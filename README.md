@@ -4,7 +4,7 @@
 
 | Платформа | Скачать | Требования |
 | --- | --- | --- |
-| Windows · EXE 2.19.2 | [Последний Windows-релиз](https://github.com/Kam300/KodVsego-SmartDNS/releases/latest) | Windows 10 2004+ / Windows 11, .NET Framework 4.8 |
+| Windows · EXE 2.19.2 с иконками | [Скачать EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.0.0/KodVsego_SmartDNS.2.19.2.exe) | Windows 10 2004+ / Windows 11, .NET Framework 4.8 |
 | Android · APK 1.0.0, предварительная версия | [Android APK и обновлённый Windows EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/android-v1.0.0) | Android 8.0+, без root |
 
 [Канал «Код Всего»](https://t.me/TotalC0de) · [Поддержка](https://t.me/TotalCodeAdmin) · [Сообщить об ошибке](https://github.com/Kam300/KodVsego-SmartDNS/issues)
