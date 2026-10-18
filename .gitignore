@@ -1,0 +1,8 @@
+*.exe
+*.pdb
+preview.png
+dist/
+*.log
+*.reg
+SmartDNS-report-*.txt
+SmartDNS-v*.txt
