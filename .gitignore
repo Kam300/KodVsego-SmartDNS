@@ -6,3 +6,12 @@ dist/
 *.reg
 SmartDNS-report-*.txt
 SmartDNS-v*.txt
+*.apk
+*.aab
+*.jks
+*.keystore
+android/.gradle/
+android/**/build/
+android/local.properties
+android/signing.properties
+.android-sdk/

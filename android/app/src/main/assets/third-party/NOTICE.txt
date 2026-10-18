@@ -1,0 +1,20 @@
+KodVsego Smart DNS for Android includes:
+
+OkHttp 4.12.0
+Copyright Square, Inc.
+https://github.com/square/okhttp
+
+Okio 3.6.0
+Copyright Square, Inc.
+https://github.com/square/okio
+
+Kotlin standard library 1.9.10 and JetBrains annotations
+Copyright JetBrains s.r.o. and respective contributors
+https://github.com/JetBrains/kotlin
+https://github.com/JetBrains/java-annotations
+
+These components are distributed under the Apache License, Version 2.0.
+The complete license text is included as Apache-2.0.txt in this directory.
+
+Service logos are third-party brand artwork. Their owners retain their rights.
+See README.md in the application's assets for the source domains.

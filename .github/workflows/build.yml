@@ -1,0 +1,56 @@
+name: Build and verify
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test, lint and build APK
+        working-directory: android
+        run: bash gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SmartDNS-Android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-test-reports
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/reports/lint-results-debug.html
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build EXE
+        shell: cmd
+        run: build.bat
+      - name: Test Windows logic
+        shell: powershell
+        run: |
+          # The native smoke test needs an active network adapter on the runner.
+          ./tests/run.ps1
+      - name: Test native DLL search
+        shell: powershell
+        run: |
+          $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          & $compiler /nologo /target:exe /out:ProcessSecurityTests.exe ProcessSecurity.cs tests\ProcessSecurity.Tests.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./ProcessSecurityTests.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SmartDNS-Windows
+          path: KodVsego_SmartDNS.*.exe

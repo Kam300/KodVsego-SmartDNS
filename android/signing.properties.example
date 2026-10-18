@@ -1,0 +1,6 @@
+# Copy to signing.properties (ignored by Git). Keep the keystore and credentials private.
+# Use forward slashes. The path is relative to the android project directory.
+storeFile=../dist/signing/kodvsego-android.p12
+storePassword=REPLACE_WITH_YOUR_PASSWORD
+keyAlias=smartdns
+keyPassword=REPLACE_WITH_YOUR_PASSWORD
