@@ -1,6 +1,7 @@
 ﻿// HB AI · Smart DNS — переключатель Smart DNS (Comss.one, GeoHide, xbox-dns.ru) в стиле сообщества «Нейросети и AI на практике».
 // Сборка: build.bat (csc из .NET Framework 4, есть в каждой Windows 10/11).
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -149,6 +150,7 @@ namespace HbAi.XboxDns
         Color CardLine { get { return darkTheme ? Color.FromArgb(44, 67, 78) : Color.FromArgb(210, 227, 232); } }
 
         readonly PrivateFontCollection fonts = new PrivateFontCollection();
+        readonly Dictionary<string, Image> serviceIcons = new Dictionary<string, Image>();
         FontFamily fHead, fBold, fMed;
         bool active, busy, hasBackup;
         bool hideDnsReminder = ReadHideDnsReminder();
@@ -199,6 +201,7 @@ namespace HbAi.XboxDns
         public MainForm()
         {
             LoadFonts();
+            LoadServiceIcons();
             darkTheme = ReadDarkTheme();
             Text = "Код Всего · Smart DNS";
             AutoScaleMode = AutoScaleMode.None;
@@ -278,7 +281,11 @@ namespace HbAi.XboxDns
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { anim.Dispose(); networkMonitor.Dispose(); themeTip.Dispose(); }
+            if (disposing) {
+                anim.Dispose(); networkMonitor.Dispose(); themeTip.Dispose();
+                foreach (var image in serviceIcons.Values) image.Dispose();
+                serviceIcons.Clear();
+            }
             base.Dispose(disposing);
         }
 
@@ -391,6 +398,70 @@ namespace HbAi.XboxDns
         Point CanvasPoint(Point point)
         {
             return new Point((int)Math.Round(point.X / uiScale), (int)Math.Round(point.Y / uiScale));
+        }
+
+        void LoadServiceIcons()
+        {
+            var names = new[] { "chatgpt", "claude", "gemini", "elevenlabs", "xbox", "spotify", "youtube" };
+            foreach (var name in names)
+                using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("service-icons." + name + ".png"))
+                {
+                    // Keep text usable in development builds without embedded artwork.
+                    if (stream == null) continue;
+                    using (var source = Image.FromStream(stream)) serviceIcons.Add(name, new Bitmap(source));
+                }
+        }
+
+        void DrawServiceIcons(Graphics g, RectangleF row)
+        {
+            string[] labels = dnsSet == 3 ? new[] { "Xbox Live", "нейросети — нет" } :
+                dnsSet == 5 ? new[] { "AI-сервисы · только DoH" } : Dns.Opens[dnsSet].Split(new[] { ", " }, StringSplitOptions.None);
+            string[] keys = dnsSet == 3 ? new[] { "xbox", "" } :
+                dnsSet == 5 ? new[] { "" } : labels.Select(label => label.ToLowerInvariant()).ToArray();
+            var groupIcons = dnsSet == 5 ? new[] { "chatgpt", "claude", "gemini", "elevenlabs" } : new string[0];
+            const float iconSize = 18, iconGap = 5, itemGap = 12;
+            using (var font = UiFont(fMed, 8.5f))
+            using (var ink = new SolidBrush(Ink))
+            using (var muted = new SolidBrush(Muted))
+            using (var format = new StringFormat(StringFormat.GenericTypographic))
+            {
+                float groupWidth = groupIcons.Count(key => serviceIcons.ContainsKey(key)) * (iconSize + iconGap);
+                float width = groupWidth;
+                for (int i = 0; i < labels.Length; i++)
+                    width += g.MeasureString(labels[i], font, PointF.Empty, format).Width +
+                        (serviceIcons.ContainsKey(keys[i]) ? iconSize + iconGap : 0) + (i == 0 ? 0 : itemGap);
+                // Fit the complete row in logical coordinates; the canvas handles DPI.
+                float scale = Math.Min(1, row.Width / width);
+                var state = g.Save();
+                try
+                {
+                    g.TranslateTransform(row.X, row.Y + (row.Height - 23 * scale) / 2);
+                    g.ScaleTransform(scale, scale);
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    float x = 0;
+                    foreach (var key in groupIcons)
+                    {
+                        Image icon;
+                        if (!serviceIcons.TryGetValue(key, out icon)) continue;
+                        g.DrawImage(icon, new RectangleF(x, 2.5f, iconSize, iconSize));
+                        x += iconSize + iconGap;
+                    }
+                    for (int i = 0; i < labels.Length; i++)
+                    {
+                        Image icon;
+                        if (serviceIcons.TryGetValue(keys[i], out icon))
+                        {
+                            g.DrawImage(icon, new RectangleF(x, 2.5f, iconSize, iconSize));
+                            x += iconSize + iconGap;
+                        }
+                        float textHeight = font.GetHeight(g);
+                        g.DrawString(labels[i], font, i == 1 && dnsSet == 3 ? muted : ink,
+                            new PointF(x, (23 - textHeight) / 2), format);
+                        x += g.MeasureString(labels[i], font, PointF.Empty, format).Width + itemGap;
+                    }
+                }
+                finally { g.Restore(state); }
+            }
         }
 
         void LoadFonts()
@@ -541,9 +612,8 @@ namespace HbAi.XboxDns
             {
                 g.DrawString("DNS", fl, bl, card.X + 20, card.Y + 10);
                 g.DrawString(string.Join("  /  ", secureDns && EncryptedDns.Templates[dnsSet] != null ? EncryptedDns.ServersFor(dnsSet) : Dns.V4[dnsSet]), fv, bv, card.X + 76, card.Y + 8);
-                g.DrawString("Для", fl, bl, card.X + 20, card.Y + 35);
-                g.DrawString(Dns.Opens[dnsSet], fv, bv, card.X + 76, card.Y + 33);
             }
+            DrawServiceIcons(g, new RectangleF(card.X + 20, card.Y + 33, card.Width - 40, 23));
             using (var f = UiFont(fMed, 8f))
             using (var b = new SolidBrush(Accent)) g.DrawString(probing ? "Проверяем ответы DNS…" : probeLabels[dnsSet], f, b, 48, 636);
             using (var path = RoundPath(new RectangleF(302, 630, 92, 24), 8))
