@@ -14,7 +14,7 @@ public final class Provider {
         new Provider("GeoHide", new String[]{"159.194.200.33", "193.233.112.67"}, "https://geohide.ru/dns-query", false, "ChatGPT", "Claude", "Gemini", "ElevenLabs"),
         new Provider("GeoHide EU", new String[]{"143.20.64.192", "45.13.237.213"}, null, false, "ChatGPT", "Claude", "Gemini", "ElevenLabs"),
         new Provider("Xbox DNS", new String[]{"111.88.96.54", "111.88.96.55"}, null, false, "Xbox"),
-        new Provider("Bezmezhau", new String[]{"143.20.64.55", "31.58.216.201"}, "https://dns.bezmezhau.com/dns-query", false, "ChatGPT", "Gemini", "Spotify", "YouTube"),
+        new Provider("Bezmezhau", new String[]{"143.20.64.55", "31.58.216.201"}, "https://dns.bezmezhau.com/dns-query", false, "ChatGPT", "Gemini", "Spotify"),
         new Provider("DNS-AI", new String[]{"194.87.196.13", "186.246.49.127"}, "https://dns.dns-ai.ru/dns-query", true, "ChatGPT", "Claude", "Gemini", "ElevenLabs")
     };
     public static final int[] AG_PROVIDERS = {1, 2, 4};
@@ -29,7 +29,7 @@ public final class Provider {
     }
     public String[] testHosts() {
         if (this == ALL[3]) return new String[]{"example.com", "xbox.com", "user.auth.xboxlive.com", "xsts.auth.xboxlive.com"};
-        if (this == ALL[4]) return new String[]{"example.com", "chatgpt.com", "gemini.google.com", "open.spotify.com", "www.youtube.com", AG_DOMAINS[0], AG_DOMAINS[1]};
+        if (this == ALL[4]) return new String[]{"example.com", "chatgpt.com", "gemini.google.com", "open.spotify.com", AG_DOMAINS[0], AG_DOMAINS[1]};
         return new String[]{"example.com", "chatgpt.com", "claude.ai", "gemini.google.com", "generativelanguage.googleapis.com", "api.elevenlabs.io", AG_DOMAINS[0], AG_DOMAINS[1]};
     }
 }

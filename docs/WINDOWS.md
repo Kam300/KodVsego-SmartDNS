@@ -1,5 +1,7 @@
 # Код Всего · Smart DNS
 
+Текущая Windows-версия — 2.20.0. Добавлена жёлто-фиолетовая тема, плавные переходы и кэширование фона; кадровый таймер не работает в покое. Bezmezhau отображает ChatGPT, Gemini и Spotify. Актуальные загрузки и инструкции для компьютеров/телефонов находятся в [основном README](../README.md). Ниже сохранена подробная история Windows-версии.
+
 Локальная доработка [hb-ai-xbox-dns](https://github.com/neiroseti-ai/hb-ai-xbox-dns/). Переключение DNS с сохранением исходных настроек, светлой/тёмной темой и ссылкой на [Код Всего](https://t.me/TotalC0de).
 
 [Скачать программу для Windows](https://github.com/Kam300/KodVsego-SmartDNS/releases/latest) · [Сообщить об ошибке](https://github.com/Kam300/KodVsego-SmartDNS/issues) · [Разработчик в Telegram](https://t.me/TotalCodeAdmin)
@@ -184,7 +186,7 @@ VPN проверяется при нажатии включения DNS и пр�
 
 В карточке выбранного провайдера появилась кнопка «Тест DNS». Одно окно позволяет выбрать любой из пяти провайдеров и повторять проверку без смены системных DNS. Оба IPv4-сервера проверяются отдельно; в отчёте видны домен, время ответа или ошибка.
 
-Comss.one, GeoHide и GeoHide EU: example.com, chatgpt.com, claude.ai, generativelanguage.googleapis.com, api.elevenlabs.io и два домена Antigravity. Xbox DNS: example.com, xbox.com, user.auth.xboxlive.com, xsts.auth.xboxlive.com. Bezmezhau: example.com, chatgpt.com, generativelanguage.googleapis.com, open.spotify.com, www.youtube.com и два домена Antigravity.
+Comss.one, GeoHide и GeoHide EU: example.com, chatgpt.com, claude.ai, generativelanguage.googleapis.com, api.elevenlabs.io и два домена Antigravity. Xbox DNS: example.com, xbox.com, user.auth.xboxlive.com, xsts.auth.xboxlive.com. Bezmezhau: example.com, chatgpt.com, generativelanguage.googleapis.com, open.spotify.com и два домена Antigravity.
 
 Это тест DNS-ответов, а не проверка HTTPS-доступа, авторизации или обхода региональных ограничений. При обнаруженном VPN тест не запускается; если VPN обнаружен при завершении, результат помечается недостоверным. Ошибки и результат показываются в том же окне. Автоматическая проверка при запуске и перед подключением ограничена example.com; полный набор запускается кнопкой.
 

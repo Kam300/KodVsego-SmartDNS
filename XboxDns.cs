@@ -1,4 +1,4 @@
-﻿// HB AI · Smart DNS — переключатель Smart DNS (Comss.one, GeoHide, xbox-dns.ru) в стиле сообщества «Нейросети и AI на практике».
+// HB AI · Smart DNS — переключатель Smart DNS (Comss.one, GeoHide, xbox-dns.ru) в стиле сообщества «Нейросети и AI на практике».
 // Сборка: build.bat (csc из .NET Framework 4, есть в каждой Windows 10/11).
 using System;
 using System.Collections.Generic;
@@ -35,7 +35,7 @@ namespace HbAi.XboxDns
             new[] { "2a00:ab00:1233:26::50", "2a00:ab00:1233:26::51" }, new string[0], new string[0] };
         public static readonly string[] Opens = {
             "ChatGPT, Claude, Gemini, ElevenLabs", "ChatGPT, Claude, Gemini, ElevenLabs",
-            "ChatGPT, Claude, Gemini, ElevenLabs", "только Xbox Live, нейросети — нет", "ChatGPT, Gemini, Spotify, YouTube", "AI-сервисы · только DoH" };
+            "ChatGPT, Claude, Gemini, ElevenLabs", "только Xbox Live, нейросети — нет", "ChatGPT, Gemini, Spotify", "AI-сервисы · только DoH" };
         public static readonly string[] Site = { "comss.ru", "geohide.ru", "geohide.ru", "xbox-dns.ru", "bezmezhau.com", "dns-ai.ru" };
         public static readonly string[] Url = { "https://www.comss.ru/", "https://geohide.ru/", "https://geohide.ru/", "https://xbox-dns.ru/", "https://bezmezhau.com/", "https://dns-ai.ru/#setup" };
         internal static bool EncryptedOnly(int provider) { return provider == 5; }
@@ -137,20 +137,28 @@ namespace HbAi.XboxDns
         internal static string VersionLabel { get { return "v" + Assembly.GetExecutingAssembly().GetName().Version.ToString(3); } }
         readonly float uiScale;
         bool darkTheme;
-        Color Bg { get { return darkTheme ? Color.FromArgb(15, 24, 30) : Color.FromArgb(252, 253, 254); } }
-        Color Accent { get { return darkTheme ? Color.FromArgb(69, 203, 230) : Color.FromArgb(0, 127, 159); } }
-        Color Selection { get { return darkTheme ? Color.FromArgb(29, 66, 79) : Color.FromArgb(201, 237, 244); } }
-        static readonly Color Sand = Color.FromArgb(238, 215, 173);
+        Color Bg { get { return Mix(Color.FromArgb(250, 249, 255), Color.FromArgb(8, 8, 13), themeMix); } }
+        Color Accent { get { return Mix(Color.FromArgb(100, 66, 210), Yellow, themeMix); } }
+        Color Selection { get { return Yellow; } }
+        static readonly Color Yellow = Color.FromArgb(255, 226, 99);
+        static readonly Color Sand = Yellow;
         static readonly Color ContrastInk = Color.FromArgb(21, 29, 34);
-        static readonly Color ActiveBg = Color.FromArgb(0, 127, 159);
-        Color Ink { get { return darkTheme ? Color.FromArgb(235, 243, 246) : ContrastInk; } }
-        Color Muted { get { return darkTheme ? Color.FromArgb(160, 184, 194) : Color.FromArgb(82, 102, 111); } }
-        Color Soft { get { return darkTheme ? Color.FromArgb(190, 217, 226) : Color.FromArgb(51, 79, 91); } }
-        Color CardBg { get { return darkTheme ? Color.FromArgb(23, 38, 47) : Color.FromArgb(240, 247, 249); } }
-        Color CardLine { get { return darkTheme ? Color.FromArgb(44, 67, 78) : Color.FromArgb(210, 227, 232); } }
+        static readonly Color ActiveBg = Yellow;
+        Color Ink { get { return Mix(ContrastInk, Color.FromArgb(247, 246, 252), themeMix); } }
+        Color Muted { get { return Mix(Color.FromArgb(104, 99, 123), Color.FromArgb(151, 148, 168), themeMix); } }
+        Color Soft { get { return Mix(Color.FromArgb(80, 69, 117), Color.FromArgb(204, 196, 244), themeMix); } }
+        Color CardBg { get { return Mix(Color.FromArgb(241, 239, 250), Color.FromArgb(18, 18, 27), themeMix); } }
+        Color CardLine { get { return Mix(Color.FromArgb(222, 217, 239), Color.FromArgb(43, 40, 59), themeMix); } }
+        Color Purple { get { return Mix(Color.FromArgb(100, 66, 210), Color.FromArgb(155, 124, 255), themeMix); } }
 
         readonly PrivateFontCollection fonts = new PrivateFontCollection();
         readonly Dictionary<string, Image> serviceIcons = new Dictionary<string, Image>();
+        readonly List<IntPtr> fontMemory = new List<IntPtr>();
+        Bitmap lightBackground, darkBackground;
+        float themeMix, powerMix, hoverMix, selectionLeft, scrollMix;
+        bool motionReady, powerHovered, resourcesDisposed;
+        readonly Stopwatch frameClock = Stopwatch.StartNew();
+        long lastFrame;
         FontFamily fHead, fBold, fMed;
         bool active, busy, hasBackup;
         bool hideDnsReminder = ReadHideDnsReminder();
@@ -195,7 +203,9 @@ namespace HbAi.XboxDns
                 probeResults = new DnsProbeResult[Dns.Name.Length][];
                 probeLabels = Enumerable.Repeat(status.NeedsAttention ? "Для теста отключите VPN" : "Ответы DNS ещё не проверены", Dns.Name.Length).ToArray();
             }
-            liveVpn = status; Invalidate();
+            bool changed = liveVpn.NeedsAttention != status.NeedsAttention || liveVpn.Failed != status.Failed;
+            liveVpn = status;
+            if (changed) Invalidate();
         }
 
         public MainForm()
@@ -203,6 +213,7 @@ namespace HbAi.XboxDns
             LoadFonts();
             LoadServiceIcons();
             darkTheme = ReadDarkTheme();
+            themeMix = darkTheme ? 1 : 0;
             Text = "Код Всего · Smart DNS";
             AutoScaleMode = AutoScaleMode.None;
             FormBorderStyle = FormBorderStyle.None;
@@ -221,9 +232,8 @@ namespace HbAi.XboxDns
             rClose = new Rectangle(CanvasWidth - 58, 22, 36, 36);
             rToggle = new Rectangle((CanvasWidth - 200) / 2, 196, 200, 200);
 
-            anim.Interval = 30;
-            anim.Tick += (s, e) => { pulse = (pulse + 0.035f) % 1f; if (busy || active) Invalidate(rToggleGlow()); };
-            anim.Start();
+            anim.Interval = 16;
+            anim.Tick += (s, e) => AnimateFrame();
 
             int cur = Dns.ActiveSet();
             dnsConfirmed = cur >= 0;
@@ -243,7 +253,7 @@ namespace HbAi.XboxDns
             Shown += (s, e) => CheckDnsServers();
             networkMonitor.Interval = 3000;
             networkMonitor.Tick += (s, e) => {
-                if (checkingNetwork || busy) return;
+                if (checkingNetwork || busy || !Visible || WindowState == FormWindowState.Minimized) return;
                 checkingNetwork = true;
                 ThreadPool.QueueUserWorkItem(_ => {
                     var status = VpnCheck.Scan();
@@ -256,6 +266,7 @@ namespace HbAi.XboxDns
                     try { BeginInvoke((Action)(() => {
                         checkingNetwork = false;
                         if (busy) return;
+                        string before = VisualState();
                         if (networkAvailable != connected) {
                             probeResults = new DnsProbeResult[Dns.Name.Length][];
                             probeLabels = Enumerable.Repeat(connected ? "Ответы DNS ещё не проверены" : "Нет сетевого подключения", Dns.Name.Length).ToArray();
@@ -266,6 +277,7 @@ namespace HbAi.XboxDns
                         active = actual >= 0 || availableBackup;
                         if (actual >= 0 && actual != dnsSet) { dnsSet = actual; EnsureProviderVisible(); }
                         UpdateVpnStatus(status);
+                        if (before != VisualState()) Invalidate();
                     })); }
                     catch (InvalidOperationException) { }
                 });
@@ -277,14 +289,22 @@ namespace HbAi.XboxDns
                 try { BeginInvoke((Action)(() => { agStatus = status; agLoading = false; Invalidate(); })); }
                 catch (InvalidOperationException) { }
             });
+            motionReady = true;
+            SnapMotion();
         }
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) {
+            if (disposing && !resourcesDisposed) {
+                resourcesDisposed = true;
                 anim.Dispose(); networkMonitor.Dispose(); themeTip.Dispose();
                 foreach (var image in serviceIcons.Values) image.Dispose();
                 serviceIcons.Clear();
+                if (lightBackground != null) lightBackground.Dispose();
+                if (darkBackground != null) darkBackground.Dispose();
+                fonts.Dispose();
+                foreach (var ptr in fontMemory) Marshal.FreeCoTaskMem(ptr);
+                fontMemory.Clear();
             }
             base.Dispose(disposing);
         }
@@ -294,11 +314,11 @@ namespace HbAi.XboxDns
             try
             {
                 using (var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KodVsego\SmartDns"))
-                    return key != null && string.Equals(key.GetValue("Theme") as string, "Dark", StringComparison.Ordinal);
+                    return key == null || !string.Equals(key.GetValue("Theme") as string, "Light", StringComparison.Ordinal);
             }
-            catch (System.Security.SecurityException) { return false; }
-            catch (UnauthorizedAccessException) { return false; }
-            catch (IOException) { return false; }
+            catch (System.Security.SecurityException) { return true; }
+            catch (UnauthorizedAccessException) { return true; }
+            catch (IOException) { return true; }
         }
 
         static bool ReadHideDnsReminder()
@@ -402,7 +422,7 @@ namespace HbAi.XboxDns
 
         void LoadServiceIcons()
         {
-            var names = new[] { "chatgpt", "claude", "gemini", "elevenlabs", "xbox", "spotify", "youtube" };
+            var names = new[] { "chatgpt", "claude", "gemini", "elevenlabs", "xbox", "spotify" };
             foreach (var name in names)
                 using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("service-icons." + name + ".png"))
                 {
@@ -476,6 +496,7 @@ namespace HbAi.XboxDns
                     IntPtr ptr = Marshal.AllocCoTaskMem(data.Length);
                     Marshal.Copy(data, 0, ptr, data.Length);
                     fonts.AddMemoryFont(ptr, data.Length);
+                    fontMemory.Add(ptr);
                 }
             }
             fHead = Find("HB Unbounded", "Segoe UI");
@@ -503,6 +524,120 @@ namespace HbAi.XboxDns
             return p;
         }
 
+        static Color Mix(Color from, Color to, float amount)
+        {
+            amount = Math.Max(0, Math.Min(1, amount));
+            return Color.FromArgb((int)(from.A + (to.A - from.A) * amount),
+                (int)(from.R + (to.R - from.R) * amount), (int)(from.G + (to.G - from.G) * amount),
+                (int)(from.B + (to.B - from.B) * amount));
+        }
+
+        string VisualState()
+        {
+            return ConnectionLabel + "|" + dnsSet + "|" + secureDns + "|" + hasBackup + "|" + dnsConfirmed + "|" +
+                agLoading + "|" + agStatus.Checked + "|" + agStatus.Complete + "|" + agStatus.External + "|" +
+                agStatus.Error + "|" + agStatus.Provider + "|" + agStatus.RecoveryNeeded;
+        }
+
+        [DllImport("user32.dll", ExactSpelling = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool SystemParametersInfoW(uint action, uint parameter, [MarshalAs(UnmanagedType.Bool)] out bool value, uint flags);
+
+        bool MotionAllowed { get {
+            bool enabled;
+            return !SystemInformation.TerminalServerSession && SystemParametersInfoW(0x1042, 0, out enabled, 0) && enabled;
+        } }
+
+        // No continuous animation when connected. Frames are requested only for transitions or a pending operation.
+        internal void SnapMotion()
+        {
+            themeMix = darkTheme ? 1 : 0; powerMix = active ? 1 : 0; hoverMix = powerHovered ? 1 : 0;
+            selectionLeft = rSeg[dnsSet].X; scrollMix = providerScroll;
+            anim.Stop();
+        }
+
+        bool MotionPending()
+        {
+            return Math.Abs(themeMix - (darkTheme ? 1 : 0)) > 0.002f || Math.Abs(powerMix - (active ? 1 : 0)) > 0.002f ||
+                Math.Abs(hoverMix - (powerHovered ? 1 : 0)) > 0.002f ||
+                Math.Abs(selectionLeft - rSeg[dnsSet].X) > 0.1f || Math.Abs(scrollMix - providerScroll) > 0.1f;
+        }
+
+        protected override void OnInvalidated(InvalidateEventArgs e)
+        {
+            base.OnInvalidated(e);
+            if (!motionReady || IsDisposed || Disposing) return;
+            if (!MotionAllowed) { SnapMotion(); return; }
+            if (Visible && WindowState != FormWindowState.Minimized && (busy || MotionPending()) && !anim.Enabled)
+            { lastFrame = frameClock.ElapsedTicks; anim.Start(); }
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            if (!Visible) anim.Stop();
+            else if (motionReady) Invalidate();
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            if (WindowState == FormWindowState.Minimized) anim.Stop();
+            else if (motionReady) Invalidate();
+        }
+
+        void AnimateFrame()
+        {
+            if (!Visible || WindowState == FormWindowState.Minimized || !MotionAllowed) { SnapMotion(); return; }
+            long now = frameClock.ElapsedTicks;
+            float delta = Math.Min(0.05f, (float)(now - lastFrame) / Stopwatch.Frequency); lastFrame = now;
+            float step = 1 - (float)Math.Exp(-delta / 0.055f);
+            themeMix += ((darkTheme ? 1 : 0) - themeMix) * step;
+            powerMix += ((active ? 1 : 0) - powerMix) * step;
+            hoverMix += ((powerHovered ? 1 : 0) - hoverMix) * step;
+            selectionLeft += (rSeg[dnsSet].X - selectionLeft) * step;
+            scrollMix += (providerScroll - scrollMix) * step;
+            pulse = (float)(frameClock.Elapsed.TotalSeconds * 0.7 % 1);
+            bool transitioning = MotionPending();
+            if (!transitioning)
+            {
+                themeMix = darkTheme ? 1 : 0; powerMix = active ? 1 : 0; hoverMix = powerHovered ? 1 : 0;
+                selectionLeft = rSeg[dnsSet].X; scrollMix = providerScroll;
+            }
+            anim.Interval = transitioning ? 16 : 33;
+            if (transitioning) Invalidate(); else Invalidate(rToggleGlow());
+            if (!busy && !transitioning) anim.Stop();
+        }
+
+        Bitmap MakeBackground(bool dark)
+        {
+            var bitmap = new Bitmap(CanvasWidth, CanvasHeight);
+            using (var canvas = Graphics.FromImage(bitmap))
+            {
+                canvas.Clear(dark ? Color.FromArgb(8, 8, 13) : Color.FromArgb(250, 249, 255));
+                Glow(canvas, new RectangleF(65, -265, 620, 600), Color.FromArgb(dark ? 82 : 30, 121, 80, 230));
+                Glow(canvas, new RectangleF(-300, 500, 620, 600), Color.FromArgb(dark ? 38 : 22, 42, 99, 195));
+            }
+            return bitmap;
+        }
+
+        void DrawBackground(Graphics g)
+        {
+            if (lightBackground == null) lightBackground = MakeBackground(false);
+            if (darkBackground == null) darkBackground = MakeBackground(true);
+            var bounds = new Rectangle(0, 0, CanvasWidth, CanvasHeight);
+            if (themeMix >= 0.998f) { g.DrawImage(darkBackground, bounds); return; }
+            g.DrawImage(lightBackground, bounds);
+            if (themeMix <= 0.002f) return;
+            using (var attributes = new System.Drawing.Imaging.ImageAttributes())
+            {
+                var matrix = new System.Drawing.Imaging.ColorMatrix(); matrix.Matrix33 = themeMix;
+                attributes.SetColorMatrix(matrix);
+                g.DrawImage(darkBackground, bounds, 0, 0, CanvasWidth, CanvasHeight, GraphicsUnit.Pixel, attributes);
+            }
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
@@ -521,9 +656,7 @@ namespace HbAi.XboxDns
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             int W = CanvasWidth;
 
-            // Both themes retain the sand and cyan brand colors.
-            Glow(g, new RectangleF(W - 330, -260, 560, 520), Color.FromArgb(darkTheme ? 25 : 120, 238, 215, 173));
-            Glow(g, new RectangleF(-260, 460, 520, 460), Color.FromArgb(darkTheme ? 30 : 45, 2, 165, 207));
+            DrawBackground(g);
             DrawThemeButton(g);
 
             // плашка сверху
@@ -534,8 +667,8 @@ namespace HbAi.XboxDns
                 var pr = new RectangleF(30, 24, sz.Width + 46, 34);
                 rSite = Rectangle.Round(pr);
                 using (var path = RoundPath(pr, 17))
-                using (var b = new SolidBrush(Color.FromArgb(22, 2, 165, 207)))
-                using (var pen = new Pen(Color.FromArgb(70, 0, 127, 159)))
+                using (var b = new SolidBrush(Color.FromArgb(24, Purple)))
+                using (var pen = new Pen(Color.FromArgb(100, Purple)))
                 { g.FillPath(b, path); g.DrawPath(pen, path); }
                 using (var b = new SolidBrush(Accent)) g.FillEllipse(b, pr.X + 16, pr.Y + 12, 10, 10);
                 using (var b = new SolidBrush(Soft)) g.DrawString(pill, f, b, pr.X + 32, pr.Y + (34 - sz.Height) / 2 + 1);
@@ -581,16 +714,15 @@ namespace HbAi.XboxDns
             { g.FillPath(b, path); g.DrawPath(pen, path); }
             var providerState = g.Save();
             g.SetClip(providerViewport);
+            using (var path = RoundPath(new RectangleF(selectionLeft - scrollMix + 5, 505, 100, 46), 12))
+            using (var b = new SolidBrush(Selection)) g.FillPath(b, path);
             for (int k = 0; k < rSeg.Length; k++)
             {
-                var sr = new RectangleF(rSeg[k].X - providerScroll + 5, rSeg[k].Y + 5, rSeg[k].Width - 10, rSeg[k].Height - 10);
-                bool on = k == dnsSet;
-                if (on)
-                    using (var path = RoundPath(sr, 12))
-                    using (var b = new SolidBrush(Selection)) g.FillPath(b, path);
+                var sr = new RectangleF(rSeg[k].X - scrollMix + 5, rSeg[k].Y + 5, rSeg[k].Width - 10, rSeg[k].Height - 10);
+                bool on = Math.Abs(rSeg[k].X - selectionLeft) < 50;
                 string label = k == 3 ? "Xbox" : k == 2 ? "GeoHide EU" : Dns.Name[k];
                 using (var f = UiFont(fBold, 9.5f))
-                using (var b = new SolidBrush(on ? Ink : Soft))
+                using (var b = new SolidBrush(on ? ContrastInk : Soft))
                 using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap })
                     g.DrawString(label, f, b, sr, sf);
             }
@@ -607,7 +739,7 @@ namespace HbAi.XboxDns
             { g.FillPath(b, path); g.DrawPath(pen, path); }
             using (var fl = UiFont(fBold, 9.5f))
             using (var fv = UiFont(fMed, 10.5f))
-            using (var bl = new SolidBrush(Accent))
+            using (var bl = new SolidBrush(Purple))
             using (var bv = new SolidBrush(Ink))
             {
                 g.DrawString("DNS", fl, bl, card.X + 20, card.Y + 10);
@@ -619,7 +751,7 @@ namespace HbAi.XboxDns
             using (var path = RoundPath(new RectangleF(302, 630, 92, 24), 8))
             using (var b = new SolidBrush(Selection)) g.FillPath(b, path);
             using (var f = UiFont(fBold, 8f))
-            using (var b = new SolidBrush(Ink))
+            using (var b = new SolidBrush(ContrastInk))
             using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                 g.DrawString("Тест DNS", f, b, new RectangleF(302, 630, 92, 24), sf);
 
@@ -629,7 +761,7 @@ namespace HbAi.XboxDns
             using (var path = RoundPath(new Rectangle(46, 696, 20, 20), 5))
             using (var fill = new SolidBrush(secureDns ? ActiveBg : Bg))
             using (var line = new Pen(Accent, 1.5f)) { g.FillPath(fill, path); g.DrawPath(line, path); }
-            if (secureDns) using (var pen = new Pen(Color.White, 2f)) g.DrawLines(pen, new[] { new Point(50, 706), new Point(55, 711), new Point(63, 701) });
+            if (secureDns) using (var pen = new Pen(ContrastInk, 2f)) g.DrawLines(pen, new[] { new Point(50, 706), new Point(55, 711), new Point(63, 701) });
             using (var title = UiFont(fBold, 10f))
             using (var body = UiFont(fMed, 8f))
             using (var ink = new SolidBrush(Ink))
@@ -647,7 +779,7 @@ namespace HbAi.XboxDns
             using (var line = new Pen(Accent, 1.5f))
             { g.FillPath(fill, path); g.DrawPath(line, path); }
             if (agStatus.Checked)
-                using (var pen = new Pen(Color.White, 2f))
+                using (var pen = new Pen(ContrastInk, 2f))
                     g.DrawLines(pen, new[] { new Point(50, 781), new Point(55, 786), new Point(63, 776) });
             using (var title = UiFont(fBold, 10f))
             using (var body = UiFont(fMed, 8.5f))
@@ -670,7 +802,7 @@ namespace HbAi.XboxDns
                 using (var path = RoundPath(rAgCleanup, 8))
                 using (var fill = new SolidBrush(Selection)) g.FillPath(fill, path);
                 using (var f = UiFont(fBold, 8f))
-                using (var b = new SolidBrush(Ink))
+                using (var b = new SolidBrush(ContrastInk))
                 using (var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                     g.DrawString(agStatus.External ? "Удалить старые" : "Копия правил", f, b, rAgCleanup, format);
             }
@@ -678,10 +810,10 @@ namespace HbAi.XboxDns
             // кнопка Telegram-канала
             rTelegram = new Rectangle(28, 858, W - 56, 58);
             using (var path = RoundPath(rTelegram, 16))
-            using (var b = new LinearGradientBrush(rTelegram, Sand, Color.FromArgb(2, 165, 207), LinearGradientMode.Horizontal))
+            using (var b = new LinearGradientBrush(rTelegram, Color.FromArgb(126, 83, 255), Color.FromArgb(75, 116, 255), LinearGradientMode.Horizontal))
                 g.FillPath(b, path);
             using (var f = UiFont(fHead, 11.5f))
-            using (var b = new SolidBrush(ContrastInk))
+            using (var b = new SolidBrush(Color.White))
             using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                 g.DrawString("Telegram · TotalC0de  →", f, b, rTelegram, sf);
 
@@ -717,15 +849,15 @@ namespace HbAi.XboxDns
         void DrawToggle(Graphics g)
         {
             var r = new RectangleF(rToggle.X, rToggle.Y, rToggle.Width, rToggle.Height);
-            if (active || busy)
+            r.Inflate(hoverMix * 3, hoverMix * 3);
+            if (powerMix > 0.005f || busy)
             {
-                float k = (float)(0.5 + 0.5 * Math.Sin(pulse * Math.PI * 2));
-                var gr = r; gr.Inflate(28 + 10 * k, 28 + 10 * k);
-                Glow(g, gr, Color.FromArgb((int)(busy ? 60 : 90 + 40 * k), Accent));
+                var gr = r; gr.Inflate(36, 36);
+                Glow(g, gr, Color.FromArgb((int)(busy ? 30 : 38 * powerMix), Yellow));
             }
             // кольцо
-            using (var b = new SolidBrush(active ? ActiveBg : (darkTheme ? CardBg : Color.White))) g.FillEllipse(b, r);
-            using (var pen = new Pen(active || (!agLoading && agStatus.Checked && agStatus.Error == null) ? Accent : Color.FromArgb(161, 194, 204), 3f)) g.DrawEllipse(pen, r);
+            using (var b = new SolidBrush(Mix(CardBg, ActiveBg, powerMix))) g.FillEllipse(b, r);
+            using (var pen = new Pen(Mix(CardLine, Yellow, Math.Max(powerMix, hoverMix)), 2f)) g.DrawEllipse(pen, r);
             if (busy)
             {
                 using (var pen = new Pen(Accent, 5f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
@@ -736,14 +868,14 @@ namespace HbAi.XboxDns
             }
             // значок питания
             var c = new PointF(r.X + r.Width / 2, r.Y + r.Height / 2 - 14);
-            using (var pen = new Pen(active ? Color.White : Accent, 7f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            using (var pen = new Pen(Mix(Accent, ContrastInk, powerMix), 7f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
             {
                 g.DrawArc(pen, c.X - 32, c.Y - 32, 64, 64, -60, 300);
                 g.DrawLine(pen, c.X, c.Y - 40, c.X, c.Y - 6);
             }
             bool separateOnly = !active && AntigravityOnlyLabel != null;
             using (var f = UiFont(fHead, separateOnly ? 9f : 13f))
-            using (var b = new SolidBrush(active ? Color.White : Soft))
+            using (var b = new SolidBrush(Mix(Soft, ContrastInk, powerMix)))
             {
                 string t = active ? "ВКЛ" : separateOnly ? "ВКЛЮЧИТЬ DNS" : "ВЫКЛ";
                 var sz = g.MeasureString(t, f);
@@ -767,9 +899,11 @@ namespace HbAi.XboxDns
 
         void Centered(Graphics g, string s, Font f, Brush b, float y, float maxW = 0)
         {
-            var sf = new StringFormat { Alignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap, Trimming = StringTrimming.EllipsisCharacter };
-            float w = maxW > 0 ? maxW : CanvasWidth;
-            g.DrawString(s, f, b, new RectangleF((CanvasWidth - w) / 2, y, w, 40), sf);
+            using (var sf = new StringFormat { Alignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap, Trimming = StringTrimming.EllipsisCharacter })
+            {
+                float w = maxW > 0 ? maxW : CanvasWidth;
+                g.DrawString(s, f, b, new RectangleF((CanvasWidth - w) / 2, y, w, 40), sf);
+            }
         }
 
         void OnDown(object s, MouseEventArgs e)
@@ -801,7 +935,7 @@ namespace HbAi.XboxDns
             double dx = e.X - c.X, dy = e.Y - c.Y;
             if (dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0) { Toggle(); return; }
             for (int k = 0; k < rSeg.Length; k++)
-                if (providerViewport.Contains(e.Location) && rSeg[k].Contains(new Point(e.X + providerScroll, e.Y))) { PickSet(k); return; }
+                if (providerViewport.Contains(e.Location) && rSeg[k].Contains(new Point(e.X + (int)Math.Round(scrollMix), e.Y))) { PickSet(k); return; }
             dragFrom = e.Location;
         }
 
@@ -810,6 +944,8 @@ namespace HbAi.XboxDns
             e = new MouseEventArgs(e.Button, e.Clicks, CanvasPoint(e.Location).X, CanvasPoint(e.Location).Y, e.Delta);
             var c = new Point(rToggle.X + rToggle.Width / 2, rToggle.Y + rToggle.Height / 2);
             double dx = e.X - c.X, dy = e.Y - c.Y;
+            bool overPower = dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0;
+            if (powerHovered != overPower) { powerHovered = overPower; Invalidate(rToggleGlow()); }
             bool hand = rSecureOption.Contains(e.Location) || rAgOption.Contains(e.Location) || rTheme.Contains(e.Location) || rClose.Contains(e.Location) || rGroup.Contains(e.Location) || rSite.Contains(e.Location) || rBrand.Contains(e.Location) || rTelegram.Contains(e.Location) || new Rectangle(28, 500, 384, 56).Contains(e.Location) || new Rectangle(28, 628, 384, 32).Contains(e.Location)
                         || dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0;
             Cursor = hand && !busy ? Cursors.Hand : Cursors.Default;
@@ -818,6 +954,12 @@ namespace HbAi.XboxDns
             if (e.Button == MouseButtons.Left && !hand)
                 Location = new Point(Location.X + (int)Math.Round((e.X - dragFrom.X) * uiScale),
                     Location.Y + (int)Math.Round((e.Y - dragFrom.Y) * uiScale));
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            if (powerHovered) { powerHovered = false; Invalidate(rToggleGlow()); }
         }
 
         static void Open(string url) { try { Process.Start(url); } catch { } }

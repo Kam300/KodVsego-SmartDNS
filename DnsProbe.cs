@@ -127,7 +127,7 @@ namespace HbAi.XboxDns
         {
             if (provider < 0 || provider >= Dns.Name.Length) throw new ArgumentOutOfRangeException("provider");
             if (provider == 3) return new[] { "example.com", "xbox.com", "user.auth.xboxlive.com", "xsts.auth.xboxlive.com" };
-            if (provider == 4) return new[] { "example.com", "chatgpt.com", "generativelanguage.googleapis.com", "open.spotify.com", "www.youtube.com", "cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com" };
+            if (provider == 4) return new[] { "example.com", "chatgpt.com", "generativelanguage.googleapis.com", "open.spotify.com", "cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com" };
             if (provider == 5) return new[] { "example.com", "chatgpt.com", "claude.ai", "gemini.google.com", "generativelanguage.googleapis.com", "api.elevenlabs.io", "cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com" };
             return new[] { "example.com", "chatgpt.com", "claude.ai", "generativelanguage.googleapis.com", "api.elevenlabs.io", "cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com" };
         }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -38,13 +38,13 @@ namespace HbAi.XboxDns
             ShowInTaskbar = false;
             Text = title;
             DoubleBuffered = true;
-            surface = dark ? Color.FromArgb(15, 24, 30) : Color.FromArgb(252, 253, 254);
-            border = dark ? Color.FromArgb(44, 67, 78) : Color.FromArgb(210, 227, 232);
-            Color ink = dark ? Color.FromArgb(235, 243, 246) : Color.FromArgb(21, 29, 34);
-            Color muted = dark ? Color.FromArgb(160, 184, 194) : Color.FromArgb(82, 102, 111);
-            Color accent = dark ? Color.FromArgb(69, 203, 230) : Color.FromArgb(0, 127, 159);
-            Color card = dark ? Color.FromArgb(23, 38, 47) : Color.FromArgb(240, 247, 249);
-            Color sand = Color.FromArgb(238, 215, 173);
+            surface = dark ? Color.FromArgb(8, 8, 13) : Color.FromArgb(250, 249, 255);
+            border = dark ? Color.FromArgb(43, 40, 59) : Color.FromArgb(222, 217, 239);
+            Color ink = dark ? Color.FromArgb(247, 246, 252) : Color.FromArgb(21, 29, 34);
+            Color muted = dark ? Color.FromArgb(151, 148, 168) : Color.FromArgb(104, 99, 123);
+            Color accent = dark ? Color.FromArgb(255, 226, 99) : Color.FromArgb(100, 66, 210);
+            Color card = dark ? Color.FromArgb(18, 18, 27) : Color.FromArgb(241, 239, 250);
+            Color sand = Color.FromArgb(255, 226, 99);
             statusAccent = accent;
             statusWarning = dark ? sand : Color.FromArgb(139, 87, 24);
             BackColor = surface;
@@ -99,8 +99,8 @@ namespace HbAi.XboxDns
 
             bool confirm = buttons == MessageBoxButtons.YesNo;
             var primary = new DialogButton(confirm ? "Продолжить" : "Понятно", buttonFont,
-                dark ? Color.FromArgb(69, 203, 230) : Color.FromArgb(0, 127, 159),
-                dark ? Color.FromArgb(15, 24, 30) : Color.White, border, px(12)) {
+                dark ? Color.FromArgb(255, 226, 99) : Color.FromArgb(100, 66, 210),
+                dark ? Color.FromArgb(8, 8, 13) : Color.White, border, px(12)) {
                 Bounds = new Rectangle(width - pad - px(150), ClientSize.Height - px(66), px(150), px(42)),
                 DialogResult = confirm ? DialogResult.Yes : DialogResult.OK, TabIndex = confirm ? 1 : 0
             };

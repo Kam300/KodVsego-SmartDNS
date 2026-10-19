@@ -11,7 +11,6 @@ Favicons retrieved on 2026-10-18 through Google's favicon service:
 | elevenlabs.png | elevenlabs.io |
 | xbox.png | xbox.com |
 | spotify.png | spotify.com |
-| youtube.png | youtube.com |
 
 These images identify the respective services. Brand artwork and trademarks belong
 to their respective owners; the project's MIT license does not relicense them.

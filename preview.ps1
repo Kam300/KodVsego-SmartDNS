@@ -1,9 +1,11 @@
 ﻿# Creates the form and renders its canvas only; never invokes DNS changes.
 param(
-    [string]$AssemblyPath = (Join-Path $PSScriptRoot 'KodVsego_SmartDNS.2.19.2.exe'),
+    [string]$AssemblyPath = (Join-Path $PSScriptRoot 'KodVsego_SmartDNS.2.20.0.exe'),
     [int]$Dpi = 96,
     [ValidateRange(-1,5)][int]$DnsSet = -1,
     [switch]$Active,
+    [switch]$Confirmed,
+    [ValidateSet('Live', 'Off', 'On', 'Unknown')][string]$VpnPreview = 'Live',
     [switch]$Inactive,
     [switch]$Busy,
     [switch]$Offline,
@@ -95,7 +97,7 @@ if ($Dialog -ne 'None') {
     if ($Dialog -eq 'DnsTest') {
         $providers = [string[]]@('Comss.one','GeoHide','GeoHide EU','Xbox DNS','Bezmezhau','DNS-AI')
         $d.GetType().GetMethod('AddDnsTestControls', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @($providers, 4, [Action[int]]{param($provider)})) | Out-Null
-        $testMessage = "Ответ DNS не гарантирует доступность сайта.`n`n143.20.64.55`n✓ example.com — 25 мс`n✓ chatgpt.com — 31 мс`n✓ generativelanguage.googleapis.com — 28 мс`n✓ open.spotify.com — 26 мс`n✓ www.youtube.com — 26 мс`n✓ cloudcode-pa.googleapis.com — 29 мс`n✓ daily-cloudcode-pa.googleapis.com — 29 мс`n`n31.58.216.201`n✓ example.com — 31 мс`n✕ chatgpt.com — нет ответа (2 с)`n`nНастройки DNS не изменялись."
+        $testMessage = "Ответ DNS не гарантирует доступность сайта.`n`n143.20.64.55`n✓ example.com — 25 мс`n✓ chatgpt.com — 31 мс`n✓ generativelanguage.googleapis.com — 28 мс`n✓ open.spotify.com — 26 мс`n✓ cloudcode-pa.googleapis.com — 29 мс`n✓ daily-cloudcode-pa.googleapis.com — 29 мс`n`n31.58.216.201`n✓ example.com — 31 мс`n✕ chatgpt.com — нет ответа (2 с)`n`nНастройки DNS не изменялись."
         $d.GetType().GetMethod('ShowDnsTestStatus', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @($testMessage,'Bezmezhau · результаты', $false, $true)) | Out-Null
     }
     $bitmap = New-Object Drawing.Bitmap $d.Width, $d.Height
@@ -115,6 +117,17 @@ if ($Dialog -ne 'None') {
 if ($Active) {
     $f.GetType().GetField('active', [Reflection.BindingFlags]'Instance,NonPublic').SetValue($f, $true)
 }
+if ($Confirmed) {
+    foreach ($field in @('hasBackup','dnsConfirmed')) { $f.GetType().GetField($field, [Reflection.BindingFlags]'Instance,NonPublic').SetValue($f, $true) }
+}
+if ($VpnPreview -ne 'Live') {
+    $vpn = [Activator]::CreateInstance($asm.GetType('HbAi.XboxDns.VpnStatus'), $true)
+    $vpn.GetType().GetField('Failed', [Reflection.BindingFlags]'Instance,NonPublic').SetValue($vpn, ($VpnPreview -eq 'Unknown'))
+    [string[]]$connections = @()
+    if ($VpnPreview -eq 'On') { $connections = @('Preview VPN') }
+    $vpn.GetType().GetField('Connections', [Reflection.BindingFlags]'Instance,NonPublic').SetValue($vpn, $connections)
+    $f.GetType().GetMethod('UpdateVpnStatus', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($f, @($vpn)) | Out-Null
+}
 $f.GetType().GetMethod('EnsureProviderVisible', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($f, @()) | Out-Null
 if ($Secure) { $f.GetType().GetField('secureDns', [Reflection.BindingFlags]'Instance,NonPublic').SetValue($f, $true) }
 if ($Inactive) {
@@ -122,6 +135,7 @@ if ($Inactive) {
 }
 if ($Offline) { $f.GetType().GetField('networkAvailable', [Reflection.BindingFlags]'Instance,NonPublic').SetValue($f, $false) }
 if ($Busy) { $f.GetType().GetField('busy', [Reflection.BindingFlags]'Instance,NonPublic').SetValue($f, $true) }
+$f.GetType().GetMethod('SnapMotion', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($f, @()) | Out-Null
 $logicalWidth = $f.GetType().GetField('CanvasWidth', [Reflection.BindingFlags]'Static,NonPublic').GetRawConstantValue()
 $logicalHeight = $f.GetType().GetField('CanvasHeight', [Reflection.BindingFlags]'Static,NonPublic').GetRawConstantValue()
 $scale = $Dpi / 96.0

@@ -8,6 +8,7 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.*;
+import android.animation.ValueAnimator;
 import android.net.VpnService;
 import android.os.*;
 import android.provider.Settings;
@@ -15,6 +16,8 @@ import android.view.*;
 import android.widget.*;
 import java.io.*;
 import java.util.concurrent.*;
+import java.util.HashMap;
+import java.util.Map;
 
 public final class MainActivity extends Activity {
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -22,32 +25,40 @@ public final class MainActivity extends Activity {
     private android.content.SharedPreferences prefs;
     private boolean dark,rendering,testing;private int selected,agSelected;
     private LinearLayout content,serviceRow;private TextView state,addresses,probe;
-    private Button connect,test;private Switch encrypted,ag;private Spinner providers,agProvider;
+    private PowerButton connect;private Button test;private Switch encrypted,ag;private Spinner providers,agProvider;
     private int ink,muted,accent,card;
     private DnsConfig pending;
     private Future<?> runningTest;private int testGeneration;
-    private final Runnable refresh=new Runnable(){public void run(){updateState();handler.postDelayed(this,750);}};
+    private Typeface heading,body,bold;
+    private final Map<String,Drawable.ConstantState> iconCache=new HashMap<>();
+    private String lastUiState,providerContent;
+    private boolean updatingProvider;
+    private final Runnable refresh=new Runnable(){public void run(){updateState();handler.postDelayed(this,1000);}};
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);prefs=getSharedPreferences("smartdns",MODE_PRIVATE);
         selected=prefs.getInt("provider",0);if(selected<0||selected>=Provider.ALL.length)selected=0;
         agSelected=prefs.getInt("agProvider",0);if(agSelected<0||agSelected>=Provider.AG_PROVIDERS.length)agSelected=0;
-        dark=prefs.getBoolean("dark",false);render();
+        heading=font("Unbounded-ExtraBold.ttf",Typeface.DEFAULT_BOLD);body=font("Manrope-Medium.ttf",Typeface.DEFAULT);bold=font("Manrope-Bold.ttf",Typeface.DEFAULT_BOLD);
+        dark=prefs.getBoolean("dark",true);render();
     }
+    private Typeface font(String name,Typeface fallback){try{return Typeface.createFromAsset(getAssets(),"fonts/"+name);}catch(RuntimeException e){return fallback;}}
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
     private TextView text(String value,int size,int color,boolean bold) {
         TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(color);
-        if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);v.setPadding(0,dp(5),0,dp(5));return v;
+        v.setTypeface(bold?this.bold:body);v.setPadding(0,dp(5),0,dp(5));return v;
     }
-    private Button button(String label){Button b=new Button(this);b.setText(label);b.setTextColor(Color.WHITE);b.setAllCaps(false);b.setBackgroundTintList(ColorStateList.valueOf(accent));b.setMinHeight(dp(48));return b;}
+    private Button button(String label){Button b=new Button(this);b.setText(label);b.setTypeface(bold);b.setTextColor(dark?Color.rgb(21,29,34):Color.WHITE);b.setAllCaps(false);b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x226F53FF),shape(accent,14),null));b.setMinHeight(dp(48));return b;}
     private void space(int height){Space s=new Space(this);content.addView(s,new LinearLayout.LayoutParams(1,dp(height)));}
-    private LinearLayout box(){LinearLayout b=new LinearLayout(this);b.setOrientation(LinearLayout.VERTICAL);b.setPadding(dp(16),dp(12),dp(16),dp(12));b.setBackground(shape(card,20));content.addView(b,new LinearLayout.LayoutParams(-1,-2));return b;}
+    private LinearLayout box(){LinearLayout b=new LinearLayout(this);b.setOrientation(LinearLayout.VERTICAL);b.setPadding(dp(16),dp(12),dp(16),dp(12));GradientDrawable background=shape(card,20);background.setStroke(dp(1),Color.parseColor(dark?"#2B283B":"#DED9EF"));b.setBackground(background);content.addView(b,new LinearLayout.LayoutParams(-1,-2));return b;}
     private void render() {
+        setTheme(dark?R.style.AppThemeDark:R.style.AppTheme);
         rendering=true;
-        ink=Color.parseColor(dark?"#EBF3F6":"#151D22");muted=Color.parseColor(dark?"#A0B8C2":"#52666F");
-        accent=Color.parseColor(dark?"#008EAA":"#007F9F");card=Color.parseColor(dark?"#17262F":"#F0F7F9");
+        lastUiState=null;providerContent=null;
+        ink=Color.parseColor(dark?"#F7F6FC":"#151D22");muted=Color.parseColor(dark?"#A8A4BC":"#68637B");
+        accent=Color.parseColor(dark?"#FFE263":"#6442D2");card=Color.parseColor(dark?"#12121B":"#F1EFFA");
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
-        scroll.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Color.parseColor(dark?"#0F181E":"#FCFDFE"),Color.parseColor(dark?"#15343C":"#DDF5FA")}));
+        scroll.setBackground(new GradientDrawable(GradientDrawable.Orientation.TR_BL,new int[]{Color.parseColor(dark?"#27203F":"#F0EAFF"),Color.parseColor(dark?"#08080D":"#FAF9FF"),Color.parseColor(dark?"#10192B":"#EDF2FF")}));
         content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(24),dp(20),dp(24),dp(24));scroll.addView(content);
         setContentView(scroll);
         scroll.setOnApplyWindowInsetsListener((view,insets)->{
@@ -59,11 +70,12 @@ public final class MainActivity extends Activity {
         top.addView(text("SMART DNS · Android",13,accent,true),new LinearLayout.LayoutParams(0,-2,1));
         Button theme=button(dark?"☀":"☾");theme.setContentDescription("Переключить тему");top.addView(theme,new LinearLayout.LayoutParams(dp(64),dp(48)));
         theme.setOnClickListener(v->{dark=!dark;prefs.edit().putBoolean("dark",dark).apply();render();});content.addView(top);
-        space(14);content.addView(text("Доступ\nк сервисам",36,ink,true));space(18);
-        connect=button("ВКЛЮЧИТЬ DNS");connect.setTextSize(16);connect.setBackground(shape(accent,90));
-        LinearLayout.LayoutParams circle=new LinearLayout.LayoutParams(dp(172),dp(172));circle.gravity=Gravity.CENTER_HORIZONTAL;content.addView(connect,circle);
+        space(14);TextView title=text("Доступ",30,ink,true);title.setTypeface(heading);content.addView(title);
+        TextView highlight=text("к сервисам",28,Color.rgb(21,29,34),true);highlight.setTypeface(heading);highlight.setPadding(dp(8),0,dp(8),dp(4));highlight.setBackground(shape(Color.rgb(255,226,99),8));content.addView(highlight,new LinearLayout.LayoutParams(-2,-2));space(10);
+        connect=new PowerButton(this,card,accent,muted,heading);
+        LinearLayout.LayoutParams circle=new LinearLayout.LayoutParams(dp(210),dp(210));circle.gravity=Gravity.CENTER_HORIZONTAL;content.addView(connect,circle);
         connect.setOnClickListener(v->{if(DnsVpnService.active||DnsVpnService.connecting)stopService(new Intent(this,DnsVpnService.class));else requestConnect();});
-        space(14);state=text("DNS выключен",19,ink,true);state.setGravity(Gravity.CENTER);state.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);content.addView(state);
+        space(4);state=text("DNS выключен",18,ink,true);state.setTypeface(heading);state.setGravity(Gravity.CENTER);state.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);content.addView(state);
         content.addView(text("После смены DNS полностью перезапустите нужное приложение.",13,muted,false));space(12);
         LinearLayout selection=box();selection.addView(text("Провайдер DNS",14,accent,true));providers=new Spinner(this);
         String[] names=new String[Provider.ALL.length];for(int i=0;i<names.length;i++)names[i]=Provider.ALL[i].name;
@@ -81,13 +93,14 @@ public final class MainActivity extends Activity {
         space(12);LinearLayout info=box();info.addView(text("Как работает на телефоне",15,ink,true));
         info.addView(text("Без root. Android запросит разрешение VPN: локальный туннель обрабатывает только DNS. Сайты и приложения подключаются напрямую. Другой VPN одновременно использовать нельзя.\n\nСобственный Secure DNS браузера и DNS внутри приложений могут обходить настройку. Строгий частный DNS Android нужно переключить вручную. Не включайте блокировку соединений вне VPN.",13,muted,false));
         Button privateDns=button("Сетевые настройки Android");info.addView(privateDns);privateDns.setOnClickListener(v->{try{startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));}catch(ActivityNotFoundException ignored){}});
-        space(14);content.addView(text("Код Всего · Android 1.0.0",13,accent,true));
-        Button channel=button("Telegram · TotalC0de ↗");content.addView(channel);channel.setOnClickListener(v->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://t.me/TotalC0de"))));
+        space(14);content.addView(text("Код Всего · Android "+BuildConfig.VERSION_NAME,13,accent,true));
+        Button channel=button("Telegram · TotalC0de ↗");channel.setTextColor(Color.WHITE);GradientDrawable channelBg=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{0xFF7E53FF,0xFF4B74FF});channelBg.setCornerRadius(dp(16));channel.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33FFFFFF),channelBg,null));content.addView(channel);channel.setOnClickListener(v->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://t.me/TotalC0de"))));
         providers.setOnItemSelectedListener(new SimpleSelection(){public void selected(int position){if(rendering)return;selected=position;updateProvider();save();}});
         agProvider.setOnItemSelectedListener(new SimpleSelection(){public void selected(int position){if(rendering)return;agSelected=position;save();}});
-        encrypted.setOnCheckedChangeListener((b,on)->{if(!rendering){save();updateProvider();}});
+        encrypted.setOnCheckedChangeListener((b,on)->{if(!rendering&&!updatingProvider){updateProvider();save();}});
         ag.setOnCheckedChangeListener((b,on)->{agProvider.setEnabled(on&&!DnsVpnService.active&&!DnsVpnService.connecting);if(!rendering)save();});
         updateProvider();rendering=false;updateState();
+        if(ValueAnimator.areAnimatorsEnabled()){content.setAlpha(.7f);content.setTranslationY(dp(5));content.animate().alpha(1).translationY(0).setDuration(180).start();}
     }
     private ArrayAdapter<String> adapter(String[] names){return new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,names){
         @Override public View getView(int p,View v,android.view.ViewGroup parent){TextView t=(TextView)super.getView(p,v,parent);t.setTextColor(ink);t.setMinHeight(dp(48));t.setGravity(Gravity.CENTER_VERTICAL);return t;}
@@ -98,28 +111,38 @@ public final class MainActivity extends Activity {
     }
     private void updateProvider() {
         Provider p=Provider.at(selected);
+        updatingProvider=true;
         if(p.encryptedOnly)encrypted.setChecked(true);else if(p.doh==null)encrypted.setChecked(false);
+        updatingProvider=false;
         boolean locked=DnsVpnService.active||DnsVpnService.connecting;
         encrypted.setEnabled(!locked&&p.doh!=null&&!p.encryptedOnly);
         addresses.setText(encrypted.isChecked()?"DoH: "+p.doh:"DNS: "+android.text.TextUtils.join(" / ",p.servers));
+        String key=selected+":"+encrypted.isChecked();
+        if(key.equals(providerContent))return;providerContent=key;
         serviceRow.removeAllViews();LinearLayout row=null;
         for(int i=0;i<p.services.length;i++) {
             if(i%2==0){row=new LinearLayout(this);serviceRow.addView(row);}
             LinearLayout item=new LinearLayout(this);item.setGravity(Gravity.CENTER_VERTICAL);item.setPadding(0,dp(6),dp(8),dp(6));
             ImageView icon=new ImageView(this);icon.setContentDescription(p.services[i]);
-            try(InputStream stream=getAssets().open(p.services[i].toLowerCase(java.util.Locale.ROOT)+".png")){icon.setImageDrawable(Drawable.createFromStream(stream,null));}catch(IOException ignored){}
+            String name=p.services[i].toLowerCase(java.util.Locale.ROOT);
+            Drawable.ConstantState cached=iconCache.get(name);
+            if(cached==null)try(InputStream stream=getAssets().open(name+".png")){Drawable source=Drawable.createFromStream(stream,null);if(source!=null){cached=source.getConstantState();if(cached!=null)iconCache.put(name,cached);}}catch(IOException ignored){}
+            if(cached!=null)icon.setImageDrawable(cached.newDrawable(getResources()));
             item.addView(icon,new LinearLayout.LayoutParams(dp(24),dp(24)));TextView label=text(p.services[i],13,ink,false);label.setPadding(dp(7),0,0,0);item.addView(label);
             row.addView(item,new LinearLayout.LayoutParams(0,-2,1));
         }
         if(selected==3)serviceRow.addView(text("Только Xbox Live · нейросети не поддерживаются",12,muted,false));
         if(selected==5)serviceRow.addView(text("Только DoH · DNS-ответ не гарантирует доступ к Gemini",12,muted,false));
+        if(!rendering&&ValueAnimator.areAnimatorsEnabled()){serviceRow.animate().cancel();serviceRow.setAlpha(.35f);serviceRow.setTranslationY(dp(5));serviceRow.animate().alpha(1).translationY(0).setDuration(180).start();}
     }
     private void save(){prefs.edit().putInt("provider",selected).putBoolean("encrypted",encrypted.isChecked()).putBoolean("ag",ag.isChecked()).putInt("agProvider",agSelected).apply();}
     private DnsConfig config(){return new DnsConfig(selected,encrypted.isChecked(),ag.isChecked()?Provider.AG_PROVIDERS[agSelected]:-1);}
     private void updateState() {
         if(state==null)return;boolean locked=DnsVpnService.active||DnsVpnService.connecting;
+        String snapshot=DnsVpnService.status+":"+locked+":"+DnsVpnService.active+":"+DnsVpnService.connecting+":"+selected+":"+ag.isChecked()+":"+testing;
+        if(snapshot.equals(lastUiState))return;lastUiState=snapshot;
         if(!android.text.TextUtils.equals(state.getText(),DnsVpnService.status))state.setText(DnsVpnService.status);
-        connect.setText(locked?"ВЫКЛЮЧИТЬ DNS":"ВКЛЮЧИТЬ DNS");
+        connect.setState(DnsVpnService.active,DnsVpnService.connecting);state.setTextColor(DnsVpnService.active?accent:ink);
         providers.setEnabled(!locked);ag.setEnabled(!locked);agProvider.setEnabled(!locked&&ag.isChecked());
         encrypted.setEnabled(!locked&&Provider.at(selected).doh!=null&&!Provider.at(selected).encryptedOnly);
         test.setEnabled(!DnsVpnService.connecting);
@@ -167,6 +190,6 @@ public final class MainActivity extends Activity {
         });
     }
     @Override protected void onResume(){super.onResume();handler.removeCallbacks(refresh);handler.post(refresh);}
-    @Override protected void onPause(){handler.removeCallbacks(refresh);super.onPause();}
+    @Override protected void onPause(){handler.removeCallbacks(refresh);if(content!=null)content.animate().cancel();if(serviceRow!=null)serviceRow.animate().cancel();super.onPause();}
     @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);tests.shutdownNow();super.onDestroy();}
 }
