@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="Код Всего Smart DNS: Windows и Android, канал t.me/TotalC0de">
+  <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0b0b10"/><stop offset="1" stop-color="#282040"/></linearGradient></defs>
+  <rect width="1280" height="640" rx="28" fill="url(#bg)"/>
+  <g font-family="Segoe UI,Arial,sans-serif"><text x="72" y="105" font-size="26" fill="#c7c1db">Windows · Android · открытый код</text>
+  <text x="72" y="238" font-size="72" font-weight="700" fill="#f6f3ff">Код Всего</text>
+  <text x="72" y="326" font-size="72" font-weight="700" fill="#02a5cf">Smart DNS</text>
+  <text x="72" y="395" font-size="28" fill="#c7c1db">Выбор провайдера · DoH · проверка DNS</text>
+  <text x="72" y="510" font-size="30" fill="#02a5cf">t.me/TotalC0de</text>
+  <text x="72" y="558" font-size="23" fill="#c7c1db">Поддержка: t.me/TotalCodeAdmin</text></g>
+  <circle cx="1030" cy="290" r="145" fill="#02a5cf"/>
+  <path d="M1030 204v75m-47-45a73 73 0 1 0 94 0" fill="none" stroke="#10151c" stroke-width="14" stroke-linecap="round"/>
+</svg>
