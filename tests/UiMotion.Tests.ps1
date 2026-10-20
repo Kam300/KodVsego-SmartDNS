@@ -1,6 +1,6 @@
-# Exercises the real WinForms timer. No DNS-changing controls are invoked.
+﻿# Exercises the real WinForms timer. No DNS-changing controls are invoked.
 # Showing the form may run its read-only startup DNS/VPN checks.
-param([string]$AssemblyPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'KodVsego_SmartDNS.2.21.0.exe'))
+param([string]$AssemblyPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'KodVsego_SmartDNS.2.22.0.exe'))
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $assembly = [Reflection.Assembly]::LoadFile($AssemblyPath)
@@ -17,7 +17,12 @@ try {
     $form.StartPosition = 'Manual'
     $form.Location = New-Object Drawing.Point -ArgumentList -10000,-10000
     $form.ShowInTaskbar = $false
+    # Isolate animation from real network status while pumping the message loop.
+    Set-Field 'checkingNetwork' $true
+    Set-Field 'checkUpdateAtStartup' $false
+    Set-Field 'initializing' $false
     $form.Show()
+    (Get-Field 'networkMonitor').Stop()
     Set-Field 'active' $true
     Set-Field 'dnsSet' 4
     $form.GetType().GetMethod('SetTheme', $flags).Invoke($form, @($true, $false)) | Out-Null

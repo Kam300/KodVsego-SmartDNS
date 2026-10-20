@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -27,6 +28,12 @@ namespace HbAi.XboxDns
         bool supportShown;
         int supportGrowth;
         Func<string, string, string> makeReport;
+        bool autoLayout, autoReady, autoRunning, autoDetailsExpanded, arranging;
+        Panel autoDetails;
+        Label autoDetailsText, autoScopeNote;
+        LinkLabel autoDetailsToggle;
+        Color autoCardColor;
+        Rectangle autoCardBounds;
 
         internal StyledDialog(Form owner, bool dark, FontFamily bold, FontFamily medium,
             string message, string title, MessageBoxButtons buttons, MessageBoxIcon icon,
@@ -219,6 +226,88 @@ namespace HbAi.XboxDns
             Invalidate(); Update();
         }
 
+        internal void AddAutoDnsControls(string[] goals, int selected, Action<int> run, Action selectionChanged = null)
+        {
+            AddDnsTestControls(goals,selected,run);
+            autoCardColor=surface.R<100?Color.FromArgb(18,18,27):Color.FromArgb(241,239,250);
+            restartBrowser.Visible=false;restartBrowser.TabStop=false;
+            statusMarker.Visible=false;
+            messageBody.AutoScroll=false;messageBody.BackColor=autoCardColor;
+            messageText.BackColor=autoCardColor;statusCaption.BackColor=autoCardColor;
+            browserChoice.AccessibleName="Сервис для автоматического подбора DNS";
+            browserChoice.BackColor=autoCardColor;
+            browserChoice.DrawMode=DrawMode.OwnerDrawFixed;
+            browserChoice.ItemHeight=(int)Math.Round(28*actionHeight/42f);
+            browserChoice.DrawItem+=(s,e)=> {
+                using(var fill=new SolidBrush(browserChoice.BackColor))e.Graphics.FillRectangle(fill,e.Bounds);
+                string item=e.Index<0?browserChoice.Text:Convert.ToString(browserChoice.Items[e.Index]);
+                TextRenderer.DrawText(e.Graphics,item,bodyFont,e.Bounds,browserChoice.ForeColor,
+                    TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPrefix);
+                e.DrawFocusRectangle();
+            };
+            browserHint.Text="Для какого сервиса?";
+            autoScopeNote=new Label {Text="Изменится DNS всего компьютера.\nДоступ к аккаунту проверяется в браузере.",Font=bodyFont,ForeColor=messageText.ForeColor,UseMnemonic=false};
+            autoDetailsToggle=new LinkLabel {Text="Результаты проверки",Font=bodyFont,LinkColor=statusAccent,ActiveLinkColor=statusAccent,UseMnemonic=false,Visible=false};
+            autoDetails=new Panel {AutoScroll=true,Visible=false,BackColor=autoCardColor};
+            autoDetailsText=new Label {AutoSize=true,Font=bodyFont,ForeColor=messageText.ForeColor,UseMnemonic=false,BackColor=autoCardColor};
+            autoDetails.Controls.Add(autoDetailsText);
+            autoDetailsToggle.LinkClicked+=(s,e)=>ToggleAutoDetails();
+            Controls.Add(autoScopeNote);Controls.Add(autoDetailsToggle);Controls.Add(autoDetails);
+            primaryAction.Click+=(s,e)=> {if(!autoReady&&!autoRunning)run(browserChoice.SelectedIndex);};
+            var close=Controls.OfType<DialogCloseButton>().Single();
+            close.DialogResult=DialogResult.Cancel; CancelButton=close;
+            AcceptButton=primaryAction;
+            if(selectionChanged!=null)browserChoice.SelectedIndexChanged+=(s,e)=>selectionChanged();
+            autoLayout=true;
+            ShowAutoDnsStatus("Нажмите «Подобрать DNS».\nПроверим подходящие варианты.","Найдём подходящий DNS",false,false);
+        }
+        internal void ShowAutoDnsStatus(string text,string caption,bool running,bool warning)
+        {
+            autoRunning=running;autoReady=false;autoDetailsExpanded=false;
+            messageText.Text=text;statusCaption.Text=caption;statusCaption.ForeColor=statusAccent;
+            browserChoice.Enabled=!running;
+            primaryAction.DialogResult=DialogResult.None;
+            primaryAction.Enabled=!running;
+            primaryAction.Text=running?"Подбираем…":"Подобрать DNS";
+            if(autoDetailsToggle!=null)autoDetailsToggle.Visible=false;
+            SetSupportVisible(false);
+            UpdateDialogLayout();Invalidate();
+        }
+        internal void ShowAutoDnsResult(string caption,string summary,string details,string connectLabel=null)
+        {
+            ShowAutoDnsStatus(summary,caption,false,false);
+            autoReady=connectLabel!=null;
+            primaryAction.DialogResult=autoReady?DialogResult.OK:DialogResult.None;
+            primaryAction.Text=connectLabel??"Повторить подбор";
+            autoDetailsText.Text=details??"";
+            autoDetailsToggle.Visible=!string.IsNullOrEmpty(details);
+            UpdateDialogLayout();Invalidate();
+        }
+        internal void ToggleAutoDetails()
+        {autoDetailsExpanded=!autoDetailsExpanded;UpdateDialogLayout();Invalidate();}
+        void LayoutAutoDns()
+        {
+            float scale=actionHeight/42f;Func<int,int> px=n=>(int)Math.Round(n*scale);
+            var wantedSize=new Size(px(440),Math.Min(maxDialogHeight,px(autoDetailsExpanded?602:452)));
+            if(ClientSize!=wantedSize)ClientSize=wantedSize;
+            var heading=Controls.OfType<Label>().First(label=>label.Font==titleFont);
+            heading.Bounds=new Rectangle(px(28),px(24),ClientSize.Width-px(92),px(32));
+            browserHint.Bounds=new Rectangle(px(28),px(72),ClientSize.Width-px(56),px(24));
+            browserChoice.Left=px(28);browserChoice.Top=px(102);browserChoice.Width=ClientSize.Width-px(56);
+            autoCardBounds=new Rectangle(px(28),px(156),ClientSize.Width-px(56),px(112));
+            statusCaption.Bounds=new Rectangle(px(44),px(170),ClientSize.Width-px(88),px(26));
+            messageBody.Bounds=new Rectangle(px(44),px(202),ClientSize.Width-px(88),px(60));
+            messageText.MaximumSize=new Size(messageBody.Width,0);
+            autoScopeNote.Bounds=new Rectangle(px(28),px(286),ClientSize.Width-px(56),px(44));
+            autoDetailsToggle.Bounds=new Rectangle(px(28),px(336),ClientSize.Width-px(56),px(26));
+            autoDetailsToggle.Text=autoDetailsExpanded?"Скрыть результаты":"Результаты проверки";
+            primaryAction.Bounds=new Rectangle(px(28),ClientSize.Height-footerGap-actionHeight,ClientSize.Width-px(56),actionHeight);
+            autoDetails.Visible=autoDetailsExpanded;
+            autoDetails.Bounds=new Rectangle(px(28),px(370),ClientSize.Width-px(56),Math.Max(0,primaryAction.Top-px(386)));
+            autoDetailsText.MaximumSize=new Size(autoDetails.Width-px(24),0);
+            autoDetailsText.Location=new Point(px(8),px(8));
+        }
+
         internal void ShowBrowserStatus(string text, bool warning)
         {
             messageText.Text = text;
@@ -229,6 +318,25 @@ namespace HbAi.XboxDns
             statusMarker.ForeColor = warning ? statusWarning : statusAccent;
             SetSupportVisible(warning && DiagnosticReport.ShouldOffer(Text, text));
             Invalidate(); Update();
+        }
+        internal void AddUpdateControls(Action action)
+        {
+            primaryAction.DialogResult=DialogResult.None;
+            primaryAction.Click+=(s,e)=>action();
+            var close=Controls.OfType<DialogCloseButton>().Single();
+            close.DialogResult=DialogResult.Cancel;CancelButton=close;AcceptButton=primaryAction;
+        }
+        internal void ShowUpdateStatus(string text,string caption,string action,bool enabled)
+        {
+            messageText.Text=text;messageBody.AutoScrollPosition=Point.Empty;
+            float scale=actionHeight/42f;
+            int textHeight=messageText.GetPreferredSize(new Size(messageText.MaximumSize.Width,0)).Height;
+            int height=Math.Min(maxDialogHeight,(int)Math.Round(190*scale)+Math.Max((int)Math.Round(90*scale),textHeight+(int)Math.Round(12*scale)));
+            if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
+            statusCaption.Text=caption;statusCaption.ForeColor=statusAccent;
+            statusMarker.Text="↑";
+            primaryAction.Enabled=enabled;SetPrimaryText(action);
+            SetSupportVisible(false);UpdateDialogLayout();Invalidate();
         }
         internal void AddSupportControls(Func<string, string, string> buildReport, bool visible)
         {
@@ -293,6 +401,7 @@ namespace HbAi.XboxDns
 
         internal void SetPrimaryText(string text)
         {
+            if(autoLayout){primaryAction.Text=text;return;}
             float scale = actionHeight / 42f;
             int right = primaryAction.Right;
             int gap = (int)Math.Round(12 * scale);
@@ -359,7 +468,10 @@ namespace HbAi.XboxDns
         }
         void UpdateDialogLayout()
         {
-            if (primaryAction != null && messageBody != null)
+            if(arranging)return;arranging=true;
+            try {
+            if(autoLayout)LayoutAutoDns();
+            else if (primaryAction != null && messageBody != null)
             {
                 primaryAction.Top = Math.Max(0, ClientSize.Height - footerGap - actionHeight);
                 if (cancelAction != null) cancelAction.Top = primaryAction.Top;
@@ -385,11 +497,16 @@ namespace HbAi.XboxDns
                 using (var path = Rounded(ClientRectangle, radius)) Region = new Region(path);
                 if (previous != null) previous.Dispose();
             }
+            }
+            finally {arranging=false;}
         }
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            if(autoLayout)using(var path=Rounded(autoCardBounds,radius/2f))
+            using(var fill=new SolidBrush(autoCardColor))
+            using(var line=new Pen(border)){e.Graphics.FillPath(fill,path);e.Graphics.DrawPath(line,path);}
             using (var path = Rounded(new RectangleF(0.5f, 0.5f, Width - 1, Height - 1), radius))
             using (var pen = new Pen(border)) e.Graphics.DrawPath(pen, path);
         }

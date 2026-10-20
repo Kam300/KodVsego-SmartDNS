@@ -2,6 +2,7 @@
 
 - [Основной README](../README.md) — загрузки для Windows и Android, возможности и требования.
 - [WINDOWS.md](WINDOWS.md) — текущая инструкция Windows, DoH, Antigravity, тесты и диагностика.
+- [UPDATES.md](UPDATES.md) — проверка и установка обновлений в Windows-версии 2.22.0.
 - [Android](../android/README.md) — разработка и подпись APK.
 - [ui-dark.png](ui-dark.png) и [ui-light.png](ui-light.png) — примеры интерфейса Windows 2.21.0. Это тестовые состояния, а не подтверждение доступности сервисов.
 - [button.html](button.html) — страница загрузки с действующими ссылками; [download-button.svg](download-button.svg) — кнопка для встраивания.

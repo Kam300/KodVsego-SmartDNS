@@ -60,6 +60,18 @@ namespace HbAi.XboxDns
             }
             if (!address) throw new IOException("Нет IPv4-ответа");
         }
+        internal static string[] Addresses(byte[] request, byte[] response)
+        {
+            Validate(request,response);
+            int offset=request.Length, answers=Word(response,6);
+            var result=new System.Collections.Generic.List<string>();
+            for(int i=0;i<answers;i++) {
+                SkipName(response,ref offset);int type=Word(response,offset),cls=Word(response,offset+2),length=Word(response,offset+8);offset+=10;
+                if(type==1&&cls==1&&length==4)result.Add(new IPAddress(response.Skip(offset).Take(4).ToArray()).ToString());
+                offset+=length;
+            }
+            return result.Distinct().ToArray();
+        }
         internal static DnsProbeResult Check(string server, string host)
         {
             var result = new DnsProbeResult { Server = server, Host = host }; var timer = Stopwatch.StartNew();

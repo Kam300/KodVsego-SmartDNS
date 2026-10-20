@@ -3,5 +3,6 @@ using System.Reflection;
 [assembly: AssemblyProduct("Код Всего · Smart DNS")]
 [assembly: AssemblyDescription("DNS switcher with persistent per-adapter backup, recovery and light/dark themes.")]
 [assembly: AssemblyCompany("Код Всего")]
-[assembly: AssemblyVersion("2.21.0.0")]
-[assembly: AssemblyFileVersion("2.21.0.0")]
+[assembly: AssemblyVersion("2.22.0.0")]
+[assembly: AssemblyFileVersion("2.22.0.0")]
+[assembly: AssemblyInformationalVersion("2.22.0")]

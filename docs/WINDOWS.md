@@ -1,8 +1,8 @@
 # Код Всего · Smart DNS для Windows
 
-Опубликованная версия: **2.21.0**. Требуется Windows 10 2004+ или Windows 11, .NET Framework 4.8.
+Опубликованная версия: **2.22.0**. Требуется Windows 10 2004+ или Windows 11, .NET Framework 4.8.
 
-[Скачать EXE 2.21.0](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.21.0/KodVsego_SmartDNS.2.21.0.exe) · [Все релизы](https://github.com/Kam300/KodVsego-SmartDNS/releases) · [Общая инструкция](../README.md)
+[Скачать EXE 2.22.0](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.22.0/KodVsego_SmartDNS.2.22.0.exe) · [Все релизы](https://github.com/Kam300/KodVsego-SmartDNS/releases) · [Общая инструкция](../README.md)
 
 Канал: [Код Всего — @TotalC0de](https://t.me/TotalC0de). После C в адресе стоит цифра **0**.
 
@@ -58,6 +58,6 @@
 
 Сборка из корня: build.bat. Версия задаётся в AssemblyInfo.cs. Тесты: powershell -NoProfile -ExecutionPolicy Bypass -File tests\run.ps1.
 
-Исправления отзывчивости окна готовятся отдельно и ещё не вошли в опубликованный EXE 2.21.0. Новая версия пока не выпущена. История доступна в [коммитах](https://github.com/Kam300/KodVsego-SmartDNS/commits/main/) и [релизах](https://github.com/Kam300/KodVsego-SmartDNS/releases).
+В версии 2.22.0 исправлена отзывчивость окна и отрисовка при большом масштабе экрана. Добавлены [режим «Авто»](AUTO.md) и [проверка и установка обновлений](UPDATES.md). История доступна в [коммитах](https://github.com/Kam300/KodVsego-SmartDNS/commits/main/) и [релизах](https://github.com/Kam300/KodVsego-SmartDNS/releases).
 
 Основа проекта — [hb-ai-xbox-dns](https://github.com/neiroseti-ai/hb-ai-xbox-dns/). Исходная MIT-лицензия и уведомления правообладателей сохранены в [LICENSE](../LICENSE). Это сведения о происхождении кода, а не канал поддержки текущей версии.

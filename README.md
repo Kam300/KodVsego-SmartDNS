@@ -4,7 +4,7 @@
 
 | Платформа | Скачать | Требования |
 | --- | --- | --- |
-| Windows · EXE 2.21.0 с иконками | [Скачать EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.21.0/KodVsego_SmartDNS.2.21.0.exe) | Windows 10 2004+ / Windows 11, .NET Framework 4.8 |
+| Windows · EXE 2.22.0 | [Скачать EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.22.0/KodVsego_SmartDNS.2.22.0.exe) | Windows 10 2004+ / Windows 11, .NET Framework 4.8 |
 | Android · APK 1.2.0, предварительная версия | [Android APK и обновлённый Windows EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/v2.21.0) | Android 8.0+, без root |
 
 [Канал «Код Всего» — @TotalC0de](https://t.me/TotalC0de) · [Поддержка — @TotalCodeAdmin](https://t.me/TotalCodeAdmin) · [Сообщить об ошибке](https://github.com/Kam300/KodVsego-SmartDNS/issues)
@@ -13,7 +13,7 @@ Smart DNS может помочь с доступом к сервисам, по�
 
 Ссылка канала содержит цифру **0**: https://t.me/TotalC0de. Поддержка — отдельный аккаунт @TotalCodeAdmin.
 
-**Состояние выпуска:** EXE 2.21.0 и APK 1.2.0 опубликованы. Исправления отзывчивости Windows готовятся отдельно и пока не входят в скачиваемый EXE. Новый выпуск ещё не собран.
+**Стабильная Windows-версия: 2.22.0.** Добавлены [подбор DNS для сервиса](docs/AUTO.md), [обновление из программы](docs/UPDATES.md) и исправления отзывчивости окна, включая большой масштаб экрана. Android остаётся на версии 1.2.0.
 
 ## Интерфейс 2.21 / Android 1.2
 
@@ -85,7 +85,7 @@ Android-версия использует **локальный DNS-туннел�
 build.bat
 ```
 
-Результат: `KodVsego_SmartDNS.2.21.0.exe`. Используется системный компилятор .NET Framework; зависимости не скачиваются.
+Результат: `KodVsego_SmartDNS.2.22.0.exe`. Используется системный компилятор .NET Framework; зависимости не скачиваются.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run.ps1

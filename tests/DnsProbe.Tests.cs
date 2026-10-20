@@ -16,6 +16,7 @@ static class ProbeTests
         var answer = q.Concat(new byte[] {192,12,0,1,0,1,0,0,0,60,0,4,93,184,215,14}).ToArray();
         answer[2] = 129; answer[3] = 128; answer[7] = 1;
         DnsProbe.Validate(q, answer); Check(true, "Valid matching A response accepted");
+        Check(DnsProbe.Addresses(q,answer).SequenceEqual(new[]{"93.184.215.14"}),"Resolved candidate IP is extracted from validated DNS packet");
         var bad = (byte[])answer.Clone(); bad[0] ^= 1; Reject(q,bad,"Wrong transaction rejected");
         bad = (byte[])answer.Clone(); bad[13] ^= 1; Reject(q,bad,"Different question rejected");
         bad = (byte[])answer.Clone(); bad[3] = 131; Reject(q,bad,"NXDOMAIN is not success");

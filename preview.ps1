@@ -1,8 +1,10 @@
 ﻿# Creates the form and renders its canvas only; never invokes DNS changes.
 param(
-    [string]$AssemblyPath = (Join-Path $PSScriptRoot 'KodVsego_SmartDNS.2.21.0.exe'),
+    [string]$AssemblyPath = (Join-Path $PSScriptRoot 'KodVsego_SmartDNS.2.22.0.exe'),
     [int]$Dpi = 96,
     [ValidateRange(-1,5)][int]$DnsSet = -1,
+    [ValidateRange(-1,6)][int]$AutoGoal = -1,
+    [ValidateSet('Select','Working','Ready','Details','Failure')][string]$AutoState = 'Ready',
     [switch]$Active,
     [switch]$Confirmed,
     [ValidateSet('Live', 'Off', 'On', 'Unknown')][string]$VpnPreview = 'Live',
@@ -12,7 +14,7 @@ param(
     [switch]$Secure,
     [switch]$Harden,
     [ValidateSet('Light', 'Dark')][string]$Theme = 'Light',
-    [ValidateSet('None', 'Success', 'Warning', 'LongError', 'CancelUac', 'Force', 'DnsTest', 'DohConflict', 'Cleanup')][string]$Dialog = 'None',
+    [ValidateSet('None', 'Success', 'Warning', 'LongError', 'CancelUac', 'Force', 'DnsTest', 'Auto', 'Update', 'DohConflict', 'Cleanup')][string]$Dialog = 'None',
     [ValidateSet('Ready', 'Working', 'Done', 'Error')][string]$BrowserState = 'Ready',
     [ValidateSet('Live', 'Off', 'On', 'Partial', 'External', 'Unknown')][string]$AgPreview = 'Live',
     [ValidateRange(0,3)][int]$AgProvider = 0,
@@ -25,8 +27,10 @@ if ($Harden) {
 }
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $f = [Activator]::CreateInstance($asm.GetType("HbAi.XboxDns.MainForm"), $true)
+$f.GetType().GetField('initializing', [Reflection.BindingFlags]'Instance,NonPublic').SetValue($f, $false)
 $f.GetType().GetMethod('SetTheme', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($f, @(($Theme -eq 'Dark'), $false)) | Out-Null
 if ($DnsSet -ge 0) { $f.GetType().GetField('dnsSet', [Reflection.BindingFlags]'Instance,NonPublic').SetValue($f, $DnsSet) }
+if ($AutoGoal -ge 0) { $f.GetType().GetField('autoGoal', [Reflection.BindingFlags]'Instance,NonPublic').SetValue($f, $AutoGoal) }
 if ($AgPreview -eq 'Live') {
     $agStatus = $asm.GetType('HbAi.XboxDns.AntigravityDns').GetMethod('GetStatus', [Reflection.BindingFlags]'Static,NonPublic').Invoke($null, @())
 } else {
@@ -81,8 +85,14 @@ if ($Dialog -ne 'None') {
         $icon = [Windows.Forms.MessageBoxIcon]::Warning
     }
     if ($Dialog -eq 'DnsTest') { $title = 'Тест DNS'; $message = 'Результаты теста выбранного DNS' }
+    if ($Dialog -eq 'Auto') { $title = 'Авто-подключение'; $message = 'Выберите сервис и нажмите «Подобрать DNS».' }
+    if ($Dialog -eq 'Update') { $title = 'Обновление программы'; $message = 'Проверка новых версий через GitHub.' }
     $d = $f.GetType().GetMethod('CreateDialog', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($f, @($message, $title, $buttons, $icon, $default, [single]($Dpi / 96.0), ($Dialog -eq 'Success')))
     if ($Dialog -eq 'Force') { $d.GetType().GetMethod('SetPrimaryText', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @('Заменить')) | Out-Null }
+    if ($Dialog -eq 'Update') {
+        $d.GetType().GetMethod('AddUpdateControls', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @([Action]{})) | Out-Null
+        $d.GetType().GetMethod('ShowUpdateStatus', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @("Доступна версия 2.23.0.`nПосле установки программа перезапустится.", 'Доступно обновление', 'Обновить', $true)) | Out-Null
+    }
     if ($Dialog -eq 'DohConflict') { $d.GetType().GetMethod('SetPrimaryText', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @('Подключить')) | Out-Null }
     if ($Dialog -eq 'Cleanup') { $d.GetType().GetMethod('SetPrimaryText', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @('Удалить')) | Out-Null }
     if ($Dialog -eq 'Success' -and $BrowserState -ne 'Ready') {
@@ -100,8 +110,23 @@ if ($Dialog -ne 'None') {
         $testMessage = "Ответ DNS не гарантирует доступность сайта.`n`n143.20.64.55`n✓ example.com — 25 мс`n✓ chatgpt.com — 31 мс`n✓ generativelanguage.googleapis.com — 28 мс`n✓ open.spotify.com — 26 мс`n✓ cloudcode-pa.googleapis.com — 29 мс`n✓ daily-cloudcode-pa.googleapis.com — 29 мс`n`n31.58.216.201`n✓ example.com — 31 мс`n✕ chatgpt.com — нет ответа (2 с)`n`nНастройки DNS не изменялись."
         $d.GetType().GetMethod('ShowDnsTestStatus', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @($testMessage,'Bezmezhau · результаты', $false, $true)) | Out-Null
     }
+    if ($Dialog -eq 'Auto') {
+        $services=[string[]]@('Gemini','ChatGPT','Claude','ElevenLabs','Spotify','Xbox','Antigravity')
+        $goal=if($AutoGoal -ge 0){$AutoGoal}else{1}
+        $d.GetType().GetMethod('AddAutoDnsControls',[Reflection.BindingFlags]'Instance,NonPublic').Invoke($d,@($services,$goal,[Action[int]]{param($choice)},$null))|Out-Null
+        $details="Цель: $($services[$goal])`n`nComss.one: проверка в браузере · 4422 мс`nGeoHide: проверка в браузере · 1358 мс`nGeoHide EU: проверка в браузере · 1387 мс`nBezmezhau: нет соединения`nDNS-AI: нет соединения`n`nИзменится общий DNS компьютера. Работа аккаунта не проверялась."
+        if($AutoState -in @('Ready','Details')) {
+            $d.GetType().GetMethod('ShowAutoDnsResult',[Reflection.BindingFlags]'Instance,NonPublic').Invoke($d,@("GeoHide для $($services[$goal])","Сайт просит проверку в браузере.`nПосле подключения откройте сервис.",$details,'Подключить GeoHide'))|Out-Null
+            if($AutoState -eq 'Details'){$d.GetType().GetMethod('ToggleAutoDetails',[Reflection.BindingFlags]'Instance,NonPublic').Invoke($d,@())|Out-Null}
+        } elseif($AutoState -eq 'Working') {
+            $d.GetType().GetMethod('ShowAutoDnsStatus',[Reflection.BindingFlags]'Instance,NonPublic').Invoke($d,@("Проверено 2 из 5 вариантов.`nНастройки пока не меняем.",'Подбираем DNS',$true,$false))|Out-Null
+        } elseif($AutoState -eq 'Failure') {
+            $d.GetType().GetMethod('ShowAutoDnsResult',[Reflection.BindingFlags]'Instance,NonPublic').Invoke($d,@('Нет подходящего варианта',"Попробуйте позже или выберите DNS вручную.`nНастройки не изменены.",$details,$null))|Out-Null
+        }
+    }
     $bitmap = New-Object Drawing.Bitmap $d.Width, $d.Height
     try {
+        $d.StartPosition='Manual';$d.Location=New-Object Drawing.Point -ArgumentList -10000,-10000
         $d.Show()
         [Windows.Forms.Application]::DoEvents()
         foreach ($button in $d.Controls | Where-Object { $_ -is [Windows.Forms.Button] -and $_.TabStop }) {
