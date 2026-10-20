@@ -138,18 +138,18 @@ namespace HbAi.XboxDns
         readonly float uiScale;
         bool darkTheme;
         Color Bg { get { return Mix(Color.FromArgb(250, 249, 255), Color.FromArgb(8, 8, 13), themeMix); } }
-        Color Accent { get { return Mix(Color.FromArgb(100, 66, 210), Yellow, themeMix); } }
-        Color Selection { get { return Yellow; } }
-        static readonly Color Yellow = Color.FromArgb(255, 226, 99);
-        static readonly Color Sand = Yellow;
+        Color Accent { get { return Mix(Color.FromArgb(0, 127, 159), Cyan, themeMix); } }
+        Color Selection { get { return Cyan; } }
+        static readonly Color Cyan = Color.FromArgb(2, 165, 207);
+        static readonly Color Highlight = Cyan;
         static readonly Color ContrastInk = Color.FromArgb(21, 29, 34);
-        static readonly Color ActiveBg = Yellow;
+        static readonly Color ActiveBg = Cyan;
         Color Ink { get { return Mix(ContrastInk, Color.FromArgb(247, 246, 252), themeMix); } }
         Color Muted { get { return Mix(Color.FromArgb(104, 99, 123), Color.FromArgb(151, 148, 168), themeMix); } }
         Color Soft { get { return Mix(Color.FromArgb(80, 69, 117), Color.FromArgb(204, 196, 244), themeMix); } }
         Color CardBg { get { return Mix(Color.FromArgb(241, 239, 250), Color.FromArgb(18, 18, 27), themeMix); } }
         Color CardLine { get { return Mix(Color.FromArgb(222, 217, 239), Color.FromArgb(43, 40, 59), themeMix); } }
-        Color Purple { get { return Mix(Color.FromArgb(100, 66, 210), Color.FromArgb(155, 124, 255), themeMix); } }
+        Color Purple { get { return Mix(Color.FromArgb(0, 127, 159), Color.FromArgb(155, 124, 255), themeMix); } }
 
         readonly PrivateFontCollection fonts = new PrivateFontCollection();
         readonly Dictionary<string, Image> serviceIcons = new Dictionary<string, Image>();
@@ -685,7 +685,7 @@ namespace HbAi.XboxDns
                 string hl = "к сервисам";
                 var sz = g.MeasureString(hl, f);
                 using (var path = RoundPath(new RectangleF(28, 124, sz.Width + 6, sz.Height - 2), 8))
-                using (var yb = new SolidBrush(Sand)) g.FillPath(yb, path);
+                using (var yb = new SolidBrush(Highlight)) g.FillPath(yb, path);
                 using (var db = new SolidBrush(ContrastInk)) g.DrawString(hl, f, db, 31, 124);
             }
 
@@ -853,11 +853,11 @@ namespace HbAi.XboxDns
             if (powerMix > 0.005f || busy)
             {
                 var gr = r; gr.Inflate(36, 36);
-                Glow(g, gr, Color.FromArgb((int)(busy ? 30 : 38 * powerMix), Yellow));
+                Glow(g, gr, Color.FromArgb((int)(busy ? 30 : 38 * powerMix), Cyan));
             }
             // кольцо
             using (var b = new SolidBrush(Mix(CardBg, ActiveBg, powerMix))) g.FillEllipse(b, r);
-            using (var pen = new Pen(Mix(CardLine, Yellow, Math.Max(powerMix, hoverMix)), 2f)) g.DrawEllipse(pen, r);
+            using (var pen = new Pen(Mix(CardLine, Cyan, Math.Max(powerMix, hoverMix)), 2f)) g.DrawEllipse(pen, r);
             if (busy)
             {
                 using (var pen = new Pen(Accent, 5f) { StartCap = LineCap.Round, EndCap = LineCap.Round })

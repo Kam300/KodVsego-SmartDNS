@@ -1,6 +1,6 @@
 ﻿# Creates the form and renders its canvas only; never invokes DNS changes.
 param(
-    [string]$AssemblyPath = (Join-Path $PSScriptRoot 'KodVsego_SmartDNS.2.20.0.exe'),
+    [string]$AssemblyPath = (Join-Path $PSScriptRoot 'KodVsego_SmartDNS.2.21.0.exe'),
     [int]$Dpi = 96,
     [ValidateRange(-1,5)][int]$DnsSet = -1,
     [switch]$Active,

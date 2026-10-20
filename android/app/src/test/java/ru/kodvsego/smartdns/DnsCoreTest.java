@@ -24,11 +24,8 @@ public class DnsCoreTest {
     static final byte[] EMPTY=new byte[0];
     @Test public void sixProvidersMatchWindows(){assertEquals(6,Provider.ALL.length);assertEquals("DNS-AI",Provider.at(5).name);assertEquals("194.87.196.13",Provider.at(5).servers[0]);}
     @Test public void invalidProviderRejected(){fails(()->Provider.at(-1));fails(()->Provider.at(6));}
-    @Test public void encryptedOnlyCannotDowngrade(){assertTrue(new DnsConfig(5,false,-1).encrypted);}
-    @Test public void missingDohCannotDowngrade(){fails(()->new DnsConfig(2,true,-1));fails(()->new DnsConfig(3,true,-1));}
-    @Test public void unsupportedAntigravityRejected(){fails(()->new DnsConfig(0,false,0));fails(()->new DnsConfig(0,true,2));}
-    @Test public void antigravityMatchesExactDomainsOnly(){DnsConfig c=new DnsConfig(0,false,4);assertSame(Provider.at(4),c.forHost("CLOUDCODE-PA.GOOGLEAPIS.COM"));assertSame(Provider.at(0),c.forHost("evil.cloudcode-pa.googleapis.com"));assertSame(Provider.at(0),c.forHost("cloudcode-pa.googleapis.com.evil"));}
-    @Test public void dohAntigravityRemainsEncrypted(){DnsConfig c=new DnsConfig(0,true,4);assertTrue(c.encrypted);assertNotNull(c.forHost(Provider.AG_DOMAINS[0]).doh);}
+    @Test public void encryptedOnlyCannotDowngrade(){assertTrue(new DnsConfig(5,false).encrypted);}
+    @Test public void missingDohCannotDowngrade(){fails(()->new DnsConfig(2,true));fails(()->new DnsConfig(3,true));}
     @Test public void queryRoundTrip() throws Exception{byte[] q=DnsWire.query("Gemini.Google.Com");assertEquals("gemini.google.com",DnsWire.question(q).host);assertEquals(1,DnsWire.question(q).type);}
     @Test public void corruptQueriesRejected(){fails(()->DnsWire.question(new byte[12]));fails(()->DnsWire.query("bad..host"));fails(()->DnsWire.query(String.join("",Collections.nCopies(64,"a"))+".com"));}
     @Test public void compressedQueryRejected() throws Exception{byte[] q=DnsWire.query("example.com");q[12]=(byte)0xc0;q[13]=12;fails(()->DnsWire.question(q));}

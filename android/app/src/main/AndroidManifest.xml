@@ -8,12 +8,20 @@
     <application android:label="Код Всего · Smart DNS" android:icon="@drawable/app_icon"
         android:theme="@style/AppTheme" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:supportsRtl="true"
         android:usesCleartextTraffic="false">
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <receiver android:name=".DnsWidget" android:exported="false" android:label="@string/widget_title">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_dns_info" />
+        </receiver>
+        <receiver android:name=".CompactDnsWidget" android:exported="false" android:label="@string/widget_compact_title">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_dns_compact_info" />
+        </receiver>
         <!-- VPN consent via VpnService.prepare qualifies for systemExempted without alarm permissions.
              AGP 8.7 lint models only the alarm branch of this OR condition.
              https://developer.android.com/develop/background-work/services/fgs/service-types#system-exempted -->

@@ -1,0 +1,4 @@
+<resources>
+    <item name="dns_power" type="id" />
+    <item name="add_widget" type="id" />
+</resources>

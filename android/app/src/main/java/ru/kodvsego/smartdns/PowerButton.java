@@ -9,17 +9,17 @@ import android.view.animation.DecelerateInterpolator;
 
 /** One drawable control: no layouts or bitmap allocations during animation frames. */
 public final class PowerButton extends View {
-    private static final int YELLOW=Color.rgb(255,226,99), BLACK=Color.rgb(21,29,34);
+    private static final int CYAN=Color.rgb(2,165,207), BLACK=Color.rgb(21,29,34);
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG), glow=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF arc=new RectF();
     private final int surface,accent,muted;
     private final Typeface heading;
     private ValueAnimator transition,spinner;
     private float progress,angle;
-    private boolean connected,working,initialized;
+    private boolean connected,working,initialized,uiResumed;
 
     public PowerButton(Context context) {
-        this(context,Color.rgb(18,18,27),YELLOW,Color.rgb(168,164,188),Typeface.DEFAULT_BOLD);
+        this(context,Color.rgb(18,18,27),CYAN,Color.rgb(168,164,188),Typeface.DEFAULT_BOLD);
     }
 
     PowerButton(Context context,int surface,int accent,int muted,Typeface heading) {
@@ -38,7 +38,7 @@ public final class PowerButton extends View {
         setContentDescription(working?"Отменить подключение DNS":connected?"Выключить DNS":"Включить DNS");
         if(transition!=null)transition.cancel();
         float target=connected?1:0;
-        if(first||!ValueAnimator.areAnimatorsEnabled()||!isAttachedToWindow())progress=target;
+        if(first||!uiResumed||!ValueAnimator.areAnimatorsEnabled()||!isAttachedToWindow())progress=target;
         else {
             transition=ValueAnimator.ofFloat(progress,target);transition.setDuration(220);
             transition.setInterpolator(new DecelerateInterpolator());
@@ -47,7 +47,7 @@ public final class PowerButton extends View {
         updateSpinner();invalidate();
     }
     private void updateSpinner() {
-        boolean animate=working&&isAttachedToWindow()&&getWindowVisibility()==VISIBLE&&ValueAnimator.areAnimatorsEnabled();
+        boolean animate=working&&uiResumed&&isAttachedToWindow()&&getWindowVisibility()==VISIBLE&&ValueAnimator.areAnimatorsEnabled();
         if(!animate){if(spinner!=null){spinner.cancel();spinner=null;}return;}
         if(spinner!=null)return;
         spinner=ValueAnimator.ofFloat(0,360);spinner.setDuration(1100);spinner.setRepeatCount(ValueAnimator.INFINITE);
@@ -56,13 +56,13 @@ public final class PowerButton extends View {
     }
     @Override protected void onSizeChanged(int w,int h,int oldw,int oldh) {
         super.onSizeChanged(w,h,oldw,oldh);
-        glow.setShader(new RadialGradient(w/2f,h/2f,Math.max(1,Math.min(w,h)/2f),new int[]{0x38FFE263,0x00FFE263},null,Shader.TileMode.CLAMP));
+        glow.setShader(new RadialGradient(w/2f,h/2f,Math.max(1,Math.min(w,h)/2f),new int[]{0x3802A5CF,0x0002A5CF},null,Shader.TileMode.CLAMP));
     }
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);float cx=getWidth()/2f,cy=getHeight()/2f,r=Math.min(cx,cy)-dp(16);
         glow.setAlpha((int)(255*progress));canvas.drawCircle(cx,cy,r+dp(15),glow);
-        paint.setStyle(Paint.Style.FILL);paint.setColor(blend(surface,YELLOW,progress));canvas.drawCircle(cx,cy,r,paint);
-        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(1.5f));paint.setColor(blend(accent,YELLOW,progress));canvas.drawCircle(cx,cy,r,paint);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(blend(surface,CYAN,progress));canvas.drawCircle(cx,cy,r,paint);
+        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(1.5f));paint.setColor(blend(accent,CYAN,progress));canvas.drawCircle(cx,cy,r,paint);
         if(working){paint.setStrokeWidth(dp(3));paint.setStrokeCap(Paint.Cap.ROUND);arc.set(cx-r+dp(8),cy-r+dp(8),cx+r-dp(8),cy+r-dp(8));canvas.drawArc(arc,angle,85,false,paint);}
         int glyph=blend(accent,BLACK,progress);paint.setColor(glyph);paint.setStrokeWidth(dp(6));paint.setStrokeCap(Paint.Cap.ROUND);
         float icon=dp(28),y=cy-dp(13);arc.set(cx-icon,y-icon,cx+icon,y+icon);canvas.drawArc(arc,-60,300,false,paint);
@@ -72,14 +72,20 @@ public final class PowerButton extends View {
     }
     @Override protected void drawableStateChanged() {
         super.drawableStateChanged();
-        if(isAttachedToWindow()&&ValueAnimator.areAnimatorsEnabled()) {
+        if(uiResumed&&isAttachedToWindow()&&ValueAnimator.areAnimatorsEnabled()) {
             float scale=isPressed()?.97f:1;
             animate().scaleX(scale).scaleY(scale).setDuration(isPressed()?100:160).start();
         }
     }
     @Override public boolean performClick(){return super.performClick();}
+    void pauseUi(){
+        uiResumed=false;if(transition!=null)transition.cancel();
+        if(spinner!=null){spinner.cancel();spinner=null;}
+        animate().cancel();cancelPendingInputEvents();setPressed(false);setScaleX(1);setScaleY(1);progress=connected?1:0;invalidate();
+    }
+    void resumeUi(){pauseUi();uiResumed=true;setEnabled(true);setClickable(true);updateSpinner();}
     @Override public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(info);info.setClassName(android.widget.Button.class.getName());}
     @Override protected void onAttachedToWindow(){super.onAttachedToWindow();updateSpinner();}
     @Override protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);updateSpinner();}
-    @Override protected void onDetachedFromWindow(){if(transition!=null)transition.cancel();if(spinner!=null){spinner.cancel();spinner=null;}animate().cancel();super.onDetachedFromWindow();}
+    @Override protected void onDetachedFromWindow(){pauseUi();super.onDetachedFromWindow();}
 }

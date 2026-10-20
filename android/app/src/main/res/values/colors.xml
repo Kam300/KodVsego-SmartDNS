@@ -1,0 +1,6 @@
+<resources>
+    <color name="brand_cyan">#02A5CF</color>
+    <color name="widget_surface">#121822</color>
+    <color name="widget_ink">#F7FAFC</color>
+    <color name="widget_muted">#B0C8D3</color>
+</resources>

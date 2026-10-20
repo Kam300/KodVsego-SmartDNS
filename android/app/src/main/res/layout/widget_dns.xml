@@ -1,0 +1,7 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_root"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@drawable/widget_background">
+    <TextView android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:drawableStart="@drawable/ic_power" android:drawablePadding="8dp" android:text="@string/widget_title" android:textColor="@color/brand_cyan" android:textSize="15sp" android:textStyle="bold" />
+    <TextView android:id="@+id/widget_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/widget_off" android:textColor="@color/widget_ink" android:textSize="16sp" android:textStyle="bold" android:maxLines="2" />
+    <TextView android:id="@+id/widget_provider" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:textColor="@color/widget_muted" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+    <Button android:id="@+id/widget_toggle" android:layout_width="match_parent" android:layout_height="44dp" android:text="@string/widget_on" android:background="@drawable/widget_button" android:textColor="#081A20" android:textAllCaps="false" android:textSize="14sp" android:textStyle="bold" android:minHeight="0dp" android:minWidth="0dp" />
+</LinearLayout>

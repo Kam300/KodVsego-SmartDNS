@@ -17,19 +17,13 @@ public final class Provider {
         new Provider("Bezmezhau", new String[]{"143.20.64.55", "31.58.216.201"}, "https://dns.bezmezhau.com/dns-query", false, "ChatGPT", "Gemini", "Spotify"),
         new Provider("DNS-AI", new String[]{"194.87.196.13", "186.246.49.127"}, "https://dns.dns-ai.ru/dns-query", true, "ChatGPT", "Claude", "Gemini", "ElevenLabs")
     };
-    public static final int[] AG_PROVIDERS = {1, 2, 4};
-    public static final String[] AG_DOMAINS = {"cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com"};
     public static Provider at(int index) {
         if (index < 0 || index >= ALL.length) throw new IllegalArgumentException("Неизвестный DNS-провайдер");
         return ALL[index];
     }
-    public static boolean antigravity(String host) {
-        for (String domain : AG_DOMAINS) if (domain.equalsIgnoreCase(host)) return true;
-        return false;
-    }
     public String[] testHosts() {
         if (this == ALL[3]) return new String[]{"example.com", "xbox.com", "user.auth.xboxlive.com", "xsts.auth.xboxlive.com"};
-        if (this == ALL[4]) return new String[]{"example.com", "chatgpt.com", "gemini.google.com", "open.spotify.com", AG_DOMAINS[0], AG_DOMAINS[1]};
-        return new String[]{"example.com", "chatgpt.com", "claude.ai", "gemini.google.com", "generativelanguage.googleapis.com", "api.elevenlabs.io", AG_DOMAINS[0], AG_DOMAINS[1]};
+        if (this == ALL[4]) return new String[]{"example.com", "chatgpt.com", "gemini.google.com", "open.spotify.com"};
+        return new String[]{"example.com", "chatgpt.com", "claude.ai", "gemini.google.com", "generativelanguage.googleapis.com", "api.elevenlabs.io"};
     }
 }

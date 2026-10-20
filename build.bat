@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-"%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /optimize+ /out:"KodVsego_SmartDNS.2.20.0.exe" ^
+"%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /optimize+ /out:"KodVsego_SmartDNS.2.21.0.exe" ^
  /win32icon:res\app.ico /win32manifest:app.manifest ^
  /resource:res\app.ico,app.ico /resource:res\Unbounded-ExtraBold.ttf,Unbounded-ExtraBold.ttf ^
  /resource:res\Manrope-Bold.ttf,Manrope-Bold.ttf /resource:res\Manrope-Medium.ttf,Manrope-Medium.ttf ^

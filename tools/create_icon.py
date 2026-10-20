@@ -7,7 +7,7 @@ size = 1024
 nodes = [(512, 190), (248, 348), (248, 664), (512, 822),
          (776, 664), (512, 506), (776, 348)]
 edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 0)]
-sand, cyan = (238, 215, 173), (2, 165, 207)
+sky, cyan = (103, 217, 248), (2, 165, 207)
 
 background = Image.new('RGBA', (size, size))
 pixels = background.load()
@@ -33,7 +33,7 @@ gradient = Image.new('RGBA', (size, size))
 gd = ImageDraw.Draw(gradient)
 for y in range(size):
     t = min(1, max(0, (y - 190) / (740 - 190)))
-    color = tuple(round(a*(1-t) + b*t) for a, b in zip(sand, cyan))
+    color = tuple(round(a*(1-t) + b*t) for a, b in zip(sky, cyan))
     gd.line((0, y, size, y), fill=(*color, 255))
 gradient.putalpha(mask)
 background = Image.alpha_composite(background, gradient)
@@ -46,7 +46,7 @@ circles = '\n'.join(f'<circle cx="{x}" cy="{y}" r="47.5"/>' for x,y in nodes)
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
 <defs>
   <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#192a34"/><stop offset="1" stop-color="#0c161d"/></linearGradient>
-  <linearGradient id="mark" x1="0" y1="190" x2="0" y2="740" gradientUnits="userSpaceOnUse"><stop stop-color="#eed7ad"/><stop offset="1" stop-color="#02a5cf"/></linearGradient>
+  <linearGradient id="mark" x1="0" y1="190" x2="0" y2="740" gradientUnits="userSpaceOnUse"><stop stop-color="#67d9f8"/><stop offset="1" stop-color="#02a5cf"/></linearGradient>
 </defs>
 <rect x="9" y="9" width="1006" height="1006" rx="224" fill="url(#bg)" stroke="#354f59" stroke-width="5"/>
 <path d="{path}" fill="none" stroke="url(#mark)" stroke-width="42"/>

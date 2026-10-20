@@ -1,6 +1,11 @@
 <resources>
     <string name="encrypted_dns">Зашифрованный DNS · DoH</string>
-    <string name="antigravity_dns">Доп. DNS Antigravity</string>
+    <string name="widget_title">Smart DNS</string>
+    <string name="widget_compact_title">Smart DNS · компактный</string>
+    <string name="widget_description">Состояние DNS и быстрое включение или отключение</string>
+    <string name="widget_off">DNS выключен</string>
+    <string name="widget_on">Включить</string>
+    <string name="widget_on_short">Вкл</string>
     <string name="test_dns">Тест DNS</string>
     <string name="test_stopped">Тест остановлен. Настройки DNS не изменены.</string>
 </resources>

@@ -42,11 +42,10 @@ namespace HbAi.XboxDns
             border = dark ? Color.FromArgb(43, 40, 59) : Color.FromArgb(222, 217, 239);
             Color ink = dark ? Color.FromArgb(247, 246, 252) : Color.FromArgb(21, 29, 34);
             Color muted = dark ? Color.FromArgb(151, 148, 168) : Color.FromArgb(104, 99, 123);
-            Color accent = dark ? Color.FromArgb(255, 226, 99) : Color.FromArgb(100, 66, 210);
+            Color accent = dark ? Color.FromArgb(2, 165, 207) : Color.FromArgb(0, 127, 159);
             Color card = dark ? Color.FromArgb(18, 18, 27) : Color.FromArgb(241, 239, 250);
-            Color sand = Color.FromArgb(255, 226, 99);
             statusAccent = accent;
-            statusWarning = dark ? sand : Color.FromArgb(139, 87, 24);
+            statusWarning = accent;
             BackColor = surface;
             ForeColor = ink;
             var area = Screen.FromControl(owner).WorkingArea;
@@ -76,11 +75,11 @@ namespace HbAi.XboxDns
             Controls.Add(heading);
             bool warning = icon == MessageBoxIcon.Warning || icon == MessageBoxIcon.Error;
             var marker = new Label { Text = warning ? "!" : "i", Font = buttonFont,
-                ForeColor = warning ? (dark ? sand : Color.FromArgb(139, 87, 24)) : accent, BackColor = card, TextAlign = ContentAlignment.MiddleCenter,
+                ForeColor = accent, BackColor = card, TextAlign = ContentAlignment.MiddleCenter,
                 Bounds = new Rectangle(pad, px(66), px(28), px(28)) };
             Controls.Add(marker);
             var caption = new Label { Text = warning ? "Обратите внимание" : "Готово", Font = buttonFont,
-                ForeColor = warning && dark ? sand : accent, UseMnemonic = false,
+                ForeColor = accent, UseMnemonic = false,
                 Bounds = new Rectangle(pad + px(38), px(70), width - pad * 2 - px(38), px(26)) };
             Controls.Add(caption);
             statusCaption = caption; statusMarker = marker;
@@ -99,7 +98,7 @@ namespace HbAi.XboxDns
 
             bool confirm = buttons == MessageBoxButtons.YesNo;
             var primary = new DialogButton(confirm ? "Продолжить" : "Понятно", buttonFont,
-                dark ? Color.FromArgb(255, 226, 99) : Color.FromArgb(100, 66, 210),
+                dark ? Color.FromArgb(2, 165, 207) : Color.FromArgb(0, 127, 159),
                 dark ? Color.FromArgb(8, 8, 13) : Color.White, border, px(12)) {
                 Bounds = new Rectangle(width - pad - px(150), ClientSize.Height - px(66), px(150), px(42)),
                 DialogResult = confirm ? DialogResult.Yes : DialogResult.OK, TabIndex = confirm ? 1 : 0
