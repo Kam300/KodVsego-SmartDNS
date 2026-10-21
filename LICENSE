@@ -1,5 +1,11 @@
+Код Всего · Smart DNS
+Исходный код: https://github.com/Kam300/KodVsego-SmartDNS
+Канал проекта: https://t.me/TotalC0de
+Поддержка: https://t.me/TotalCodeAdmin
+
 MIT License
 
+Copyright (c) 2026 Код Всего (https://t.me/TotalC0de) — modifications to KodVsego Smart DNS
 Copyright (c) 2026 HB AI (vk.com/neiroseti_ai)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,5 +27,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ---
-Шрифты в папке res/ (Unbounded, Manrope) — SIL Open Font License 1.1,
-тексты лицензий: res/OFL-Unbounded.txt и res/OFL-Manrope.txt.
+Исходная программа: HB AI · Xbox DNS
+https://github.com/neiroseti-ai/hb-ai-xbox-dns
+
+Уведомление HB AI относится к исходному коду проекта.
+Уведомление «Код Всего» относится к изменениям в KodVsego Smart DNS.
+
+Шрифты Unbounded и Manrope распространяются по SIL Open Font License 1.1.
+Тексты лицензий: res/OFL-Unbounded.txt и res/OFL-Manrope.txt.
+Исходный русский лицензионный текст HB AI сохранён в docs/licenses/HB-AI-LICENSE.ru.md.

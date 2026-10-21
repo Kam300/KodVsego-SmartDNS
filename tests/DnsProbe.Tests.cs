@@ -9,6 +9,21 @@ static class ProbeTests
     static void Main(string[] args)
     {
         byte[] q = DnsProbe.Query("example.com");
+        bool resolved=false;
+        var pinned=DohHttp2.ResolverAddresses(EncryptedDns.Templates[0],host=>{resolved=true;return new[]{"127.0.1.1"};});
+        Check(!resolved&&pinned.SequenceEqual(new[]{"195.133.25.16"}),"Comss test uses configured Windows DoH IP without resolving its poisoned hostname");
+        var geo=DohHttp2.ResolverAddresses(EncryptedDns.Templates[1],host=>new[]{"127.0.1.1","193.233.112.68"});
+        Check(geo.SequenceEqual(new[]{"193.233.112.68"}),"Other provider addresses are resolved separately and local targets are rejected");
+        Check(!DohHttp2.CanRetry(new System.Security.Authentication.AuthenticationException("wrong hostname certificate")),"Direct HTTPS never retries around a certificate validation failure");
+        int attempts=0;var trace=new System.Collections.Generic.List<string>();
+        var retried=DohHttp2.QueryReliable("https://resolver.test/dns-query",q,(url,packet)=>{attempts++;if(attempts==1)throw new System.ComponentModel.Win32Exception(12002,"simulated timeout");return packet;},trace.Add);
+        Check(attempts==2&&retried==q&&trace.Any(line=>line.Contains("attempt=1"))&&trace.Any(line=>line.Contains("attempt=2")),"Temporary DoH timeout is retried once with both attempts logged");
+        attempts=0;try{DohHttp2.QueryReliable("https://resolver.test/dns-query",q,(url,packet)=>{attempts++;throw new System.ComponentModel.Win32Exception(12029);},null);}catch(System.ComponentModel.Win32Exception){}
+        Check(attempts==2,"Persistent network failure stops after two HTTPS attempts");
+        foreach(Exception failure in new Exception[]{new System.ComponentModel.Win32Exception(12175,"certificate failure"),new System.IO.IOException("DoH HTTP 403"),new System.IO.IOException("malformed DNS")}) {
+            attempts=0;try{DohHttp2.QueryReliable("https://resolver.test/dns-query",q,(url,packet)=>{attempts++;throw failure;},null);}catch(Exception){}
+            Check(attempts==1,"Certificate, HTTP and data errors are never bypassed or retried: "+failure.Message);
+        }
         foreach(string endpoint in new[]{"http://resolver.test/dns-query","https://user:secret@resolver.test/dns-query","https://resolver.test:444/dns-query","https://resolver.test/dns-query?token=secret"}) {
             bool rejected=false;try {DohHttp2.Query(endpoint,q);}catch(System.IO.IOException){rejected=true;}
             Check(rejected,"HTTP/2 transport rejects unsafe endpoint before connecting");

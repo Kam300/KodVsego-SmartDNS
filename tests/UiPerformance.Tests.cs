@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Reflection;
@@ -20,7 +20,82 @@ static class UiPerformanceTests
         {
             Check((bool)Get(form, "initializing") && !(bool)Get(form, "checkingNetwork"), "Constructing window defers network initialization until Shown");
             Check(form.ConnectionLabel == "Проверяем настройки…", "Initial status does not claim DNS is off before reading Windows");
+            Set(form,"defaultGoal",-1);
             Check(form.AcceptNetworkSnapshot(0), "Current idle snapshot accepted");
+            var nativeHandle=form.Handle;
+            var creation=(CreateParams)typeof(Control).GetProperty("CreateParams",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(form,null);
+            Check((creation.Style&0x00c40000)==0,"Native caption and thick-frame styles remain disabled for the custom window");
+            Check(form.ClientSize==form.Size&&form.PointToScreen(Point.Empty)==form.Location,"Real native client fills the window with no title bar covering header buttons");
+            var originalSize=form.ClientSize;
+            Check(form.Size==form.MinimumSize,"Startup window size is the minimum; enlargement remains available");
+            Check(form.MinimumSize.Width>0&&form.MinimumSize.Height>0,"Resizable window has explicit minimum dimensions");
+            form.Size=new Size(10,10);
+            Check(form.Width>=form.MinimumSize.Width&&form.Height>=form.MinimumSize.Height,"Windows cannot shrink the form below its minimum");
+            form.ClientSize=new Size(originalSize.Width+240,originalSize.Height+180);
+            float resizedScale=(float)Get(form,"uiScale");var offset=(PointF)Get(form,"canvasOffset");
+            Console.WriteLine("INFO resize: client="+form.ClientSize+"; scale="+resizedScale+"; offset="+offset+"; expected="+Math.Min(form.ClientSize.Width/440f,form.ClientSize.Height/988f));
+            int layoutWidth=(int)Get(form,"layoutWidth"),layoutHeight=(int)Get(form,"layoutHeight");
+            Check(offset==PointF.Empty&&Math.Abs(layoutWidth*resizedScale-form.ClientSize.Width)<=1&&Math.Abs(layoutHeight*resizedScale-form.ClientSize.Height)<=1,"Responsive layout fills the real window without sidebars or stretched fonts");
+            var responsiveCard=(Rectangle)Get(form,"rSecureOption");
+            Check(responsiveCard.Left==28&&responsiveCard.Right==layoutWidth-28&&((Rectangle)Get(form,"providerViewport")).Width==layoutWidth-116,"Cards and provider list expand to available window width");
+            Check(((Rectangle)Get(form,"providerViewport")).Width/(int)Get(form,"ProviderItemWidth")>3,"Wider windows expose more than three DNS choices");
+            Check(((Rectangle)Get(form,"rToggle")).X==(layoutWidth-200)/2&&((Rectangle)Get(form,"rSettings")).X==layoutWidth-152,"Power remains centered and header actions stay anchored to the right");
+            var toCanvas=typeof(MainForm).GetMethod("CanvasPoint",flags);
+            var mapped=(Point)toCanvas.Invoke(form,new object[]{new Point((int)Math.Round(offset.X+220*resizedScale),(int)Math.Round(offset.Y+300*resizedScale))});
+            Check(Math.Abs(mapped.X-220)<=1&&Math.Abs(mapped.Y-300)<=1,"Pointer mapping follows resized and centered buttons");
+            Check(form.ResizeHitTest(new Point(0,form.ClientSize.Height/2))==10&&form.ResizeHitTest(new Point(form.ClientSize.Width-1,form.ClientSize.Height/2))==11&&form.ResizeHitTest(new Point(form.ClientSize.Width/2,0))==12&&form.ResizeHitTest(new Point(form.ClientSize.Width/2,form.ClientSize.Height-1))==15,"All four window edges resize");
+            Check(form.ResizeHitTest(Point.Empty)==13&&form.ResizeHitTest(new Point(form.ClientSize.Width-1,0))==14&&form.ResizeHitTest(new Point(0,form.ClientSize.Height-1))==16&&form.ResizeHitTest(new Point(form.ClientSize.Width-1,form.ClientSize.Height-1))==17,"All four window corners resize diagonally");
+            var closeBounds=(Rectangle)Get(form,"rClose");
+            var closePoint=new Point((int)Math.Round((closeBounds.Left+closeBounds.Width/2f)*resizedScale),(int)Math.Round((closeBounds.Top+closeBounds.Height/2f)*resizedScale));
+            Check(form.ResizeHitTest(closePoint)==0,"Resize grips do not steal the close button");
+            using(var preview=new Bitmap(form.ClientSize.Width,form.ClientSize.Height)) {
+                form.DrawToBitmap(preview,form.ClientRectangle);
+                preview.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(),"SmartDNS-resize-ui.png"));
+            }
+            var footer=(Rectangle)Get(form,"rBrand");
+            Check(footer.Left==28&&layoutHeight-footer.Bottom==20,"Footer remains anchored to the bottom without the removed Telegram banner");
+            var agCard=(Rectangle)Get(form,"rAgOption");var cleanup=(Rectangle)Get(form,"rAgCleanup");
+            Check(agCard.Height==58&&footer.Top-agCard.Bottom==16&&cleanup.Bottom<=agCard.Bottom,"Compact Antigravity card is followed directly by the footer");
+            form.ClientSize=originalSize;
+            Set(form,"defaultGoal",1);
+            using(var settings=form.CreateSettingsDialog()) {
+                var save=(Button)typeof(StyledDialog).GetField("primaryAction",flags).GetValue(settings);
+                var open=(Button)typeof(StyledDialog).GetField("settingsOpenBackup",flags).GetValue(settings);
+                var choice=(DialogServicePicker)typeof(StyledDialog).GetField("settingsGoalChoice",flags).GetValue(settings);
+                var manual=(RadioButton)typeof(StyledDialog).GetField("settingsManualMode",flags).GetValue(settings);
+                var automatic=(RadioButton)typeof(StyledDialog).GetField("settingsAutoMode",flags).GetValue(settings);
+                Check(save.Text=="Сохранить"&&save.DialogResult==DialogResult.OK&&settings.CancelButton.DialogResult==DialogResult.Cancel,"Settings saves only by explicit acceptance and Escape cancels");
+                Check(open.Enabled==System.IO.Directory.Exists(AgCleanupBackup.Root)&&open.Bottom<save.Top,"Backup folder action remains separate from saving the default service");
+                Check(settings.SettingsGoal==1&&choice.Items.Length==AutoDns.Goals.Length&&automatic.Checked,"Settings loads saved service with a separate automatic mode selector");
+                int automaticHeight=settings.ClientSize.Height;
+                manual.Checked=true;
+                Check(settings.SettingsGoal==-1&&(int)Get(form,"defaultGoal")==1,"Changing settings does not apply or persist preference before Save");
+                Check(settings.ClientSize.Height<automaticHeight&&!choice.Enabled,"Manual mode removes the unused service row and shrinks settings");
+                settings.StartPosition=FormStartPosition.Manual;settings.Location=new Point(-10000,-10000);settings.ShowInTaskbar=false;settings.Show();Application.DoEvents();
+                using(var image=new Bitmap(settings.ClientSize.Width,settings.ClientSize.Height)) {
+                    settings.DrawToBitmap(image,settings.ClientRectangle);image.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(),"SmartDNS-default-service-settings.png"));
+                }
+                automatic.Checked=true;
+                Check(settings.SettingsGoal==1&&choice.Visible&&choice.Enabled,"Switching back to automatic mode preserves the chosen service");
+                using(var image=new Bitmap(settings.ClientSize.Width,settings.ClientSize.Height)) {
+                    settings.DrawToBitmap(image,settings.ClientRectangle);image.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(),"SmartDNS-auto-service-settings.png"));
+                }
+            }
+            Set(form,"active",false);Set(form,"manualSelection",false);
+            Check((bool)typeof(MainForm).GetProperty("UseDefaultGoal",flags).GetValue(form,null),"Saved service enables one-click auto selection");
+            typeof(MainForm).GetMethod("PickSet",flags).Invoke(form,new object[]{(int)Get(form,"dnsSet")});
+            Check(!(bool)typeof(MainForm).GetProperty("UseDefaultGoal",flags).GetValue(form,null)&&(int)Get(form,"defaultGoal")==1,"Manual DNS selection overrides the default in this session without erasing the saved goal");
+            Set(form,"defaultGoal",-1);
+            int selected=(int)Get(form,"dnsSet");
+            Set(form,"providerScroll",0);
+            form.ScrollProviderPage(1);
+            Check((int)Get(form,"providerScroll")==324&&(int)Get(form,"dnsSet")==selected,"Arrow pages three providers without changing selected DNS");
+            form.ScrollProviderPage(1);
+            Check((int)Get(form,"providerScroll")==432,"Last page clamps to the final Auto entry");
+            form.ScrollProviderPage(-1);form.ScrollProviderPage(-1);
+            Check((int)Get(form,"providerScroll")==0,"Backward paging stops at first provider");
+            var viewport=(Rectangle)Get(form,"providerViewport");
+            Check(!viewport.IntersectsWith((Rectangle)Get(form,"providerPrevious"))&&!viewport.IntersectsWith((Rectangle)Get(form,"providerNext"))&&viewport.Width==3*108,"Three full provider tiles fit between separate arrow hit areas");
             Set(form, "busy", true);
             Check(!form.AcceptNetworkSnapshot(0), "Snapshot cannot overwrite an active operation");
             Set(form, "busy", false); Set(form, "operationRevision", 1);
@@ -41,7 +116,7 @@ static class UiPerformanceTests
                 Check(choice.Enabled,"Goal can be changed after search");
                 var primary=(Button)typeof(StyledDialog).GetField("primaryAction",flags).GetValue(dialog);
                 Check(primary.DialogResult==DialogResult.None&&choice.Top<((Label)typeof(StyledDialog).GetField("statusCaption",flags).GetValue(dialog)).Top,"Single action starts search and service choice is above the result");
-                dialog.ShowAutoDnsResult("GeoHide для ChatGPT","Сайт просит проверку в браузере.\nПосле подключения откройте сервис.","LONG TECHNICAL DETAILS","Подключить GeoHide");
+                dialog.ShowAutoDnsResult("GeoHide для ChatGPT","","LONG TECHNICAL DETAILS","Подключить GeoHide");
                 var body=(Label)typeof(StyledDialog).GetField("messageText",flags).GetValue(dialog);
                 Check(primary.Text=="Подключить GeoHide"&&primary.DialogResult==DialogResult.OK&&!body.Text.Contains("TECHNICAL"),"Selected DNS is named in the action; technical details stay out of summary");
                 Check(!(bool)typeof(StyledDialog).GetField("autoDetailsExpanded",flags).GetValue(dialog),"Results are collapsed by default");
@@ -54,6 +129,23 @@ static class UiPerformanceTests
                 Check(!primary.Enabled&&primary.DialogResult==DialogResult.None,"Search disables connection and clears previous acceptance");
                 dialog.ShowAutoDnsResult("Не удалось подобрать","Повторите позже","Failure details");
                 Check(primary.DialogResult==DialogResult.None&&primary.Enabled,"Failed search offers retry instead of applying a previous DNS");
+                dialog.SetDiagnosticDetails("TLS timeout; ip=203.0.113.4; token=private-test-value",true);
+                var support=(Panel)typeof(StyledDialog).GetField("supportPanel",flags).GetValue(dialog);
+                Check((bool)typeof(StyledDialog).GetField("supportShown",flags).GetValue(dialog)&&support.Bottom<primary.Top&&support.Top>=362*primary.Height/42,"Auto failure log controls fit above primary action without overlapping summary");
+                Check(dialog.DiagnosticMessage.Contains("TLS timeout")&&!dialog.DiagnosticMessage.Contains("private-test-value"),"Export includes technical failure and removes credentials");
+                dialog.ToggleAutoDetails();
+                var expanded=(Panel)typeof(StyledDialog).GetField("autoDetails",flags).GetValue(dialog);
+                Check(expanded.Bottom<support.Top&&support.Bottom<primary.Top,"Expanded diagnostics keep log save and connect controls separate");
+                dialog.ShowAutoDnsStatus("running","test",true,false);
+                Check(!(bool)typeof(StyledDialog).GetField("supportShown",flags).GetValue(dialog)&&!dialog.DiagnosticMessage.Contains("TLS timeout"),"New search clears stale diagnostics and hides log action");
+            }
+            using(var dialog=form.CreateDialog("Auto start test","Авто",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1)) {
+                int started=0,goal=-1;
+                dialog.AddAutoDnsControls(new[]{"Gemini","ChatGPT"},1,selectedGoal=>{started++;goal=selectedGoal;},null);
+                dialog.StartPosition=FormStartPosition.Manual;dialog.Location=new Point(-10000,-10000);dialog.ShowInTaskbar=false;dialog.Show();Application.DoEvents();
+                dialog.StartAutoDnsSearch();
+                Check(started==1&&goal==1,"One-click auto start immediately checks the preselected service without another button press");
+                dialog.Close();
             }
             using(var dialog=form.CreateDialog("Update test","Обновление",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1)) {
                 dialog.AddUpdateControls(()=>{});
@@ -89,7 +181,7 @@ static class UiPerformanceTests
                 graphics.ScaleTransform(2,2);
                 paint.Invoke(form,new object[]{graphics});
                 var background=(Bitmap)(Get(form,"darkBackground")??Get(form,"lightBackground"));
-                Check(background.Width==880&&background.Height==2*(int)typeof(MainForm).GetField("CanvasHeight",BindingFlags.NonPublic|BindingFlags.Static).GetRawConstantValue(),"200 percent DPI uses a background cache sized in physical pixels");
+                Check(background.Width==2*(int)Get(form,"layoutWidth")&&background.Height==2*(int)Get(form,"layoutHeight"),"200 percent DPI uses a background cache sized in physical pixels for the responsive layout");
                 var glow=(Bitmap)Get(form,"toggleGlow");
                 Check(glow.Width==560&&glow.Height==560,"Glow also uses device pixels without per-frame upscaling");
                 var clock=Stopwatch.StartNew();

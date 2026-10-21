@@ -12,7 +12,7 @@ namespace HbAi.XboxDns
 {
     sealed class DnsProbeResult
     {
-        internal string Server, Host, Error;
+        internal string Server, Host, Error, Detail;
         internal int Milliseconds;
         internal bool Ok { get { return Error == null; } }
         public override string ToString() { return Server + " · " + Host + ": " + (Ok ? Milliseconds + " мс" : Error); }
@@ -92,30 +92,14 @@ namespace HbAi.XboxDns
         internal static DnsProbeResult CheckHttps(string template, string host)
         {
             var result = new DnsProbeResult { Server = template, Host = host }; var timer = Stopwatch.StartNew();
+            var trace=new StringBuilder("Transport=Comss HTTPS to configured IP / other providers WinHTTP with HTTP/2; GeoHide alternate=HTTPS to resolved addresses; original SNI and TLS certificate validation enabled; stage timeout="+DohHttp2.RequestTimeoutMilliseconds+" ms; maximum attempts=2\n");
             try
             {
                 var query = Query(host);
-                if (template == EncryptedDns.Templates[5])
-                {
-                    Validate(query,DohHttp2.Query(template,query));
-                    result.Milliseconds=(int)timer.ElapsedMilliseconds;
-                    return result;
-                }
-                string encoded = Convert.ToBase64String(query).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-                var request = (HttpWebRequest)WebRequest.Create(template + "?dns=" + encoded);
-                request.Proxy = null; request.Timeout = 5000; request.ReadWriteTimeout = 5000;
-                request.AllowAutoRedirect = false; request.Accept = "application/dns-message";
-                using (var response = (HttpWebResponse)request.GetResponse())
-                using (var stream = response.GetResponseStream())
-                using (var output = new MemoryStream())
-                {
-                    if (response.StatusCode != HttpStatusCode.OK) throw new IOException("HTTP " + (int)response.StatusCode);
-                    var buffer = new byte[2048]; int count;
-                    while ((count = stream.Read(buffer, 0, buffer.Length)) > 0) { if (output.Length + count > 65535) throw new IOException("Слишком большой ответ DoH."); output.Write(buffer, 0, count); }
-                    Validate(query, output.ToArray());
-                }
+                Validate(query,DohHttp2.QueryReliable(template,query,line=>trace.AppendLine(line)));
             }
-            catch (Exception ex) { result.Error = ex.Message; }
+            catch (Exception ex) { result.Error = ex.Message;trace.AppendLine(ex.ToString()); }
+            result.Detail=DiagnosticReport.Scrub(trace.ToString());
             result.Milliseconds = (int)timer.ElapsedMilliseconds; return result;
         }
         internal static DnsProbeResult[] CheckProvider(int provider)

@@ -25,6 +25,7 @@ namespace HbAi.XboxDns
         internal int Provider, Milliseconds;
         internal bool Encrypted, NeedsBrowser;
         internal string Error;
+        internal string Trace;
         internal bool Ok { get { return Error == null; } }
     }
     sealed class BrowserChallengeException : IOException
@@ -38,6 +39,8 @@ namespace HbAi.XboxDns
     }
     static class AutoDns
     {
+        internal static int GoalIndex(string name)
+        {return Array.FindIndex(Goals,goal=>string.Equals(goal.Name,name,StringComparison.OrdinalIgnoreCase));}
         internal static readonly AutoGoal[] Goals = {
             new AutoGoal {Name="Gemini", Hosts=new[]{"gemini.google.com"}, Providers=new[]{0,1,2,4,5}},
             new AutoGoal {Name="ChatGPT", Hosts=new[]{"chatgpt.com"}, Providers=new[]{0,1,2,4,5}},
@@ -62,24 +65,29 @@ namespace HbAi.XboxDns
                 int provider=providers[i];
                 var result=new AutoDnsResult {Provider=provider,Encrypted=encrypted||Dns.EncryptedOnly(provider)};
                 var watch=Stopwatch.StartNew();
+                var trace=new StringBuilder();trace.AppendLine("Provider="+Dns.Name[provider]+"; DoH="+result.Encrypted+"; UTC="+DateTime.UtcNow.ToString("O"));
                 try {
                     foreach(string host in Goals[goal].Hosts) {
                         cancel.ThrowIfCancellationRequested();
+                        trace.AppendLine(watch.ElapsedMilliseconds+" ms DNS query "+host+"; servers="+(result.Encrypted?EncryptedDns.Templates[provider]:string.Join(",",Dns.V4[provider]))+"; timeout="+(result.Encrypted?DohHttp2.RequestTimeoutMilliseconds:2000)+" ms");
                         var addresses=probe.Resolve(provider,result.Encrypted,host,cancel);
+                        trace.AppendLine(watch.ElapsedMilliseconds+" ms DNS "+host+" -> "+string.Join(", ",addresses));
                         bool reachable=false, challenged=false; string error="DNS не вернул IPv4-адрес";
                         foreach(string address in addresses.Distinct().Take(3)) {
                             cancel.ThrowIfCancellationRequested();
-                            try {probe.Https(host,address,Goals[goal].Api,cancel);reachable=true;break;}
+                            trace.AppendLine(watch.ElapsedMilliseconds+" ms HTTPS "+host+" @ "+address+"; connect/TLS timeout=3500 ms");
+                            try {probe.Https(host,address,Goals[goal].Api,cancel);trace.AppendLine(watch.ElapsedMilliseconds+" ms HTTPS OK");reachable=true;break;}
                             catch(OperationCanceledException){throw;}
-                            catch(BrowserChallengeException){challenged=true;}
-                            catch(Exception ex){error=ex.Message;}
+                            catch(BrowserChallengeException ex){challenged=true;trace.AppendLine(watch.ElapsedMilliseconds+" ms "+ex.Message);}
+                            catch(Exception ex){error=ex.Message;trace.AppendLine(watch.ElapsedMilliseconds+" ms "+ex.ToString());}
                         }
                         if(!reachable && challenged) { reachable=true;result.NeedsBrowser=true; }
                         if(!reachable)throw new IOException(host+": "+error);
                     }
                 }
                 catch(OperationCanceledException){throw;}
-                catch(Exception ex){result.Error=ex.Message;}
+                catch(Exception ex){result.Error=ex.Message;trace.AppendLine(ex.ToString());}
+                result.Trace=DiagnosticReport.Scrub(trace.ToString());
                 result.Milliseconds=(int)watch.ElapsedMilliseconds;results[i]=result;
                 if(progress!=null)progress(result);
             });
@@ -87,6 +95,8 @@ namespace HbAi.XboxDns
         }
         internal static AutoDnsResult Best(IEnumerable<AutoDnsResult> results)
         { return results.Where(r=>r.Ok).OrderBy(r=>r.NeedsBrowser).ThenBy(r=>r.Milliseconds).ThenBy(r=>r.Provider).FirstOrDefault(); }
+        internal static string Diagnostic(int goal,IEnumerable<AutoDnsResult> results)
+        {return "Auto goal="+Goals[goal].Name+"\n"+string.Join("\n\n",results.Select(r=>(r.Trace??"")+"\nTotal="+r.Milliseconds+" ms; error="+r.Error+"; browser challenge="+r.NeedsBrowser));}
         internal static string Report(int goal, IEnumerable<AutoDnsResult> results)
         {
             return "Цель: "+Goals[goal].Name+"\n\n"+string.Join("\n",results.OrderBy(r=>r.Provider).Select(r=>Dns.Name[r.Provider]+(r.Encrypted?" · DoH":" · DNS")+": "+(r.Ok?(r.NeedsBrowser?"HTTPS есть · проверка в браузере":"HTTPS отвечает")+" · "+r.Milliseconds+" мс":r.Error)))+
@@ -102,7 +112,7 @@ namespace HbAi.XboxDns
                 cancel.ThrowIfCancellationRequested();
                 try {
                     byte[] response;
-                    if(encrypted)response=DohHttp2.Query(server,request);
+                    if(encrypted)response=DohHttp2.QueryReliable(server,request);
                     else using(var udp=new UdpClient(AddressFamily.InterNetwork)) {
                         udp.Client.ReceiveTimeout=2000;udp.Client.SendTimeout=2000;
                         udp.Connect(IPAddress.Parse(server),53);udp.Send(request,request.Length);
@@ -115,7 +125,7 @@ namespace HbAi.XboxDns
             }
             cancel.ThrowIfCancellationRequested();
             if(addresses.Count>0)return addresses.Distinct().ToArray();
-            throw new IOException("DNS не ответил: "+(last==null?"нет сервера":last.Message));
+            throw new IOException("DNS не ответил: "+(last==null?"нет сервера":last.Message),last);
         }
         internal static bool AcceptStatus(int status, bool api)
         { return status>=200&&status<400 || api&&(status==401||status==404||status==405); }

@@ -1,6 +1,6 @@
 ﻿# Creates the form and renders its canvas only; never invokes DNS changes.
 param(
-    [string]$AssemblyPath = (Join-Path $PSScriptRoot 'KodVsego_SmartDNS.2.22.0.exe'),
+    [string]$AssemblyPath = (Join-Path $PSScriptRoot 'KodVsego_SmartDNS.2.22.1.exe'),
     [int]$Dpi = 96,
     [ValidateRange(-1,5)][int]$DnsSet = -1,
     [ValidateRange(-1,6)][int]$AutoGoal = -1,
@@ -116,7 +116,7 @@ if ($Dialog -ne 'None') {
         $d.GetType().GetMethod('AddAutoDnsControls',[Reflection.BindingFlags]'Instance,NonPublic').Invoke($d,@($services,$goal,[Action[int]]{param($choice)},$null))|Out-Null
         $details="Цель: $($services[$goal])`n`nComss.one: проверка в браузере · 4422 мс`nGeoHide: проверка в браузере · 1358 мс`nGeoHide EU: проверка в браузере · 1387 мс`nBezmezhau: нет соединения`nDNS-AI: нет соединения`n`nИзменится общий DNS компьютера. Работа аккаунта не проверялась."
         if($AutoState -in @('Ready','Details')) {
-            $d.GetType().GetMethod('ShowAutoDnsResult',[Reflection.BindingFlags]'Instance,NonPublic').Invoke($d,@("GeoHide для $($services[$goal])","Сайт просит проверку в браузере.`nПосле подключения откройте сервис.",$details,'Подключить GeoHide'))|Out-Null
+            $d.GetType().GetMethod('ShowAutoDnsResult',[Reflection.BindingFlags]'Instance,NonPublic').Invoke($d,@("GeoHide для $($services[$goal])",'',$details,'Подключить GeoHide'))|Out-Null
             if($AutoState -eq 'Details'){$d.GetType().GetMethod('ToggleAutoDetails',[Reflection.BindingFlags]'Instance,NonPublic').Invoke($d,@())|Out-Null}
         } elseif($AutoState -eq 'Working') {
             $d.GetType().GetMethod('ShowAutoDnsStatus',[Reflection.BindingFlags]'Instance,NonPublic').Invoke($d,@("Проверено 2 из 5 вариантов.`nНастройки пока не меняем.",'Подбираем DNS',$true,$false))|Out-Null

@@ -1,4 +1,4 @@
-// HB AI · Smart DNS — переключатель Smart DNS (Comss.one, GeoHide, xbox-dns.ru) в стиле сообщества «Нейросети и AI на практике».
+﻿// HB AI · Smart DNS — переключатель Smart DNS (Comss.one, GeoHide, xbox-dns.ru) в стиле сообщества «Нейросети и AI на практике».
 // Сборка: build.bat (csc из .NET Framework 4, есть в каждой Windows 10/11).
 using System;
 using System.Collections.Generic;
@@ -133,13 +133,17 @@ namespace HbAi.XboxDns
 
     class MainForm : Form
     {
-        const int CanvasWidth = 440, CanvasHeight = 988;
+        const int CanvasWidth = 440, CanvasHeight = 878;
         internal static string VersionLabel { get {
             var assembly = Assembly.GetExecutingAssembly();
             var info = (AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(assembly,typeof(AssemblyInformationalVersionAttribute));
             return "v" + (info == null ? assembly.GetName().Version.ToString(3) : info.InformationalVersion);
         } }
-        readonly float uiScale;
+        float uiScale,minimumCanvasScale,preferredCanvasScale;
+        int layoutWidth=CanvasWidth,layoutHeight=CanvasHeight;
+        bool layoutReady;
+        int LowerY(int y){return y+layoutHeight-CanvasHeight;}
+        PointF canvasOffset;
         bool darkTheme;
         Color Bg { get { return Mix(Color.FromArgb(250, 249, 255), Color.FromArgb(8, 8, 13), themeMix); } }
         Color Accent { get { return Mix(Color.FromArgb(0, 127, 159), Cyan, themeMix); } }
@@ -169,26 +173,35 @@ namespace HbAi.XboxDns
         AgStatus agStatus = new AgStatus();
         bool agLoading = true;
         bool cleanupDone, cleanupBackupAvailable = Directory.Exists(AgCleanupBackup.Root);
-        readonly Rectangle rAgCleanup = new Rectangle(280, 807, 114, 26);
-        readonly Rectangle rAgOption = new Rectangle(28, 754, 384, 86);
-        readonly Rectangle rSecureOption = new Rectangle(28, 678, 384, 58);
+        Rectangle rAgCleanup = new Rectangle(280, 807, 114, 26);
+        Rectangle rAgOption = new Rectangle(28, 754, 384, 58);
+        Rectangle rSecureOption = new Rectangle(28, 678, 384, 58);
         bool secureDns;
         int dnsSet;
         int autoGoal = -1;
+        int defaultGoal=-1;
+        bool manualSelection;
+        bool UseDefaultGoal {get{return defaultGoal>=0&&!manualSelection;}}
         bool autoNeedsRetry, checkingAuto;
         long lastAutoCheck;
         readonly CancellationTokenSource autoLifetime = new CancellationTokenSource();
-        int SelectedSegment { get { return autoGoal >= 0 ? Dns.Name.Length : dnsSet; } }
+        int SelectedSegment { get { return autoGoal >= 0||(!active&&UseDefaultGoal) ? Dns.Name.Length : dnsSet; } }
         string error;
         float pulse;
-        Rectangle rToggle, rClose, rSite, rGroup, rBrand, rTelegram;
-        readonly Rectangle rTheme = new Rectangle(332, 24, 36, 34);
+        Rectangle rToggle, rClose, rSite, rGroup, rBrand;
+        Rectangle rTheme = new Rectangle(332, 24, 36, 34);
+        Rectangle rSettings = new Rectangle(288, 24, 36, 34);
         Rectangle rVersion;
         UpdateRelease availableUpdate;
         bool checkUpdateAtStartup = true;
         readonly ToolTip themeTip = new ToolTip();
         readonly Rectangle[] rSeg = new Rectangle[Dns.Name.Length + 1];
-        readonly Rectangle providerViewport = new Rectangle(48, 500, 344, 56);
+        int ProviderItemWidth = 108;
+        Rectangle providerViewport = new Rectangle(58, 500, 324, 56);
+        Rectangle providerPrevious = new Rectangle(28, 500, 30, 56);
+        Rectangle providerNext = new Rectangle(382, 500, 30, 56);
+        Rectangle ProviderBar {get{return new Rectangle(28,LowerY(500),layoutWidth-56,56);}}
+        Rectangle DnsTestButton {get{return new Rectangle(layoutWidth-138,LowerY(630),92,24);}}
         int providerScroll;
         string[] probeLabels = Enumerable.Repeat("Ответы DNS ещё не проверены", Dns.Name.Length).ToArray();
         bool probing;
@@ -227,6 +240,7 @@ namespace HbAi.XboxDns
             LoadFonts();
             LoadServiceIcons();
             darkTheme = ReadDarkTheme();
+            defaultGoal=ReadDefaultGoal();
             themeMix = darkTheme ? 1 : 0;
             Text = "Код Всего · Smart DNS";
             AutoScaleMode = AutoScaleMode.None;
@@ -236,26 +250,27 @@ namespace HbAi.XboxDns
                 uiScale = Math.Min(desktop.DpiX / 96f,
                     Math.Min((area.Width - 32f) / CanvasWidth, (area.Height - 32f) / CanvasHeight));
             uiScale = Math.Max(0.5f, uiScale);
-            ClientSize = new Size((int)Math.Round(CanvasWidth * uiScale), (int)Math.Round(CanvasHeight * uiScale));
+            preferredCanvasScale=uiScale;
+            uiScale=Math.Max(0.5f,preferredCanvasScale*0.85f);
+            var initialSize=new Size((int)Math.Round(CanvasWidth*uiScale),(int)Math.Round(CanvasHeight*uiScale));
+            minimumCanvasScale=uiScale;
+            MinimumSize=new Size((int)Math.Round(CanvasWidth*minimumCanvasScale),(int)Math.Round(CanvasHeight*minimumCanvasScale));
+            ClientSize=initialSize;
+            MaximizedBounds=area;
+            SetStyle(ControlStyles.ResizeRedraw,true);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Bg;
             DoubleBuffered = true;
             try { Icon = new Icon(Assembly.GetExecutingAssembly().GetManifestResourceStream("app.ico")); } catch { }
-            Region = RoundRegion(ClientRectangle, (int)Math.Round(22 * uiScale));
+            UpdateCanvasBounds();
 
-            rClose = new Rectangle(CanvasWidth - 58, 22, 36, 36);
-            rToggle = new Rectangle((CanvasWidth - 200) / 2, 196, 200, 200);
 
             anim.Interval = 16;
             anim.Tick += (s, e) => AnimateFrame();
 
-            for (int k = 0; k < rSeg.Length; k++)
-            {
-                rSeg[k] = new Rectangle(48 + k * 110, 500, 110, 56);
-            }
             MouseDown += OnDown;
             MouseMove += OnMove;
-            MouseWheel += (s, e) => { if (new Rectangle(28, 500, 384, 56).Contains(CanvasPoint(e.Location))) ScrollProviders(e.Delta > 0 ? -90 : 90); };
+            MouseWheel += (s, e) => { if (ProviderBar.Contains(CanvasPoint(e.Location))) ScrollProviderPage(e.Delta > 0 ? -1 : 1); };
             EnsureProviderVisible();
             networkMonitor.Interval = 3000;
             networkMonitor.Tick += (s, e) => RefreshNetworkStatus();
@@ -293,6 +308,7 @@ namespace HbAi.XboxDns
                     active = actual >= 0 || availableBackup;
                     if (actual >= 0 && actual != dnsSet) { if (!firstRead) autoGoal = -1; dnsSet = actual; EnsureProviderVisible(); }
                     initializing = false;
+                    if(firstRead)EnsureProviderVisible();
                     UpdateVpnStatus(status);
                     if (before != VisualState()) Invalidate();
                     if (firstRead) CheckDnsServers();
@@ -315,6 +331,42 @@ namespace HbAi.XboxDns
                 if(release==null||IsDisposed||token.IsCancellationRequested)return;
                 try{BeginInvoke((Action)(()=>{availableUpdate=release;Invalidate();}));}catch(InvalidOperationException){}
             });
+        }
+
+        void DrawSettingsButton(Graphics g)
+        {
+            using(var path=RoundPath(rSettings,12))
+            using(var fill=new SolidBrush(CardBg))
+            using(var border=new Pen(CardLine)){g.FillPath(fill,path);g.DrawPath(border,path);}
+            float x=rSettings.X+rSettings.Width/2f,y=rSettings.Y+rSettings.Height/2f;
+            var teeth=new PointF[32];
+            for(int i=0;i<teeth.Length;i++) {
+                double angle=i*Math.PI/16;float radius=i%4==0||i%4==3?9f:11f;
+                teeth[i]=new PointF(x+radius*(float)Math.Cos(angle),y+radius*(float)Math.Sin(angle));
+            }
+            using(var pen=new Pen(Accent,1.6f)){pen.LineJoin=LineJoin.Round;g.DrawPolygon(pen,teeth);g.DrawEllipse(pen,x-4,y-4,8,8);}
+        }
+        internal StyledDialog CreateSettingsDialog()
+        {
+            bool available=Directory.Exists(AgCleanupBackup.Root);
+            var dialog=CreateDialog(available?"Копия правил Antigravity\n\nОткройте папку с сохранёнными копиями правил.":"Копия правил Antigravity\n\nСохранённых копий пока нет. Копия создаётся при удалении старых правил.","Настройки",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1,uiScale);
+            dialog.AddSettingsControls(available,()=>Open(AgCleanupBackup.Root),AutoDns.Goals.Select(goal=>goal.Name).ToArray(),defaultGoal,url=>Open(url));return dialog;
+        }
+        void ShowSettings()
+        {
+            using(var dialog=CreateSettingsDialog()) {
+                if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+                int selected=dialog.SettingsGoal;
+                try {
+                    using(var key=Registry.CurrentUser.CreateSubKey(@"SOFTWARE\KodVsego\SmartDns"))key.SetValue("DefaultService",selected<0?"":AutoDns.Goals[selected].Name,RegistryValueKind.String);
+                    defaultGoal=selected;manualSelection=false;if(selected<0)autoGoal=-1;EnsureProviderVisible();Invalidate();
+                }catch(Exception error){ShowMessage("Не удалось сохранить сервис по умолчанию.\n\n"+error.Message,"Настройки",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+            }
+        }
+        static int ReadDefaultGoal()
+        {
+            try{using(var key=Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KodVsego\SmartDns"))return AutoDns.GoalIndex(key==null?null:key.GetValue("DefaultService") as string);}
+            catch(System.Security.SecurityException){return -1;}catch(UnauthorizedAccessException){return -1;}catch(IOException){return -1;}
         }
 
         void ShowUpdates()
@@ -392,6 +444,11 @@ namespace HbAi.XboxDns
             });
         }
 
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if(e.CloseReason==CloseReason.UserClosing&&(busy||agLoading))e.Cancel=true;
+            base.OnFormClosing(e);
+        }
         protected override void Dispose(bool disposing)
         {
             if (disposing && !resourcesDisposed) {
@@ -506,7 +563,7 @@ namespace HbAi.XboxDns
         Rectangle rToggleGlow()
         {
             var r = rToggle; r.Inflate(40, 40);
-            return Rectangle.Ceiling(new RectangleF(r.X * uiScale, r.Y * uiScale, r.Width * uiScale, r.Height * uiScale));
+            return Rectangle.Ceiling(new RectangleF(canvasOffset.X+r.X * uiScale,canvasOffset.Y+r.Y * uiScale,r.Width * uiScale,r.Height * uiScale));
         }
 
         // Use logical pixels for fonts and geometry alike. Point fonts apply the
@@ -518,7 +575,7 @@ namespace HbAi.XboxDns
 
         Point CanvasPoint(Point point)
         {
-            return new Point((int)Math.Round(point.X / uiScale), (int)Math.Round(point.Y / uiScale));
+            return new Point((int)Math.Round((point.X-canvasOffset.X)/uiScale),(int)Math.Round((point.Y-canvasOffset.Y)/uiScale));
         }
 
         void LoadServiceIcons()
@@ -684,8 +741,54 @@ namespace HbAi.XboxDns
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
+            UpdateCanvasBounds();
             if (WindowState == FormWindowState.Minimized) anim.Stop();
             else if (motionReady) Invalidate();
+        }
+        void UpdateCanvasBounds()
+        {
+            if(minimumCanvasScale<=0||ClientSize.Width<=0||ClientSize.Height<=0)return;
+            uiScale=Math.Max(0.1f,Math.Min(preferredCanvasScale,Math.Min(ClientSize.Width/(float)CanvasWidth,ClientSize.Height/(float)CanvasHeight)));
+            canvasOffset=PointF.Empty;
+            int width=Math.Max(CanvasWidth,(int)Math.Round(ClientSize.Width/uiScale)),height=Math.Max(CanvasHeight,(int)Math.Round(ClientSize.Height/uiScale));
+            if(!layoutReady||width!=layoutWidth||height!=layoutHeight) {
+                layoutReady=true;
+                int first=providerScroll/ProviderItemWidth;
+                layoutWidth=width;layoutHeight=height;
+                rClose=new Rectangle(width-58,22,36,36);rTheme=new Rectangle(width-108,24,36,34);rSettings=new Rectangle(width-152,24,36,34);
+                rToggle=new Rectangle((width-200)/2,196+(height-CanvasHeight)/2,200,200);
+                rSecureOption=new Rectangle(28,LowerY(678),width-56,58);rAgOption=new Rectangle(28,LowerY(754),width-56,58);rAgCleanup=new Rectangle(width-160,LowerY(775),114,26);
+                providerViewport=new Rectangle(58,LowerY(500),width-116,56);providerPrevious=new Rectangle(28,LowerY(500),30,56);providerNext=new Rectangle(width-58,LowerY(500),30,56);
+                int visible=Math.Min(rSeg.Length,Math.Max(3,providerViewport.Width/108));ProviderItemWidth=providerViewport.Width/visible;
+                for(int k=0;k<rSeg.Length;k++)rSeg[k]=new Rectangle(58+k*ProviderItemWidth,LowerY(500),ProviderItemWidth,56);
+                providerScroll=Math.Max(0,Math.Min(rSeg.Length*ProviderItemWidth-providerViewport.Width,first*ProviderItemWidth));
+                selectionLeft=rSeg[SelectedSegment].X;EnsureProviderVisible();scrollMix=providerScroll;
+            }
+            var previous=Region;
+            Region=WindowState==FormWindowState.Maximized?null:RoundRegion(ClientRectangle,(int)Math.Round(22*uiScale));
+            if(previous!=null)previous.Dispose();
+        }
+        protected override void SetClientSizeCore(int width,int height)
+        {base.SetClientSizeCore(width,height);UpdateCanvasBounds();}
+        internal int ResizeHitTest(Point point)
+        {
+            if(WindowState!=FormWindowState.Normal||!ClientRectangle.Contains(point))return 0;
+            int edge=Math.Max(8,(int)Math.Round(10*minimumCanvasScale));
+            int corner=Math.Max(edge,(int)Math.Round(18*uiScale));
+            if(point.Y<corner){if(point.X<corner)return 13;if(point.X>=ClientSize.Width-corner)return 14;}
+            if(point.Y>=ClientSize.Height-corner){if(point.X<corner)return 16;if(point.X>=ClientSize.Width-corner)return 17;}
+            bool left=point.X<edge,right=point.X>=ClientSize.Width-edge,top=point.Y<edge,bottom=point.Y>=ClientSize.Height-edge;
+            return top?(left?13:right?14:12):bottom?(left?16:right?17:15):left?10:right?11:0;
+        }
+        protected override void WndProc(ref Message message)
+        {
+            if(message.Msg==0x84) {
+                long position=message.LParam.ToInt64();
+                var point=PointToClient(new Point((short)(position&0xffff),(short)((position>>16)&0xffff)));
+                int hit=ResizeHitTest(point);if(hit!=0){message.Result=new IntPtr(hit);return;}
+            }
+            base.WndProc(ref message);
+            if(message.Msg==0x5)UpdateCanvasBounds();
         }
 
         void AnimateFrame()
@@ -727,7 +830,7 @@ namespace HbAi.XboxDns
         void DrawBackground(Graphics g)
         {
             int width, height;
-            PhysicalSize(g, CanvasWidth, CanvasHeight, out width, out height);
+            PhysicalSize(g, layoutWidth, layoutHeight, out width, out height);
             if (lightBackground != null && (lightBackground.Width != width || lightBackground.Height != height)) { lightBackground.Dispose(); lightBackground = null; }
             if (darkBackground != null && (darkBackground.Width != width || darkBackground.Height != height)) { darkBackground.Dispose(); darkBackground = null; }
             if (themeMix >= 0.998f) {
@@ -775,6 +878,8 @@ namespace HbAi.XboxDns
             var state = g.Save();
             try
             {
+                g.Clear(Bg);
+                g.TranslateTransform(canvasOffset.X,canvasOffset.Y);
                 g.ScaleTransform(uiScale, uiScale);
                 PaintCanvas(g);
             }
@@ -785,24 +890,27 @@ namespace HbAi.XboxDns
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            int W = CanvasWidth;
+            int W = layoutWidth;
 
             DrawBackground(g);
             DrawThemeButton(g);
+            DrawSettingsButton(g);
 
             // плашка сверху
             using (var f = UiFont(fBold, 11f))
             {
                 string pill = "Smart DNS · " + Dns.Site[dnsSet];
                 var sz = g.MeasureString(pill, f);
-                var pr = new RectangleF(30, 24, sz.Width + 46, 34);
+                var pr = new RectangleF(30, 24, Math.Min(sz.Width + 46,rSettings.Left-40), 34);
                 rSite = Rectangle.Round(pr);
                 using (var path = RoundPath(pr, 17))
                 using (var b = new SolidBrush(Color.FromArgb(24, Purple)))
                 using (var pen = new Pen(Color.FromArgb(100, Purple)))
                 { g.FillPath(b, path); g.DrawPath(pen, path); }
                 using (var b = new SolidBrush(Accent)) g.FillEllipse(b, pr.X + 16, pr.Y + 12, 10, 10);
-                using (var b = new SolidBrush(Soft)) g.DrawString(pill, f, b, pr.X + 32, pr.Y + (34 - sz.Height) / 2 + 1);
+                using (var b = new SolidBrush(Soft))
+                using(var format=new StringFormat{Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap,LineAlignment=StringAlignment.Center})
+                    g.DrawString(pill,f,b,new RectangleF(pr.X+32,pr.Y,pr.Width-40,pr.Height),format);
             }
             // крестик
             WindowGlyph.DrawClose(g, rClose, Muted, 1f);
@@ -833,39 +941,39 @@ namespace HbAi.XboxDns
             if (!busy && !networkAvailable) sub = "Подключитесь к Wi-Fi или Ethernet";
             if (!busy && autoGoal >= 0 && autoNeedsRetry && networkAvailable && !liveVpn.NeedsAttention)
                 sub = AutoDns.Goals[autoGoal].Name + ": соединение не подтверждено · повторите Авто";
+            if(!busy&&!active&&UseDefaultGoal&&networkAvailable&&!liveVpn.NeedsAttention)sub="Для подключения: "+AutoDns.Goals[defaultGoal].Name;
             using (var f = UiFont(fHead, busy ? 12f : 15f))
             using (var b = new SolidBrush((active || ((agStatus.Checked || agStatus.External) && agStatus.Error == null)) && !busy ? Accent : Ink))
-                Centered(g, status, f, b, 420);
+                Centered(g, status, f, b, LowerY(420));
             using (var f = UiFont(fMed, 10.5f))
             using (var b = new SolidBrush(error != null ? (darkTheme ? Color.FromArgb(255, 151, 151) : Color.FromArgb(181, 59, 65)) : Muted))
-                Centered(g, sub, f, b, 454, W - 60);
+                Centered(g, sub, f, b, LowerY(454), W - 60);
 
             // выбор набора адресов
-            using (var path = RoundPath(new RectangleF(28, 500, W - 56, 56), 16))
+            using (var path = RoundPath(ProviderBar, 16))
             using (var b = new SolidBrush(CardBg))
             using (var pen = new Pen(CardLine))
             { g.FillPath(b, path); g.DrawPath(pen, path); }
             var providerState = g.Save();
             g.SetClip(providerViewport);
-            using (var path = RoundPath(new RectangleF(selectionLeft - scrollMix + 5, 505, 100, 46), 12))
+            using (var path = RoundPath(new RectangleF(selectionLeft - scrollMix + 5, LowerY(505), ProviderItemWidth-10, 46), 12))
             using (var b = new SolidBrush(Selection)) g.FillPath(b, path);
             for (int k = 0; k < rSeg.Length; k++)
             {
                 var sr = new RectangleF(rSeg[k].X - scrollMix + 5, rSeg[k].Y + 5, rSeg[k].Width - 10, rSeg[k].Height - 10);
-                bool on = Math.Abs(rSeg[k].X - selectionLeft) < 50;
-                string label = k == Dns.Name.Length ? "Авто" : k == 3 ? "Xbox" : k == 2 ? "GeoHide EU" : Dns.Name[k];
+                bool on = Math.Abs(rSeg[k].X - selectionLeft) < ProviderItemWidth/2f;
+                string label = k == Dns.Name.Length ? "Авто · beta" : k == 3 ? "Xbox" : k == 2 ? "GeoHide EU" : Dns.Name[k];
                 using (var f = UiFont(fBold, 9.5f))
                 using (var b = new SolidBrush(on ? ContrastInk : Soft))
                 using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap })
                     g.DrawString(label, f, b, sr, sf);
             }
             g.Restore(providerState);
-            using (var f = UiFont(fBold, 14f))
-            using (var b = new SolidBrush(Accent))
-            { g.DrawString("‹", f, b, 30, 515); g.DrawString("›", f, b, 396, 515); }
+            DrawProviderArrow(g,providerPrevious,-1,providerScroll>0);
+            DrawProviderArrow(g,providerNext,1,providerScroll<rSeg.Length*ProviderItemWidth-providerViewport.Width);
 
             // карточка с адресами
-            var card = new RectangleF(28, 574, W - 56, 86);
+            var card = new RectangleF(28, LowerY(574), W - 56, 86);
             using (var path = RoundPath(card, 16))
             using (var b = new SolidBrush(CardBg))
             using (var pen = new Pen(CardLine))
@@ -880,75 +988,64 @@ namespace HbAi.XboxDns
             }
             DrawServiceIcons(g, new RectangleF(card.X + 20, card.Y + 33, card.Width - 40, 23));
             using (var f = UiFont(fMed, 8f))
-            using (var b = new SolidBrush(Accent)) g.DrawString(probing ? "Проверяем ответы DNS…" : probeLabels[dnsSet], f, b, 48, 636);
-            using (var path = RoundPath(new RectangleF(302, 630, 92, 24), 8))
+            using (var b = new SolidBrush(Accent)) g.DrawString(probing ? "Проверяем ответы DNS…" : probeLabels[dnsSet], f, b, 48, LowerY(636));
+            using (var path = RoundPath(DnsTestButton, 8))
             using (var b = new SolidBrush(Selection)) g.FillPath(b, path);
             using (var f = UiFont(fBold, 8f))
             using (var b = new SolidBrush(ContrastInk))
             using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                g.DrawString("Тест DNS", f, b, new RectangleF(302, 630, 92, 24), sf);
+                g.DrawString("Тест DNS", f, b, DnsTestButton, sf);
 
             using (var path = RoundPath(rSecureOption, 16))
             using (var fill = new SolidBrush(CardBg))
             using (var line = new Pen(CardLine)) { g.FillPath(fill, path); g.DrawPath(line, path); }
-            using (var path = RoundPath(new Rectangle(46, 696, 20, 20), 5))
+            using (var path = RoundPath(new Rectangle(46, LowerY(696), 20, 20), 5))
             using (var fill = new SolidBrush(secureDns ? ActiveBg : Bg))
             using (var line = new Pen(Accent, 1.5f)) { g.FillPath(fill, path); g.DrawPath(line, path); }
-            if (secureDns) using (var pen = new Pen(ContrastInk, 2f)) g.DrawLines(pen, new[] { new Point(50, 706), new Point(55, 711), new Point(63, 701) });
+            if (secureDns) using (var pen = new Pen(ContrastInk, 2f)) g.DrawLines(pen, new[] { new Point(50, LowerY(706)), new Point(55, LowerY(711)), new Point(63, LowerY(701)) });
             using (var title = UiFont(fBold, 10f))
             using (var body = UiFont(fMed, 8f))
             using (var ink = new SolidBrush(Ink))
             using (var muted = new SolidBrush(Muted)) {
-                g.DrawString("Зашифрованный DNS", title, ink, 76, 686);
-                g.DrawString(EncryptedDns.Templates[dnsSet] == null ? "DoH: Comss.one, GeoHide, Bezmezhau или DNS-AI" : secureDns && (agStatus.External || agStatus.Checked) ? "DoH · Antigravity по отдельным правилам" : "DoH адаптера · IPv6 приостанавливается", body, muted, 76, 710);
+                g.DrawString("Зашифрованный DNS", title, ink, 76, LowerY(686));
+                g.DrawString(EncryptedDns.Templates[dnsSet] == null ? "DoH: Comss.one, GeoHide, Bezmezhau или DNS-AI" : secureDns && (agStatus.External || agStatus.Checked) ? "DoH · Antigravity по отдельным правилам" : "DoH адаптера · IPv6 приостанавливается", body, muted, 76, LowerY(710));
             }
             using (var path = RoundPath(rAgOption, 16))
             using (var fill = new SolidBrush(CardBg))
             using (var line = new Pen(CardLine))
             { g.FillPath(fill, path); g.DrawPath(line, path); }
-            var check = new Rectangle(46, 771, 20, 20);
+            var check = new Rectangle(46, LowerY(771), 20, 20);
             using (var path = RoundPath(check, 5))
             using (var fill = new SolidBrush(agStatus.Checked ? ActiveBg : Bg))
             using (var line = new Pen(Accent, 1.5f))
             { g.FillPath(fill, path); g.DrawPath(line, path); }
             if (agStatus.Checked)
                 using (var pen = new Pen(ContrastInk, 2f))
-                    g.DrawLines(pen, new[] { new Point(50, 781), new Point(55, 786), new Point(63, 776) });
+                    g.DrawLines(pen, new[] { new Point(50, LowerY(781)), new Point(55, LowerY(786)), new Point(63, LowerY(776)) });
             using (var title = UiFont(fBold, 10f))
             using (var body = UiFont(fMed, 8.5f))
             using (var ink = new SolidBrush(Ink))
             using (var muted = new SolidBrush(Muted))
             {
-                g.DrawString("Доп. DNS Antigravity", title, ink, 76, 764);
-                g.DrawString("Может помочь при ошибке 400 в Antigravity", body, muted, 76, 788);
+                g.DrawString("Доп. DNS Antigravity", title, ink, 76, LowerY(764));
                 string note = agLoading ? "Проверяем настройки…" : agStatus.Error != null ? "Не удалось проверить · нажмите для повтора" :
                     agStatus.RecoveryNeeded ? "Снимите галочку: завершить восстановление" : agStatus.External ? "Есть правила другой программы" : agStatus.Checked ?
                     (agStatus.Complete ? (agStatus.Provider == 1 ? "Comss: смените DNS" : "Включено · " + (agStatus.Provider >= 0 ? AntigravityDns.ProviderNames[agStatus.Provider] : "DNS")) +
                         (agStatus.Provider != AntigravityDns.ProviderForMainSet(dnsSet) ? " · смена после отключения" : "") : "Включено частично · снимите для отмены") :
-                    (cleanupDone ? "Старые правила удалены" : secureDns ? "Используется системный DoH" : dnsSet == 0 ? "Comss для этой опции отключён" : dnsSet == 3 ? "Выберите DNS для нейросетей выше" : "Будет использован: " + Dns.Name[dnsSet]);
-                bool showCleanup = agStatus.External || cleanupBackupAvailable;
+                    (cleanupDone ? "Старые правила удалены" : secureDns ? "" : dnsSet == 0 ? "Comss для этой опции отключён" : dnsSet == 3 ? "Выберите DNS для нейросетей выше" : "Будет использован: " + Dns.Name[dnsSet]);
+                bool showCleanup = agStatus.External;
                 using (var format = new StringFormat { FormatFlags = StringFormatFlags.NoWrap, Trimming = StringTrimming.EllipsisCharacter })
-                    g.DrawString(note, body, muted, new RectangleF(76, 810, showCleanup ? 198 : 320, 22), format);
+                    g.DrawString(string.IsNullOrEmpty(note)?"Может помочь при ошибке 400 в Antigravity":note, body, muted, new RectangleF(76, LowerY(788), showCleanup ? W-242 : W-120, 22), format);
             }
-            if (agStatus.External || cleanupBackupAvailable)
+            if (agStatus.External)
             {
                 using (var path = RoundPath(rAgCleanup, 8))
                 using (var fill = new SolidBrush(Selection)) g.FillPath(fill, path);
                 using (var f = UiFont(fBold, 8f))
                 using (var b = new SolidBrush(ContrastInk))
                 using (var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                    g.DrawString(agStatus.External ? "Удалить старые" : "Копия правил", f, b, rAgCleanup, format);
+                    g.DrawString("Удалить старые", f, b, rAgCleanup, format);
             }
-
-            // кнопка Telegram-канала
-            rTelegram = new Rectangle(28, 858, W - 56, 58);
-            using (var path = RoundPath(rTelegram, 16))
-            using (var b = new LinearGradientBrush(rTelegram, Color.FromArgb(126, 83, 255), Color.FromArgb(75, 116, 255), LinearGradientMode.Horizontal))
-                g.FillPath(b, path);
-            using (var f = UiFont(fHead, 11.5f))
-            using (var b = new SolidBrush(Color.White))
-            using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                g.DrawString("Telegram · TotalC0de  →", f, b, rTelegram, sf);
 
             // подвал
             using (var fb = UiFont(fHead, 13f))
@@ -960,24 +1057,24 @@ namespace HbAi.XboxDns
                 {
                     format.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
                     float prefix = g.MeasureString("Код ", fb, PointF.Empty, format).Width;
-                    g.DrawString("Код ", fb, dark, new PointF(28, 940), format);
-                    g.DrawString("Всего", fb, bb, new PointF(28 + prefix, 940), format);
+                    g.DrawString("Код ", fb, dark, new PointF(28, LowerY(830)), format);
+                    g.DrawString("Всего", fb, bb, new PointF(28 + prefix, LowerY(830)), format);
                 }
-                rBrand = new Rectangle(28, 938, (int)Math.Ceiling(g.MeasureString(brand, fb).Width), 30);
+                rBrand = new Rectangle(28, LowerY(828), (int)Math.Ceiling(g.MeasureString(brand, fb).Width), 30);
             }
             using (var f = UiFont(fMed, 9.5f))
             using (var b = new SolidBrush(Muted))
             {
                 var t = "t.me/TotalC0de";
                 var sz = g.MeasureString(t, f);
-                rGroup = new Rectangle((int)(W - 28 - sz.Width), 945, (int)sz.Width, (int)sz.Height);
+                rGroup = new Rectangle((int)(W - 28 - sz.Width), LowerY(835), (int)sz.Width, (int)sz.Height);
                 g.DrawString(t, f, b, rGroup.X, rGroup.Y);
             }
             using (var f = UiFont(fMed, 8.5f))
             using (var b = new SolidBrush(availableUpdate==null?Muted:Accent))
             using (var format = new StringFormat {Alignment=StringAlignment.Center, LineAlignment=StringAlignment.Center, FormatFlags=StringFormatFlags.NoWrap})
             {
-                rVersion=new Rectangle(rBrand.Right+4,940,Math.Max(0,rGroup.Left-rBrand.Right-8),25);
+                rVersion=new Rectangle(rBrand.Right+4,LowerY(830),Math.Max(0,rGroup.Left-rBrand.Right-8),25);
                 g.DrawString(availableUpdate==null?VersionLabel:"↑ "+availableUpdate.Version,f,b,rVersion,format);
             }
         }
@@ -1046,8 +1143,8 @@ namespace HbAi.XboxDns
         {
             using (var sf = new StringFormat { Alignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap, Trimming = StringTrimming.EllipsisCharacter })
             {
-                float w = maxW > 0 ? maxW : CanvasWidth;
-                g.DrawString(s, f, b, new RectangleF((CanvasWidth - w) / 2, y, w, 40), sf);
+                float w = maxW > 0 ? maxW : layoutWidth;
+                g.DrawString(s, f, b, new RectangleF((layoutWidth - w) / 2, y, w, 40), sf);
             }
         }
 
@@ -1057,6 +1154,7 @@ namespace HbAi.XboxDns
             e = new MouseEventArgs(e.Button, e.Clicks, CanvasPoint(e.Location).X, CanvasPoint(e.Location).Y, e.Delta);
             if (rClose.Contains(e.Location)) { Close(); return; }
             if (rTheme.Contains(e.Location)) { SetTheme(!darkTheme, true); return; }
+            if (rSettings.Contains(e.Location)) { ShowSettings(); return; }
             if (rVersion.Contains(e.Location)) { ShowUpdates(); return; }
             if (initializing) return;
             if (rSecureOption.Contains(e.Location)) {
@@ -1066,18 +1164,18 @@ namespace HbAi.XboxDns
                 if (active) Apply(true, null, false, !secureDns); else { secureDns = !secureDns; Invalidate(); }
                 return;
             }
-            if (new Rectangle(28, 500, 20, 56).Contains(e.Location)) { ScrollProviders(-110); return; }
-            if (new Rectangle(392, 500, 20, 56).Contains(e.Location)) { ScrollProviders(110); return; }
-            if (new Rectangle(28, 628, 384, 32).Contains(e.Location)) { ShowDnsDiagnostics(); return; }
-            if (rAgCleanup.Contains(e.Location) && (agStatus.External || cleanupBackupAvailable)) {
+            if (providerPrevious.Contains(e.Location)) { ScrollProviderPage(-1); return; }
+            if (providerNext.Contains(e.Location)) { ScrollProviderPage(1); return; }
+            if (DnsTestButton.Contains(e.Location)) { ShowDnsDiagnostics(); return; }
+            if (rAgCleanup.Contains(e.Location) && agStatus.External) {
                 if (busy || agLoading) return;
-                if (agStatus.External) RemoveOldAntigravity(); else Open(AgCleanupBackup.Root);
+                RemoveOldAntigravity();
                 return;
             }
             if (rAgOption.Contains(e.Location)) { ToggleAntigravity(); return; }
             if (rGroup.Contains(e.Location)) { Open("https://t.me/TotalC0de"); return; }
             if (rSite.Contains(e.Location)) { Open(Dns.Url[dnsSet]); return; }
-            if (rBrand.Contains(e.Location) || rTelegram.Contains(e.Location)) { Open("https://t.me/TotalC0de"); return; }
+            if (rBrand.Contains(e.Location)) { Open("https://t.me/TotalC0de"); return; }
             var c = new Point(rToggle.X + rToggle.Width / 2, rToggle.Y + rToggle.Height / 2);
             double dx = e.X - c.X, dy = e.Y - c.Y;
             if (dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0) { Toggle(); return; }
@@ -1093,10 +1191,10 @@ namespace HbAi.XboxDns
             double dx = e.X - c.X, dy = e.Y - c.Y;
             bool overPower = dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0;
             if (powerHovered != overPower) { powerHovered = overPower; Invalidate(rToggleGlow()); }
-            bool hand = rVersion.Contains(e.Location) || rSecureOption.Contains(e.Location) || rAgOption.Contains(e.Location) || rTheme.Contains(e.Location) || rClose.Contains(e.Location) || rGroup.Contains(e.Location) || rSite.Contains(e.Location) || rBrand.Contains(e.Location) || rTelegram.Contains(e.Location) || new Rectangle(28, 500, 384, 56).Contains(e.Location) || new Rectangle(28, 628, 384, 32).Contains(e.Location)
+            bool hand = rSettings.Contains(e.Location) || rVersion.Contains(e.Location) || rSecureOption.Contains(e.Location) || rAgOption.Contains(e.Location) || rTheme.Contains(e.Location) || rClose.Contains(e.Location) || rGroup.Contains(e.Location) || rSite.Contains(e.Location) || rBrand.Contains(e.Location) || ProviderBar.Contains(e.Location) || DnsTestButton.Contains(e.Location)
                         || dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0;
             Cursor = hand && !busy ? Cursors.Hand : Cursors.Default;
-            string tip = rVersion.Contains(e.Location)?"Проверить обновления":rTheme.Contains(e.Location) ? (darkTheme ? "Светлая тема" : "Тёмная тема") : null;
+            string tip = rSettings.Contains(e.Location)?"Настройки":providerPrevious.Contains(e.Location)?"Предыдущие 3 варианта":providerNext.Contains(e.Location)?"Следующие 3 варианта":rVersion.Contains(e.Location)?"Проверить обновления":rTheme.Contains(e.Location) ? (darkTheme ? "Светлая тема" : "Тёмная тема") : null;
             if (themeTip.GetToolTip(this) != tip) themeTip.SetToolTip(this, tip);
             if (e.Button == MouseButtons.Left && !hand)
                 Location = new Point(Location.X + (int)Math.Round((e.X - dragFrom.X) * uiScale),
@@ -1155,9 +1253,22 @@ namespace HbAi.XboxDns
         }
 
         // смена набора: если DNS уже включён, сразу переключаем адреса
+        void DrawProviderArrow(Graphics g,Rectangle bounds,int direction,bool enabled)
+        {
+            var button=bounds;button.Inflate(-3,-6);
+            using(var path=RoundPath(button,9))
+            using(var fill=new SolidBrush(enabled?CardLine:CardBg))g.FillPath(fill,path);
+            float x=bounds.Left+bounds.Width/2f,y=bounds.Top+bounds.Height/2f;
+            using(var pen=new Pen(enabled?Accent:Muted,2f)) {
+                pen.StartCap=LineCap.Round;pen.EndCap=LineCap.Round;pen.LineJoin=LineJoin.Round;
+                g.DrawLines(pen,new[]{new PointF(x-direction*3,y-6),new PointF(x+direction*3,y),new PointF(x-direction*3,y+6)});
+            }
+        }
+        internal void ScrollProviderPage(int direction)
+        {ScrollProviders(Math.Sign(direction)*(providerViewport.Width/ProviderItemWidth)*ProviderItemWidth);}
         void ScrollProviders(int delta)
         {
-            providerScroll = Math.Max(0, Math.Min(rSeg.Length * 110 - providerViewport.Width, providerScroll + delta));
+            providerScroll = Math.Max(0, Math.Min(rSeg.Length * ProviderItemWidth - providerViewport.Width, providerScroll + delta));
             Invalidate();
         }
         void EnsureProviderVisible()
@@ -1211,18 +1322,18 @@ namespace HbAi.XboxDns
                 dialog.ShowDialog(this);
             }
         }
-        void ShowAutoDns()
+        void ShowAutoDns(bool startImmediately=false)
         {
             if (busy || initializing) return;
             AutoDnsResult chosen = null; int chosenGoal = -1; bool running = false;
             using (var cancellation = new CancellationTokenSource())
             using (var dialog = CreateDialog("Выберите сервис и нажмите «Подобрать DNS».",
-                "Авто-подключение", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, uiScale))
+                "Авто-подключение · beta", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, uiScale))
             {
                 var token = cancellation.Token;
                 dialog.SetPrimaryText("Закрыть");
                 dialog.FormClosed += (s, e) => cancellation.Cancel();
-                dialog.AddAutoDnsControls(AutoDns.Goals.Select(g => g.Name).ToArray(), autoGoal >= 0 ? autoGoal : 0, goal => {
+                dialog.AddAutoDnsControls(AutoDns.Goals.Select(g => g.Name).ToArray(), startImmediately&&UseDefaultGoal?defaultGoal:autoGoal >= 0 ? autoGoal : defaultGoal>=0?defaultGoal:0, goal => {
                     if (running) return;
                     chosen = null; chosenGoal = -1;
                     dialog.SetPrimaryText("Отмена");
@@ -1230,7 +1341,7 @@ namespace HbAi.XboxDns
                     bool encrypted = secureDns;
                     dialog.ShowAutoDnsStatus("Проверяем сеть и подходящие DNS…", "Подбираем для " + AutoDns.Goals[goal].Name, true, false);
                     ThreadPool.QueueUserWorkItem(_ => {
-                        AutoDnsResult[] results = null; string failure = null;
+                        AutoDnsResult[] results = null; string failure = null, failureDetail=null;
                         try {
                             if (!NetworkCheck.HasConnection()) throw new IOException(NetworkCheck.OfflineMessage);
                             if (VpnCheck.Scan().NeedsAttention) throw new IOException("Отключите VPN и повторите подбор.");
@@ -1249,29 +1360,33 @@ namespace HbAi.XboxDns
                             if (VpnCheck.Scan().NeedsAttention) throw new IOException("Во время проверки обнаружен VPN. Отключите VPN и повторите подбор.");
                         }
                         catch (OperationCanceledException) { return; }
-                        catch (Exception ex) { failure = ex.Message; }
+                        catch (Exception ex) { failure = ex.Message; failureDetail=ex.ToString(); }
                         if (token.IsCancellationRequested || dialog.IsDisposed || IsDisposed) return;
                         try { BeginInvoke((Action)(() => {
                             if (token.IsCancellationRequested || dialog.IsDisposed) return;
                             running = false;
                             if (failure != null) {
                                 string hint=failure.Contains("VPN")?"Отключите VPN и повторите подбор.":failure==NetworkCheck.OfflineMessage?"Подключитесь к Wi-Fi или Ethernet.":"Повторите подбор или выберите DNS вручную.";
-                                dialog.ShowAutoDnsResult("Не удалось завершить подбор",hint,failure);return;
+                                dialog.ShowAutoDnsResult("Не удалось завершить подбор",hint,failure);
+                                dialog.SetDiagnosticDetails("Goal="+AutoDns.Goals[goal].Name+"; DoH="+encrypted+"\n"+failureDetail+(results==null?"":"\n"+AutoDns.Diagnostic(goal,results)),DiagnosticReport.ShouldOffer("Авто",failure));return;
                             }
                             var best = AutoDns.Best(results);
                             string report = AutoDns.Report(goal, results);
-                            if (best == null) { dialog.ShowAutoDnsResult("Нет подходящего варианта","Попробуйте позже или выберите DNS вручную.\nНастройки не изменены.",report); return; }
+                            if (best == null) { dialog.ShowAutoDnsResult("Нет подходящего варианта","Попробуйте позже или выберите DNS вручную.\nНастройки не изменены.",report); dialog.SetDiagnosticDetails(AutoDns.Diagnostic(goal,results),true); return; }
                             dialog.ShowAutoDnsResult(Dns.Name[best.Provider]+" для "+AutoDns.Goals[goal].Name,
-                                best.NeedsBrowser?"Сайт просит проверку в браузере.\nПосле подключения откройте сервис.":"Сервер доступен.\nМожно подключить выбранный DNS.",
+                                best.NeedsBrowser?"":"Сервер доступен.\nМожно подключить выбранный DNS.",
                                 report,"Подключить "+Dns.Name[best.Provider]);
+                            dialog.SetDiagnosticDetails(AutoDns.Diagnostic(goal,results),results.Any(r=>!r.Ok));
                             // One review of the concrete choice before the existing elevation/apply flow.
                             chosen = best; chosenGoal = goal;
+                            if(startImmediately){dialog.DialogResult=DialogResult.OK;dialog.Close();}
                         })); } catch (InvalidOperationException) { }
                     });
                 }, () => {
                     chosen = null; chosenGoal = -1;
                     dialog.ShowAutoDnsStatus("Нажмите «Подобрать DNS».\nПроверим подходящие варианты.", "Найдём подходящий DNS", false, false);
                 });
+                if(startImmediately)dialog.Shown+=(s,e)=>dialog.BeginInvoke((Action)(()=>dialog.StartAutoDnsSearch()));
                 if (dialog.ShowDialog(this) != DialogResult.OK || chosen == null || running) return;
             }
             Apply(true, chosen.Provider, false, chosen.Encrypted, chosenGoal);
@@ -1305,13 +1420,15 @@ namespace HbAi.XboxDns
                     probeLabels[provider] = encrypted ? "DoH: " + results.Count(r => r.Ok) + "/" + results.Length + " ответов" : "Ответы DNS: " + count + "/2";
                     string report = encrypted ? "HTTPS: " + EncryptedDns.Templates[provider] + "\n\n" + string.Join("\n", results.Select(r => r.Host + " — " + (r.Ok ? r.Milliseconds + " мс" : r.Error))) + "\n\nЭто проверка сервера через HTTPS, не DNS браузера. Системные настройки не изменялись." : DnsProbe.Report(provider, results);
                     dialog.ShowDnsTestStatus(report, (encrypted ? "HTTPS-ответы: " : "Прямые ответы: ") + results.Count(r => r.Ok) + "/" + results.Length, false, results.Any(r => !r.Ok));
+                    dialog.SetDiagnosticDetails(string.Join("\n\n",results.Select(r=>r.Server+"; host="+r.Host+"; elapsed="+r.Milliseconds+" ms; error="+r.Error+"\n"+r.Detail)),results.Any(r=>!r.Ok));
                     Invalidate();
                 })); } catch (InvalidOperationException) { }
             });
         }
         void PickSet(int k)
         {
-            if (busy || (k == dnsSet && autoGoal < 0)) return;
+            if (busy || (k == dnsSet && autoGoal < 0&&!UseDefaultGoal)) return;
+            manualSelection=true;
             if (active) Apply(true, k);
             else { autoGoal = -1; dnsSet = k; if (Dns.EncryptedOnly(k)) secureDns = true; EnsureProviderVisible(); Invalidate(); }
         }
@@ -1319,7 +1436,7 @@ namespace HbAi.XboxDns
         void Toggle()
         {
             if (busy) return;
-            if (!active && autoGoal >= 0) { ShowAutoDns(); return; }
+            if (!active && (autoGoal >= 0||UseDefaultGoal)) { ShowAutoDns(true); return; }
             bool resetKnown = active && !hasBackup;
             if (resetKnown && ShowMessage(
                 "DNS сервиса уже задан, но копии прежних настроек нет.\n\nПерейти на автоматическое получение DNS? " +
@@ -1459,11 +1576,15 @@ namespace HbAi.XboxDns
             dnsSet = set;
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                string err;
+                string err;string networkDiagnostic=null;
                 try {
+                    DnsProbeResult encryptedProbe=null;
+                    if(turnOn&&useEncrypted&&NetworkCheck.HasConnection())encryptedProbe=DnsProbe.CheckHttps(EncryptedDns.Templates[set],"example.com");
                     if (turnOn && !NetworkCheck.HasConnection()) err = NetworkCheck.OfflineMessage;
-                    else if (turnOn && useEncrypted && !DnsProbe.CheckHttps(EncryptedDns.Templates[set], "example.com").Ok)
+                    else if (turnOn && useEncrypted && encryptedProbe!=null && !encryptedProbe.Ok) {
                         err = "Сервер не ответил через HTTPS. Обычный DNS не использовался, настройки не изменены.";
+                        networkDiagnostic="DoH preflight; provider="+Dns.Name[set]+"; endpoint="+encryptedProbe.Server+"; host="+encryptedProbe.Host+"; elapsed="+encryptedProbe.Milliseconds+" ms\n"+encryptedProbe.Detail;
+                    }
                     else if (turnOn && !useEncrypted && !DnsProbe.CheckAvailability(set).Any(r => r.Host == "example.com" && r.Ok))
                         err = NetworkCheck.HasConnection() ? "Сетевое подключение есть, но оба DNS-сервера не ответили. Возможны отсутствие интернета или блокировка запросов. Настройки не изменены. Подробнее — «Тест DNS»." : NetworkCheck.OfflineMessage;
                     else err = turnOn ? (useEncrypted ? DnsElevation.Run(true, (keepAntigravity ? 300 : 200) + set) : Dns.Enable(set)) : resetKnown ? Dns.ResetKnown() : Dns.Disable();
@@ -1502,7 +1623,10 @@ namespace HbAi.XboxDns
                     else if (err != null)
                     {
                         error = "Не удалось применить все настройки";
-                        ShowMessage( err, "Ошибка DNS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        if(networkDiagnostic!=null)using(var dialog=CreateDialog(err,"Ошибка DNS",MessageBoxButtons.OK,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button1)) {
+                            dialog.SetDiagnosticDetails(networkDiagnostic,true);dialog.ShowDialog(this);
+                        }
+                        else ShowMessage( err, "Ошибка DNS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     }
                     else if (turnOn)
                         ShowDnsReminder();
@@ -1528,8 +1652,7 @@ namespace HbAi.XboxDns
             if (args.Length != 0) return DnsElevation.Handle(args, Dns.ExecuteDirect);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
-            return 0;
+            return SingleInstance.Run(()=>new MainForm());
         }
     }
 }
