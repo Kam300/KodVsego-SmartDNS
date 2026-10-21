@@ -67,10 +67,22 @@ public class AndroidLifecycleTest {
         MotionEvent down=MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,100,100,0),up=MotionEvent.obtain(now,now+20,MotionEvent.ACTION_UP,100,100,0);
         try{power.dispatchTouchEvent(down);power.dispatchTouchEvent(up);Shadows.shadowOf(Looper.getMainLooper()).idle();assertEquals(1,clicks.get());}finally{down.recycle();up.recycle();}
     }
+    @Test public void providerSheetSavesSelectionAndCloses() {
+        MainActivity app=screen();app.findViewById(R.id.dns_provider).performClick();
+        android.app.Dialog dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog();assertTrue(dialog.isShowing());
+        dialog.findViewById(R.id.provider_sheet).findViewWithTag("provider-5").performClick();
+        assertFalse(dialog.isShowing());assertEquals(5,app.getSharedPreferences("smartdns",0).getInt("provider",-1));
+        assertEquals("DNS-AI",((android.widget.TextView)app.findViewById(R.id.dns_provider)).getText().toString());
+        activity.pause().stop().start().resume();assertEquals("DNS-AI",((android.widget.TextView)app.findViewById(R.id.dns_provider)).getText().toString());
+    }
+    @Test public void providerCannotBeChangedDuringConnection() {
+        blockedService(true);MainActivity app=screen();assertFalse(app.findViewById(R.id.dns_provider).isEnabled());
+    }
     @Test @Config(sdk=35) public void contentStaysOutsideSystemBarsWhenScrolled() {
         MainActivity app=screen();ScrollView scroll=(ScrollView)((FrameLayout)app.findViewById(android.R.id.content)).getChildAt(0);
         WindowInsets insets=new WindowInsets.Builder().setInsets(WindowInsets.Type.systemBars(),android.graphics.Insets.of(0,28,0,32)).build();
         scroll.dispatchApplyWindowInsets(insets);assertEquals(28,scroll.getPaddingTop());assertEquals(32,scroll.getPaddingBottom());assertTrue(scroll.getClipToPadding());
+        assertFalse(scroll.isVerticalScrollBarEnabled());assertFalse(scroll.isHorizontalScrollBarEnabled());
         scroll.scrollTo(0,600);assertEquals(28,scroll.getPaddingTop());assertEquals(1,scroll.getChildAt(0).getAlpha(),.001);
     }
 }

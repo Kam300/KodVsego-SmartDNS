@@ -14,8 +14,8 @@ public final class PowerButton extends View {
     private final RectF arc=new RectF();
     private final int surface,accent,muted;
     private final Typeface heading;
-    private ValueAnimator transition,spinner;
-    private float progress,angle;
+    private ValueAnimator transition,spinner,tap;
+    private float progress,angle,tapProgress=1;
     private boolean connected,working,initialized,uiResumed;
 
     public PowerButton(Context context) {
@@ -37,7 +37,7 @@ public final class PowerButton extends View {
         boolean first=!initialized;initialized=true;this.connected=connected;this.working=working;
         setContentDescription(working?"Отменить подключение DNS":connected?"Выключить DNS":"Включить DNS");
         if(transition!=null)transition.cancel();
-        float target=connected?1:0;
+        float target=connected?1:working?.22f:0;
         if(first||!uiResumed||!ValueAnimator.areAnimatorsEnabled()||!isAttachedToWindow())progress=target;
         else {
             transition=ValueAnimator.ofFloat(progress,target);transition.setDuration(220);
@@ -69,6 +69,10 @@ public final class PowerButton extends View {
         canvas.drawLine(cx,y-dp(35),cx,y-dp(5),paint);
         paint.setStyle(Paint.Style.FILL);paint.setTypeface(heading);paint.setTextSize(dp(working?10:14));paint.setTextAlign(Paint.Align.CENTER);
         paint.setColor(blend(muted,BLACK,progress));canvas.drawText(working?"ПОДКЛЮЧАЕМ":connected?"ВКЛ":"ВЫКЛ",cx,cy+dp(51),paint);
+        if(tapProgress<1){
+            paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(3)*(1-tapProgress)+dp(1));paint.setColor(accent);paint.setAlpha((int)(150*(1-tapProgress)));
+            canvas.drawCircle(cx,cy,r*(.72f+.4f*tapProgress),paint);paint.setAlpha(255);
+        }
     }
     @Override protected void drawableStateChanged() {
         super.drawableStateChanged();
@@ -77,11 +81,18 @@ public final class PowerButton extends View {
             animate().scaleX(scale).scaleY(scale).setDuration(isPressed()?100:160).start();
         }
     }
-    @Override public boolean performClick(){return super.performClick();}
+    @Override public boolean performClick(){
+        if(uiResumed&&isAttachedToWindow()&&ValueAnimator.areAnimatorsEnabled()){
+            if(tap!=null)tap.cancel();tap=ValueAnimator.ofFloat(0,1);tap.setDuration(420);tap.setInterpolator(new DecelerateInterpolator());
+            tap.addUpdateListener(a->{tapProgress=(float)a.getAnimatedValue();invalidate();});tap.start();
+        }
+        return super.performClick();
+    }
     void pauseUi(){
         uiResumed=false;if(transition!=null)transition.cancel();
         if(spinner!=null){spinner.cancel();spinner=null;}
-        animate().cancel();cancelPendingInputEvents();setPressed(false);setScaleX(1);setScaleY(1);progress=connected?1:0;invalidate();
+        if(tap!=null){tap.cancel();tap=null;}tapProgress=1;
+        animate().cancel();cancelPendingInputEvents();setPressed(false);setScaleX(1);setScaleY(1);progress=connected?1:working?.22f:0;invalidate();
     }
     void resumeUi(){pauseUi();uiResumed=true;setEnabled(true);setClickable(true);updateSpinner();}
     @Override public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(info);info.setClassName(android.widget.Button.class.getName());}

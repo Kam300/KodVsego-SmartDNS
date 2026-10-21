@@ -1,4 +1,7 @@
 <resources>
     <item name="dns_power" type="id" />
     <item name="add_widget" type="id" />
+    <item name="dns_provider" type="id" />
+    <item name="provider_sheet" type="id" />
+    <item name="network_settings" type="id" />
 </resources>

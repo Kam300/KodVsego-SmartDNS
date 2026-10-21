@@ -26,9 +26,10 @@ public final class MainActivity extends Activity {
     private android.content.SharedPreferences prefs;
     private boolean dark,rendering,testing,resumed;private int selected;
     private LinearLayout content,serviceRow;private TextView state,addresses,probe;
-    private PowerButton connect;private Button test;private Switch encrypted;private Spinner providers;
+    private PowerButton connect;private Button test;private Switch encrypted;private TextView providers;
     private int ink,muted,accent,card;
     private DnsConfig pending;
+    private Dialog providerDialog;
     private Future<?> runningTest;private int testGeneration;
     private Typeface heading,body,bold;
     private final Map<String,Drawable.ConstantState> iconCache=new HashMap<>();
@@ -59,7 +60,7 @@ public final class MainActivity extends Activity {
         lastUiState=null;providerContent=null;
         ink=Color.parseColor(dark?"#F7F6FC":"#151D22");muted=Color.parseColor(dark?"#A8A4BC":"#68637B");
         accent=Color.parseColor(dark?"#02A5CF":"#007F9F");card=Color.parseColor(dark?"#12121B":"#F1EFFA");
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.setHorizontalScrollBarEnabled(false);
         scroll.setBackground(new GradientDrawable(GradientDrawable.Orientation.TR_BL,new int[]{Color.parseColor(dark?"#27203F":"#F0EAFF"),Color.parseColor(dark?"#08080D":"#FAF9FF"),Color.parseColor(dark?"#10192B":"#EDF2FF")}));
         content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(24),dp(20),dp(24),dp(24));scroll.addView(content);
         setContentView(scroll);
@@ -81,38 +82,66 @@ public final class MainActivity extends Activity {
         connect.setId(R.id.dns_power);
         connect.setOnClickListener(v->{if(DnsVpnService.active||DnsVpnService.connecting)DnsVpnService.requestStop(this);else requestConnect();updateState();});
         space(4);state=text("DNS выключен",18,ink,true);state.setTypeface(heading);state.setGravity(Gravity.CENTER);state.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);content.addView(state);
-        content.addView(text("После смены DNS полностью перезапустите нужное приложение.",13,muted,false));space(12);
-        LinearLayout selection=box();selection.addView(text("Провайдер DNS",14,accent,true));providers=new Spinner(this);
-        String[] names=new String[Provider.ALL.length];for(int i=0;i<names.length;i++)names[i]=Provider.ALL[i].name;
-        providers.setAdapter(adapter(names));providers.setSelection(selected);selection.addView(providers);
+        content.addView(text("После смены DNS полностью перезапустите нужное приложение.",13,muted,false));space(20);
+        LinearLayout selection=box();selection.addView(text("Провайдер DNS",12,muted,false));
+        providers=text("",18,ink,true);providers.setId(R.id.dns_provider);providers.setGravity(Gravity.CENTER_VERTICAL);
+        providers.setMinHeight(dp(56));providers.setPadding(dp(12),dp(10),dp(12),dp(10));
+        providers.setCompoundDrawablesRelativeWithIntrinsicBounds(0,0,R.drawable.ic_chevron_down,0);providers.setCompoundDrawablePadding(dp(12));
+        providers.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2202A5CF),shape(dark?0xFF1B2530:0xFFE2F2F7,14),null));
+        providers.setFocusable(true);providers.setOnClickListener(v->chooseProvider());
+        LinearLayout.LayoutParams pickerParams=new LinearLayout.LayoutParams(-1,-2);pickerParams.setMargins(0,dp(8),0,dp(12));selection.addView(providers,pickerParams);
         addresses=text("",13,ink,false);selection.addView(addresses);serviceRow=new LinearLayout(this);serviceRow.setOrientation(LinearLayout.VERTICAL);selection.addView(serviceRow);
-        space(12);LinearLayout settings=box();
+        space(20);LinearLayout settings=box();
         encrypted=new Switch(this);encrypted.setText(R.string.encrypted_dns);encrypted.setTypeface(body);encrypted.setTextColor(ink);encrypted.setMinHeight(dp(48));settings.addView(encrypted);
         encrypted.setChecked(prefs.getBoolean("encrypted",false)||Provider.at(selected).encryptedOnly);
         settings.addView(text("DoH шифрует DNS-запросы. При ошибке перехода на обычный DNS нет.",12,muted,false));
-        space(12);test=button(testing?"Остановить тест":"Тест DNS");content.addView(test);test.setOnClickListener(v->testDns());
+        space(20);test=button(testing?"Остановить тест":"Тест DNS");content.addView(test);test.setOnClickListener(v->testDns());
         probe=text("Тест не меняет DNS. Проверяется ответ провайдера, а не доступ к аккаунту или сайту.",13,muted,false);content.addView(probe);
-        space(12);LinearLayout info=box();info.addView(text("Как работает на телефоне",15,ink,true));
-        info.addView(text("Без root. Android запросит разрешение VPN: локальный туннель обрабатывает только DNS. Сайты и приложения подключаются напрямую. Другой VPN одновременно использовать нельзя.\n\nСобственный Secure DNS браузера и DNS внутри приложений могут обходить настройку. Строгий частный DNS Android нужно переключить вручную. Не включайте блокировку соединений вне VPN.",13,muted,false));
-        Button privateDns=button("Сетевые настройки Android");info.addView(privateDns);privateDns.setOnClickListener(v->{try{startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));}catch(ActivityNotFoundException ignored){}});
-        Button widgets=button("Добавить виджет");widgets.setId(R.id.add_widget);info.addView(widgets);widgets.setOnClickListener(v->chooseWidget());
-        space(14);content.addView(text("Код Всего · Android "+BuildConfig.VERSION_NAME,13,accent,true));
+        space(20);Button widgets=secondaryButton("Добавить виджет");widgets.setId(R.id.add_widget);content.addView(widgets);widgets.setOnClickListener(v->chooseWidget());
+        space(12);Button privateDns=secondaryButton("Сетевые настройки Android");privateDns.setId(R.id.network_settings);content.addView(privateDns);privateDns.setOnClickListener(v->{try{startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));}catch(ActivityNotFoundException ignored){}});
+        space(24);content.addView(text("Код Всего · Android "+BuildConfig.VERSION_NAME,13,accent,true));space(8);
         Button channel=button("Telegram · TotalC0de ↗");channel.setTextColor(Color.WHITE);GradientDrawable channelBg=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{0xFF7E53FF,0xFF4B74FF});channelBg.setCornerRadius(dp(16));channel.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33FFFFFF),channelBg,null));content.addView(channel);channel.setOnClickListener(v->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://t.me/TotalC0de"))));
-        providers.setOnItemSelectedListener(new SimpleSelection(){public void selected(int position){if(rendering)return;selected=position;updateProvider();save();}});
         encrypted.setOnCheckedChangeListener((b,on)->{if(!rendering&&!updatingProvider){updateProvider();save();}});
         updateProvider();rendering=false;updateState();
         if(ValueAnimator.areAnimatorsEnabled()){content.setAlpha(.7f);content.setTranslationY(dp(5));content.animate().alpha(1).translationY(0).setDuration(180).start();}
         if(resumed)connect.resumeUi();
     }
-    private ArrayAdapter<String> adapter(String[] names){return new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,names){
-        @Override public View getView(int p,View v,android.view.ViewGroup parent){TextView t=(TextView)super.getView(p,v,parent);t.setTextColor(ink);t.setMinHeight(dp(48));t.setGravity(Gravity.CENTER_VERTICAL);return t;}
-        @Override public View getDropDownView(int p,View v,android.view.ViewGroup parent){TextView t=(TextView)super.getDropDownView(p,v,parent);t.setTextColor(Color.rgb(21,29,34));t.setBackgroundColor(Color.WHITE);t.setMinHeight(dp(48));return t;}
-    };}
-    private abstract static class SimpleSelection implements android.widget.AdapterView.OnItemSelectedListener {
-        public abstract void selected(int position);public void onItemSelected(AdapterView<?> parent,View view,int position,long id){selected(position);}public void onNothingSelected(AdapterView<?> parent){}
+    private Button secondaryButton(String label){
+        Button b=button(label);b.setTextColor(accent);
+        GradientDrawable background=shape(card,14);background.setStroke(dp(1),dark?0xFF304452:0xFFB7D6DF);
+        b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2202A5CF),background,null));return b;
+    }
+    private void chooseProvider(){
+        if(DnsVpnService.active||DnsVpnService.connecting)return;
+        Dialog sheet=new Dialog(this);providerDialog=sheet;sheet.setOnDismissListener(dialog->{if(providerDialog==sheet)providerDialog=null;});sheet.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout panel=new LinearLayout(this);panel.setId(R.id.provider_sheet);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(20),dp(12),dp(20),dp(20));
+        GradientDrawable background=shape(card,28);background.setCornerRadii(new float[]{dp(28),dp(28),dp(28),dp(28),0,0,0,0});panel.setBackground(background);
+        View handle=new View(this);handle.setBackground(shape(dark?0xFF4C5360:0xFFB5C6CD,4));LinearLayout.LayoutParams handleParams=new LinearLayout.LayoutParams(dp(36),dp(4));handleParams.gravity=Gravity.CENTER_HORIZONTAL;handleParams.bottomMargin=dp(16);panel.addView(handle,handleParams);
+        TextView title=text("Выберите DNS",21,ink,true);if(Build.VERSION.SDK_INT>=28)title.setAccessibilityHeading(true);panel.addView(title);
+        panel.addView(text("Выберите провайдера для подключения",13,muted,false));
+        ScrollView list=new ScrollView(this);list.setVerticalScrollBarEnabled(false);list.setHorizontalScrollBarEnabled(false);
+        LinearLayout rows=new LinearLayout(this);rows.setOrientation(LinearLayout.VERTICAL);list.addView(rows);panel.addView(list,new LinearLayout.LayoutParams(-1,0,1));
+        for(int i=0;i<Provider.ALL.length;i++){
+            final int position=i;Provider provider=Provider.at(i);boolean checked=i==selected;
+            LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(16),dp(12),dp(16),dp(12));row.setMinimumHeight(dp(84));row.setTag("provider-"+i);
+            GradientDrawable tile=shape(checked?(dark?0xFF153643:0xFFDCF2F8):(dark?0xFF1B1E29:0xFFF9FAFD),18);tile.setStroke(dp(1),checked?accent:(dark?0xFF303441:0xFFE1E5EC));
+            row.setBackground(new RippleDrawable(ColorStateList.valueOf(0x3302A5CF),tile,null));row.setFocusable(true);
+            row.setSelected(checked);
+            LinearLayout labels=new LinearLayout(this);labels.setOrientation(LinearLayout.VERTICAL);
+            labels.addView(text(provider.name,16,checked?accent:ink,true));labels.addView(text(android.text.TextUtils.join(" · ",provider.services),12,muted,false));
+            labels.addView(text(provider.encryptedOnly?"Только DoH":provider.doh==null?"Обычный DNS":"DNS · DoH",11,checked?accent:muted,false));row.addView(labels,new LinearLayout.LayoutParams(0,-2,1));
+            TextView mark=text(checked?"✓":"○",22,checked?accent:muted,true);mark.setPadding(dp(12),0,0,0);row.addView(mark);
+            row.setContentDescription(provider.name+", "+(checked?"выбран, ":"")+android.text.TextUtils.join(", ",provider.services));
+            LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2);rowParams.topMargin=dp(12);rows.addView(row,rowParams);
+            row.setOnClickListener(v->{if(!DnsVpnService.active&&!DnsVpnService.connecting){selected=position;updateProvider();save();lastUiState=null;updateState();}sheet.dismiss();});
+        }
+        Button close=secondaryButton("Готово");LinearLayout.LayoutParams closeParams=new LinearLayout.LayoutParams(-1,-2);closeParams.topMargin=dp(16);panel.addView(close,closeParams);close.setOnClickListener(v->sheet.dismiss());
+        sheet.setContentView(panel);Window window=sheet.getWindow();if(window!=null){window.setBackgroundDrawableResource(android.R.color.transparent);window.setGravity(Gravity.BOTTOM);window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);window.setDimAmount(.55f);window.setWindowAnimations(R.style.ProviderSheetMotion);}
+        sheet.show();if(window!=null){int height=getResources().getDisplayMetrics().heightPixels;window.setLayout(-1,(int)(height*.85f));window.setNavigationBarColor(card);}
     }
     private void updateProvider() {
         Provider p=Provider.at(selected);
+        providers.setText(p.name);providers.setContentDescription("Провайдер DNS: "+p.name+". Выбрать другой");
         updatingProvider=true;
         if(p.encryptedOnly)encrypted.setChecked(true);else if(p.doh==null)encrypted.setChecked(false);
         updatingProvider=false;
@@ -146,6 +175,7 @@ public final class MainActivity extends Activity {
         if(!android.text.TextUtils.equals(state.getText(),DnsVpnService.status))state.setText(DnsVpnService.status);
         connect.setState(DnsVpnService.active,DnsVpnService.connecting);state.setTextColor(DnsVpnService.active?accent:ink);
         providers.setEnabled(!locked);
+        providers.setAlpha(locked?.55f:1);
         encrypted.setEnabled(!locked&&Provider.at(selected).doh!=null&&!Provider.at(selected).encryptedOnly);
         test.setEnabled(!DnsVpnService.connecting);
     }
@@ -214,5 +244,5 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume(){super.onResume();resumed=true;settleMotion();lastUiState=null;updateState();connect.resumeUi();handler.removeCallbacks(refresh);handler.post(refresh);DnsWidget.updateAll(this);}
     @Override protected void onPause(){resumed=false;handler.removeCallbacks(refresh);settleMotion();if(connect!=null)connect.pauseUi();super.onPause();}
-    @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);tests.shutdownNow();super.onDestroy();}
+    @Override protected void onDestroy(){if(providerDialog!=null)providerDialog.dismiss();handler.removeCallbacksAndMessages(null);tests.shutdownNow();super.onDestroy();}
 }
