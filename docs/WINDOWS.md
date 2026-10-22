@@ -1,4 +1,6 @@
-﻿# Код Всего · Smart DNS для Windows
+﻿> В Windows 2.23.0 добавлен MagicDNS (обычный DNS и DoH); у GeoHide EU и Xbox показано «DoH недоступен». Актуальный отдельный EXE — в [релизе v2.23.0](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/v2.23.0). Установщик 2.22.1 остаётся отдельной предыдущей версией.
+
+# Код Всего · Smart DNS для Windows
 
 Опубликованная версия: **2.22.1**. Требуется Windows 10 2004+ или Windows 11, .NET Framework 4.8.
 

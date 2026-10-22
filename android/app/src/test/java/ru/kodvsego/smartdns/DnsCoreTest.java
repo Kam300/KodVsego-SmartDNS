@@ -22,8 +22,8 @@ public class DnsCoreTest {
     }
     static IpPacket tcp(long seq,long ack,int flags,byte[] data) throws Exception {byte[] p=packet(6,seq,ack,flags,data);return IpPacket.parse(p,p.length);}
     static final byte[] EMPTY=new byte[0];
-    @Test public void sixProvidersMatchWindows(){assertEquals(6,Provider.ALL.length);assertEquals("DNS-AI",Provider.at(5).name);assertEquals("194.87.196.13",Provider.at(5).servers[0]);}
-    @Test public void invalidProviderRejected(){fails(()->Provider.at(-1));fails(()->Provider.at(6));}
+    @Test public void providersMatchWindows(){assertEquals(7,Provider.ALL.length);assertEquals("DNS-AI",Provider.at(5).name);assertEquals("194.87.196.13",Provider.at(5).servers[0]);assertEquals("MagicDNS",Provider.at(6).name);assertArrayEquals(new String[]{"109.120.132.43","94.249.177.102"},Provider.at(6).servers);assertEquals("https://dns.magicdns.ru/dns-query",Provider.at(6).doh);}
+    @Test public void invalidProviderRejected(){fails(()->Provider.at(-1));fails(()->Provider.at(Provider.ALL.length));}
     @Test public void encryptedOnlyCannotDowngrade(){assertTrue(new DnsConfig(5,false).encrypted);}
     @Test public void missingDohCannotDowngrade(){fails(()->new DnsConfig(2,true));fails(()->new DnsConfig(3,true));}
     @Test public void queryRoundTrip() throws Exception{byte[] q=DnsWire.query("Gemini.Google.Com");assertEquals("gemini.google.com",DnsWire.question(q).host);assertEquals(1,DnsWire.question(q).type);}

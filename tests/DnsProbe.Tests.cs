@@ -47,6 +47,8 @@ static class ProbeTests
         Check(Dns.MatchProvider(new[] {"195.133.25.16", "192.0.2.53"}) == -1, "Mixed encrypted Comss and custom resolver is rejected");
         Check(Dns.V4[0].SequenceEqual(new[] {"83.220.169.155", "212.109.195.93"}), "Comss plain DNS remains separate from its encrypted address");
         Check(Dns.EncryptedOnly(5) && EncryptedDns.Templates[5] == "https://dns.dns-ai.ru/dns-query" && Dns.V4[5].SequenceEqual(new[]{"194.87.196.13","186.246.49.127"}), "DNS-AI uses published addresses and requires encryption");
+        Check(Dns.Name[6]=="MagicDNS" && Dns.V4[6].SequenceEqual(new[]{"109.120.132.43","94.249.177.102"}) && EncryptedDns.Templates[6]=="https://dns.magicdns.ru/dns-query" && !Dns.EncryptedOnly(6), "MagicDNS supports published plain and HTTPS endpoints");
+        Check(new[]{Dns.V4.Length,Dns.V6.Length,Dns.Site.Length,Dns.Url.Length,Dns.Opens.Length,EncryptedDns.Templates.Length}.All(n=>n==Dns.Name.Length), "Provider metadata stays aligned for DNS changes and restoration");
         Check(DnsProbe.Targets(5).SequenceEqual(new[]{EncryptedDns.Templates[5]}), "DNS-AI tests target HTTPS only, not port 53");
         Check(DnsProbe.HostsForProvider(5).Contains("gemini.google.com") && DnsProbe.HostsForProvider(5).Contains("generativelanguage.googleapis.com"), "DNS-AI checks both Gemini website and API");
         var geminiResults = DnsProbe.CheckProvider(5,(server,host)=>new DnsProbeResult{Server=server,Host=host,Milliseconds=15,Error=host=="gemini.google.com"?"Gemini test failure":null});
@@ -60,7 +62,7 @@ static class ProbeTests
         {
             var hosts = DnsProbe.HostsForProvider(k);
             Check(hosts.Contains("example.com") && hosts.Distinct().Count() == hosts.Length, Dns.Name[k] + " has a unique test suite and baseline");
-            Check(k == 3 ? hosts.Contains("xsts.auth.xboxlive.com") && !hosts.Contains("claude.ai") : hosts.Contains("cloudcode-pa.googleapis.com"), Dns.Name[k] + " tests its intended services");
+            Check(k == 3 ? hosts.Contains("xsts.auth.xboxlive.com") && !hosts.Contains("claude.ai") : k == 6 ? hosts.Contains("gemini.google.com") && hosts.Contains("claude.ai") && !hosts.Contains("cloudcode-pa.googleapis.com") : hosts.Contains("cloudcode-pa.googleapis.com"), Dns.Name[k] + " tests its intended services");
             var results = DnsProbe.CheckProvider(k, (server,host) => new DnsProbeResult {Server=server,Host=host,Milliseconds=12,Error=host=="example.com"?null:"simulated failure"});
             Check(results.Length == hosts.Length * DnsProbe.Targets(k).Length && DnsProbe.Targets(k).All(server => results.Count(r=>r.Server==server) == hosts.Length), Dns.Name[k] + " tests every host on each selected transport target");
             string report = DnsProbe.Report(k,results);

@@ -24,7 +24,7 @@ namespace HbAi.XboxDns
     {
         internal static string Run(int provider, bool keepAntigravity = false)
         {
-            if (provider < 0 || provider >= Templates.Length || Templates[provider] == null) return "Для DoH выберите Comss.one, GeoHide, Bezmezhau или DNS-AI.";
+            if (provider < 0 || provider >= Templates.Length || Templates[provider] == null) return "Для DoH выберите Comss.one, GeoHide, Bezmezhau, DNS-AI или MagicDNS.";
             try
             {
                 // Inspect persisted local AND organization policies, without depending on
@@ -53,7 +53,7 @@ namespace HbAi.XboxDns
             return "Обнаружены отдельные DNS-правила: " + domains + ".\n\nОтключите DNS-настройку прежнего анлокера и повторите попытку. Для полного шифрования эти правила должны быть отключены.";
         }
         // Only provider/IP combinations with a verified HTTPS endpoint are offered.
-        internal static readonly string[] Templates = { "https://dns.comss.one/dns-query", "https://geohide.ru/dns-query", null, null, "https://dns.bezmezhau.com/dns-query", "https://dns.dns-ai.ru/dns-query" };
+        internal static readonly string[] Templates = { "https://dns.comss.one/dns-query", "https://geohide.ru/dns-query", null, null, "https://dns.bezmezhau.com/dns-query", "https://dns.dns-ai.ru/dns-query", "https://dns.magicdns.ru/dns-query" };
         internal static bool ExplicitlyConfigured(FamilyBackup settings, int provider)
         {
             return settings.DohCaptured && settings.Servers.Length > 0 && settings.Doh != null && settings.Doh.Length == settings.Servers.Length &&

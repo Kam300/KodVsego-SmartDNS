@@ -42,10 +42,10 @@ namespace HbAi.XboxDns
         internal static int GoalIndex(string name)
         {return Array.FindIndex(Goals,goal=>string.Equals(goal.Name,name,StringComparison.OrdinalIgnoreCase));}
         internal static readonly AutoGoal[] Goals = {
-            new AutoGoal {Name="Gemini", Hosts=new[]{"gemini.google.com"}, Providers=new[]{0,1,2,4,5}},
-            new AutoGoal {Name="ChatGPT", Hosts=new[]{"chatgpt.com"}, Providers=new[]{0,1,2,4,5}},
-            new AutoGoal {Name="Claude", Hosts=new[]{"claude.ai"}, Providers=new[]{0,1,2,5}},
-            new AutoGoal {Name="ElevenLabs", Hosts=new[]{"elevenlabs.io"}, Providers=new[]{0,1,2,5}},
+            new AutoGoal {Name="Gemini", Hosts=new[]{"gemini.google.com"}, Providers=new[]{0,1,2,4,5,6}},
+            new AutoGoal {Name="ChatGPT", Hosts=new[]{"chatgpt.com"}, Providers=new[]{0,1,2,4,5,6}},
+            new AutoGoal {Name="Claude", Hosts=new[]{"claude.ai"}, Providers=new[]{0,1,2,5,6}},
+            new AutoGoal {Name="ElevenLabs", Hosts=new[]{"elevenlabs.io"}, Providers=new[]{0,1,2,5,6}},
             new AutoGoal {Name="Spotify", Hosts=new[]{"open.spotify.com"}, Providers=new[]{4}},
             new AutoGoal {Name="Xbox", Hosts=new[]{"xbox.com"}, Providers=new[]{3}},
             new AutoGoal {Name="Antigravity", Hosts=new[]{"cloudcode-pa.googleapis.com","daily-cloudcode-pa.googleapis.com"}, Providers=new[]{1,2,4,5}, Api=true}

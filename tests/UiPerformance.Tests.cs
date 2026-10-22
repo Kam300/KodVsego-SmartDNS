@@ -91,7 +91,7 @@ static class UiPerformanceTests
             form.ScrollProviderPage(1);
             Check((int)Get(form,"providerScroll")==324&&(int)Get(form,"dnsSet")==selected,"Arrow pages three providers without changing selected DNS");
             form.ScrollProviderPage(1);
-            Check((int)Get(form,"providerScroll")==432,"Last page clamps to the final Auto entry");
+            Check((int)Get(form,"providerScroll")==((Dns.Name.Length+1-3)*108),"Last page clamps to the final Auto entry");
             form.ScrollProviderPage(-1);form.ScrollProviderPage(-1);
             Check((int)Get(form,"providerScroll")==0,"Backward paging stops at first provider");
             var viewport=(Rectangle)Get(form,"providerViewport");

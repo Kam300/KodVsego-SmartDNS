@@ -22,22 +22,22 @@ namespace HbAi.XboxDns
         // Сервисы Smart DNS. Проверено 12.10.2026 из России: Comss.one и GeoHide (Европа) отдают прокси для ChatGPT,
         // Claude, Gemini и ElevenLabs, российский узел GeoHide — для Gemini и ElevenLabs. xbox-dns.ru с 10.10.2026
         // нейросети не пропускает (0.0.0.0). Astracat (135.106.217.200) 12.10.2026 не отвечал, из списка убран.
-        public static readonly string[] Name = { "Comss.one", "GeoHide", "GeoHide EU", "Xbox DNS", "Bezmezhau", "DNS-AI" };
+        public static readonly string[] Name = { "Comss.one", "GeoHide", "GeoHide EU", "Xbox DNS", "Bezmezhau", "DNS-AI", "MagicDNS" };
         public static readonly string[][] V4 = {
             new[] { "83.220.169.155", "212.109.195.93" },
             new[] { "159.194.200.33", "193.233.112.67" },
             new[] { "143.20.64.192", "45.13.237.213" },
             new[] { "111.88.96.54", "111.88.96.55" },
             new[] { "143.20.64.55", "31.58.216.201" },
-            new[] { "194.87.196.13", "186.246.49.127" } };
+            new[] { "194.87.196.13", "186.246.49.127" }, new[] { "109.120.132.43", "94.249.177.102" } };
         public static readonly string[][] V6 = {
             new string[0], new string[0], new string[0],
-            new[] { "2a00:ab00:1233:26::50", "2a00:ab00:1233:26::51" }, new string[0], new string[0] };
+            new[] { "2a00:ab00:1233:26::50", "2a00:ab00:1233:26::51" }, new string[0], new string[0], new string[0] };
         public static readonly string[] Opens = {
             "ChatGPT, Claude, Gemini, ElevenLabs", "ChatGPT, Claude, Gemini, ElevenLabs",
-            "ChatGPT, Claude, Gemini, ElevenLabs", "только Xbox Live, нейросети — нет", "ChatGPT, Gemini, Spotify", "AI-сервисы · только DoH" };
-        public static readonly string[] Site = { "comss.ru", "geohide.ru", "geohide.ru", "xbox-dns.ru", "bezmezhau.com", "dns-ai.ru" };
-        public static readonly string[] Url = { "https://www.comss.ru/", "https://geohide.ru/", "https://geohide.ru/", "https://xbox-dns.ru/", "https://bezmezhau.com/", "https://dns-ai.ru/#setup" };
+            "ChatGPT, Claude, Gemini, ElevenLabs", "только Xbox Live, нейросети — нет", "ChatGPT, Gemini, Spotify", "AI-сервисы · только DoH", "ChatGPT, Claude, Gemini, ElevenLabs" };
+        public static readonly string[] Site = { "comss.ru", "geohide.ru", "geohide.ru", "xbox-dns.ru", "bezmezhau.com", "dns-ai.ru", "magicdns.ru" };
+        public static readonly string[] Url = { "https://www.comss.ru/", "https://geohide.ru/", "https://geohide.ru/", "https://xbox-dns.ru/", "https://bezmezhau.com/", "https://dns-ai.ru/#setup", "https://magicdns.ru/" };
         internal static bool EncryptedOnly(int provider) { return provider == 5; }
         // Старые адреса xbox-dns.ru из версии 1.0: если стоят они, показываем Xbox DNS
         static readonly string[] XboxOld = { "111.88.96.50", "111.88.96.51" };
@@ -1007,8 +1007,8 @@ namespace HbAi.XboxDns
             using (var body = UiFont(fMed, 8f))
             using (var ink = new SolidBrush(Ink))
             using (var muted = new SolidBrush(Muted)) {
-                g.DrawString("Зашифрованный DNS", title, ink, 76, LowerY(686));
-                g.DrawString(EncryptedDns.Templates[dnsSet] == null ? "DoH: Comss.one, GeoHide, Bezmezhau или DNS-AI" : secureDns && (agStatus.External || agStatus.Checked) ? "DoH · Antigravity по отдельным правилам" : "DoH адаптера · IPv6 приостанавливается", body, muted, 76, LowerY(710));
+                g.DrawString(EncryptedDns.Templates[dnsSet] == null ? "DoH недоступен" : "Зашифрованный DNS", title, ink, 76, LowerY(686));
+                g.DrawString(EncryptedDns.Templates[dnsSet] == null ? "У этого провайдера настроен только обычный DNS" : secureDns && (agStatus.External || agStatus.Checked) ? "DoH · Antigravity по отдельным правилам" : "DoH адаптера · IPv6 приостанавливается", body, muted, 76, LowerY(710));
             }
             using (var path = RoundPath(rAgOption, 16))
             using (var fill = new SolidBrush(CardBg))
@@ -1032,7 +1032,7 @@ namespace HbAi.XboxDns
                     agStatus.RecoveryNeeded ? "Снимите галочку: завершить восстановление" : agStatus.External ? "Есть правила другой программы" : agStatus.Checked ?
                     (agStatus.Complete ? (agStatus.Provider == 1 ? "Comss: смените DNS" : "Включено · " + (agStatus.Provider >= 0 ? AntigravityDns.ProviderNames[agStatus.Provider] : "DNS")) +
                         (agStatus.Provider != AntigravityDns.ProviderForMainSet(dnsSet) ? " · смена после отключения" : "") : "Включено частично · снимите для отмены") :
-                    (cleanupDone ? "Старые правила удалены" : secureDns ? "" : dnsSet == 0 ? "Comss для этой опции отключён" : dnsSet == 3 ? "Выберите DNS для нейросетей выше" : "Будет использован: " + Dns.Name[dnsSet]);
+                    (cleanupDone ? "Старые правила удалены" : secureDns ? "" : dnsSet == 0 ? "Comss для этой опции отключён" : dnsSet == 3 ? "Выберите DNS для нейросетей выше" : dnsSet == 6 ? "Отдельные правила для MagicDNS недоступны" : "Будет использован: " + Dns.Name[dnsSet]);
                 bool showCleanup = agStatus.External;
                 using (var format = new StringFormat { FormatFlags = StringFormatFlags.NoWrap, Trimming = StringTrimming.EllipsisCharacter })
                     g.DrawString(string.IsNullOrEmpty(note)?"Может помочь при ошибке 400 в Antigravity":note, body, muted, new RectangleF(76, LowerY(788), showCleanup ? W-242 : W-120, 22), format);
@@ -1158,9 +1158,10 @@ namespace HbAi.XboxDns
             if (rVersion.Contains(e.Location)) { ShowUpdates(); return; }
             if (initializing) return;
             if (rSecureOption.Contains(e.Location)) {
+                if (EncryptedDns.Templates[dnsSet] == null) return;
                 if (busy) return;
                 if (Dns.EncryptedOnly(dnsSet)) { ShowMessage("DNS-AI работает только через зашифрованный DNS. Шифрование для него обязательно.", "DNS-AI", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-                if (!secureDns && EncryptedDns.Templates[dnsSet] == null) { ShowMessage("Выберите Comss.one, GeoHide, Bezmezhau или DNS-AI. Для остальных провайдеров параметры системного DoH пока не подтверждены.", "Зашифрованный DNS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+                if (!secureDns && EncryptedDns.Templates[dnsSet] == null) { ShowMessage("Выберите Comss.one, GeoHide, Bezmezhau, DNS-AI или MagicDNS. Для остальных провайдеров параметры системного DoH пока не подтверждены.", "Зашифрованный DNS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
                 if (active) Apply(true, null, false, !secureDns); else { secureDns = !secureDns; Invalidate(); }
                 return;
             }
@@ -1191,7 +1192,7 @@ namespace HbAi.XboxDns
             double dx = e.X - c.X, dy = e.Y - c.Y;
             bool overPower = dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0;
             if (powerHovered != overPower) { powerHovered = overPower; Invalidate(rToggleGlow()); }
-            bool hand = rSettings.Contains(e.Location) || rVersion.Contains(e.Location) || rSecureOption.Contains(e.Location) || rAgOption.Contains(e.Location) || rTheme.Contains(e.Location) || rClose.Contains(e.Location) || rGroup.Contains(e.Location) || rSite.Contains(e.Location) || rBrand.Contains(e.Location) || ProviderBar.Contains(e.Location) || DnsTestButton.Contains(e.Location)
+            bool hand = rSettings.Contains(e.Location) || rVersion.Contains(e.Location) || (rSecureOption.Contains(e.Location) && EncryptedDns.Templates[dnsSet] != null) || rAgOption.Contains(e.Location) || rTheme.Contains(e.Location) || rClose.Contains(e.Location) || rGroup.Contains(e.Location) || rSite.Contains(e.Location) || rBrand.Contains(e.Location) || ProviderBar.Contains(e.Location) || DnsTestButton.Contains(e.Location)
                         || dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0;
             Cursor = hand && !busy ? Cursors.Hand : Cursors.Default;
             string tip = rSettings.Contains(e.Location)?"Настройки":providerPrevious.Contains(e.Location)?"Предыдущие 3 варианта":providerNext.Contains(e.Location)?"Следующие 3 варианта":rVersion.Contains(e.Location)?"Проверить обновления":rTheme.Contains(e.Location) ? (darkTheme ? "Светлая тема" : "Тёмная тема") : null;
@@ -1395,7 +1396,7 @@ namespace HbAi.XboxDns
         void RunDnsTest(StyledDialog dialog, int provider)
         {
             bool encrypted = secureDns || Dns.EncryptedOnly(provider);
-            if (encrypted && EncryptedDns.Templates[provider] == null) { dialog.ShowDnsTestStatus("Для этого провайдера HTTPS-тест пока недоступен. Выберите Comss.one, GeoHide, Bezmezhau или DNS-AI. Обычные DNS-запросы не отправлялись.", "Нет параметров DoH", false, true); return; }
+            if (encrypted && EncryptedDns.Templates[provider] == null) { dialog.ShowDnsTestStatus("Для этого провайдера HTTPS-тест пока недоступен. Выберите Comss.one, GeoHide, Bezmezhau, DNS-AI или MagicDNS. Обычные DNS-запросы не отправлялись.", "Нет параметров DoH", false, true); return; }
             if (!NetworkCheck.HasConnection()) { dialog.ShowDnsTestStatus(NetworkCheck.OfflineMessage, "Нет подключения", false, true); return; }
             var vpn = VpnCheck.Scan();
             if (vpn.NeedsAttention)
@@ -1429,8 +1430,8 @@ namespace HbAi.XboxDns
         {
             if (busy || (k == dnsSet && autoGoal < 0&&!UseDefaultGoal)) return;
             manualSelection=true;
-            if (active) Apply(true, k);
-            else { autoGoal = -1; dnsSet = k; if (Dns.EncryptedOnly(k)) secureDns = true; EnsureProviderVisible(); Invalidate(); }
+            if (active) Apply(true, k, encrypted: EncryptedDns.Templates[k] != null && secureDns || Dns.EncryptedOnly(k));
+            else { autoGoal = -1; dnsSet = k; if (Dns.EncryptedOnly(k)) secureDns = true; else if (EncryptedDns.Templates[k] == null) secureDns = false; EnsureProviderVisible(); Invalidate(); }
         }
 
         void Toggle()
@@ -1543,7 +1544,7 @@ namespace HbAi.XboxDns
         {
             int requestedSet = selectedSet ?? dnsSet;
             bool useEncrypted = (encrypted ?? secureDns) || Dns.EncryptedOnly(requestedSet);
-            if (turnOn && useEncrypted && EncryptedDns.Templates[requestedSet] == null) { ShowMessage("Для DoH выберите Comss.one, GeoHide, Bezmezhau или DNS-AI либо снимите галочку шифрования.", "DoH недоступен", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+            if (turnOn && useEncrypted && EncryptedDns.Templates[requestedSet] == null) { ShowMessage("Для DoH выберите Comss.one, GeoHide, Bezmezhau, DNS-AI или MagicDNS либо снимите галочку шифрования.", "DoH недоступен", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
             bool keepAntigravity = false;
             if (turnOn)
             {

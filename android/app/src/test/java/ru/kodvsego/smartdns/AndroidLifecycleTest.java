@@ -78,6 +78,17 @@ public class AndroidLifecycleTest {
     @Test public void providerCannotBeChangedDuringConnection() {
         blockedService(true);MainActivity app=screen();assertFalse(app.findViewById(R.id.dns_provider).isEnabled());
     }
+    @Test public void unsupportedEncryptionIsExplicitAndMagicDnsRemainsSelectable() {
+        MainActivity app=screen();
+        for(int provider:new int[]{2,3,6}){
+            app.findViewById(R.id.dns_provider).performClick();android.app.Dialog dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            dialog.findViewById(R.id.provider_sheet).findViewWithTag("provider-"+provider).performClick();
+            android.widget.Switch encryption=app.findViewById(R.id.encrypted_dns_switch);
+            assertEquals(provider==6,encryption.isEnabled());
+            assertEquals(provider!=6,encryption.getText().toString().contains("недоступен"));
+            assertFalse(encryption.isChecked());
+        }
+    }
     @Test @Config(sdk=35) public void contentStaysOutsideSystemBarsWhenScrolled() {
         MainActivity app=screen();ScrollView scroll=(ScrollView)((FrameLayout)app.findViewById(android.R.id.content)).getChildAt(0);
         WindowInsets insets=new WindowInsets.Builder().setInsets(WindowInsets.Type.systemBars(),android.graphics.Insets.of(0,28,0,32)).build();

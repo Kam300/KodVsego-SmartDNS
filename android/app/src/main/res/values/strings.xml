@@ -1,4 +1,7 @@
 <resources>
+    <string name="widget_manual_instructions">1. Вернитесь на главный экран телефона.\n2. Удерживайте пустое место и откройте «Виджеты» (на некоторых телефонах — через настройки главного экрана).\n3. Найдите «Код Всего · Smart DNS» и перетащите нужный виджет на экран.</string>
+    <string name="widget_pin_requested">Запрос отправлен лаунчеру. Подтвердите добавление в его окне. Если окно не появилось, добавьте виджет вручную.\n\n%1$s</string>
+    <string name="widget_pin_manual">Лаунчер не принял запрос. Добавьте виджет вручную:\n\n%1$s</string>
     <string name="encrypted_dns">Зашифрованный DNS · DoH</string>
     <string name="widget_title">Smart DNS</string>
     <string name="widget_compact_title">Smart DNS · компактный</string>

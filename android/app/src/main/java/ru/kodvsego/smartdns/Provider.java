@@ -15,7 +15,8 @@ public final class Provider {
         new Provider("GeoHide EU", new String[]{"143.20.64.192", "45.13.237.213"}, null, false, "ChatGPT", "Claude", "Gemini", "ElevenLabs"),
         new Provider("Xbox DNS", new String[]{"111.88.96.54", "111.88.96.55"}, null, false, "Xbox"),
         new Provider("Bezmezhau", new String[]{"143.20.64.55", "31.58.216.201"}, "https://dns.bezmezhau.com/dns-query", false, "ChatGPT", "Gemini", "Spotify"),
-        new Provider("DNS-AI", new String[]{"194.87.196.13", "186.246.49.127"}, "https://dns.dns-ai.ru/dns-query", true, "ChatGPT", "Claude", "Gemini", "ElevenLabs")
+        new Provider("DNS-AI", new String[]{"194.87.196.13", "186.246.49.127"}, "https://dns.dns-ai.ru/dns-query", true, "ChatGPT", "Claude", "Gemini", "ElevenLabs"),
+        new Provider("MagicDNS", new String[]{"109.120.132.43", "94.249.177.102"}, "https://dns.magicdns.ru/dns-query", false, "ChatGPT", "Claude", "Gemini", "ElevenLabs")
     };
     public static Provider at(int index) {
         if (index < 0 || index >= ALL.length) throw new IllegalArgumentException("Неизвестный DNS-провайдер");

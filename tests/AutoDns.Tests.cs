@@ -31,9 +31,9 @@ static class AutoDnsTests
         Check(AutoDns.GoalIndex("ChatGPT")==1&&AutoDns.GoalIndex("gemini")==0&&AutoDns.GoalIndex(null)==-1&&AutoDns.GoalIndex("obsolete service")==-1,"Saved service names reload safely without relying on numeric order");
         Check(!AutoDns.Candidates(0,false).Contains(3)&&AutoDns.Candidates(5,false).SequenceEqual(new[]{3}),"Xbox and AI candidates remain separate");
         Check(!AutoDns.Candidates(6,false).Contains(0)&&!AutoDns.Candidates(2,false).Contains(4),"Unsupported Comss Antigravity and Bezmezhau Claude combinations excluded");
-        Check(AutoDns.Candidates(0,true).SequenceEqual(new[]{0,1,4,5})&&!AutoDns.Candidates(5,true).Any(),"Strict encryption never downgrades to unencrypted EU or Xbox");
+        Check(AutoDns.Candidates(0,true).SequenceEqual(new[]{0,1,4,5,6})&&!AutoDns.Candidates(5,true).Any(),"Strict encryption never downgrades to unencrypted EU or Xbox");
         var fake=new Probe();var results=AutoDns.Search(0,false,fake,CancellationToken.None);
-        Check(results.Length==5&&AutoDns.Best(results).Provider==1,"Only a candidate with both DNS and HTTPS succeeds");
+        Check(results.Length==6&&AutoDns.Best(results).Provider==1,"Only a candidate with both DNS and HTTPS succeeds");
         Check(fake.badAddressAttempts==1,"Failed relay IP is tried before alternative resolved address");
         string diagnostic=AutoDns.Diagnostic(0,results);
         Check(diagnostic.Contains("Auto goal=Gemini")&&diagnostic.Contains("109.120.131.201")&&diagnostic.Contains("simulated relay timeout")&&diagnostic.Contains("HTTPS OK")&&diagnostic.Contains("Total=")&&diagnostic.Contains("IOException"),"Developer log keeps failed IP attempts, error type, timings and eventual success");

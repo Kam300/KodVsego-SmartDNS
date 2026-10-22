@@ -25,11 +25,12 @@ public final class MainActivity extends Activity {
     private final ExecutorService tests=Executors.newSingleThreadExecutor();
     private android.content.SharedPreferences prefs;
     private boolean dark,rendering,testing,resumed;private int selected;
-    private LinearLayout content,serviceRow;private TextView state,addresses,probe;
+    private LinearLayout content,serviceRow;private TextView state,addresses,probe,encryptionHint;
     private PowerButton connect;private Button test;private Switch encrypted;private TextView providers;
     private int ink,muted,accent,card;
     private DnsConfig pending;
     private Dialog providerDialog;
+    private final java.util.List<Dialog> dialogs=new java.util.ArrayList<>();
     private Future<?> runningTest;private int testGeneration;
     private Typeface heading,body,bold;
     private final Map<String,Drawable.ConstantState> iconCache=new HashMap<>();
@@ -92,9 +93,9 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams pickerParams=new LinearLayout.LayoutParams(-1,-2);pickerParams.setMargins(0,dp(8),0,dp(12));selection.addView(providers,pickerParams);
         addresses=text("",13,ink,false);selection.addView(addresses);serviceRow=new LinearLayout(this);serviceRow.setOrientation(LinearLayout.VERTICAL);selection.addView(serviceRow);
         space(20);LinearLayout settings=box();
-        encrypted=new Switch(this);encrypted.setText(R.string.encrypted_dns);encrypted.setTypeface(body);encrypted.setTextColor(ink);encrypted.setMinHeight(dp(48));settings.addView(encrypted);
+        encrypted=new Switch(this);encrypted.setId(R.id.encrypted_dns_switch);encrypted.setText(R.string.encrypted_dns);encrypted.setTypeface(body);encrypted.setTextColor(ink);encrypted.setMinHeight(dp(48));settings.addView(encrypted);
         encrypted.setChecked(prefs.getBoolean("encrypted",false)||Provider.at(selected).encryptedOnly);
-        settings.addView(text("DoH шифрует DNS-запросы. При ошибке перехода на обычный DNS нет.",12,muted,false));
+        encryptionHint=text("",12,muted,false);settings.addView(encryptionHint);
         space(20);test=button(testing?"Остановить тест":"Тест DNS");content.addView(test);test.setOnClickListener(v->testDns());
         probe=text("Тест не меняет DNS. Проверяется ответ провайдера, а не доступ к аккаунту или сайту.",13,muted,false);content.addView(probe);
         space(20);Button widgets=secondaryButton("Добавить виджет");widgets.setId(R.id.add_widget);content.addView(widgets);widgets.setOnClickListener(v->chooseWidget());
@@ -141,6 +142,8 @@ public final class MainActivity extends Activity {
     }
     private void updateProvider() {
         Provider p=Provider.at(selected);
+        encrypted.setText(p.doh==null?"Зашифрованный DNS · недоступен":getString(R.string.encrypted_dns));
+        encryptionHint.setText(p.doh==null?"Для "+p.name+" настроен только обычный DNS.":"DoH шифрует DNS-запросы. При ошибке перехода на обычный DNS нет.");
         providers.setText(p.name);providers.setContentDescription("Провайдер DNS: "+p.name+". Выбрать другой");
         updatingProvider=true;
         if(p.encryptedOnly)encrypted.setChecked(true);else if(p.doh==null)encrypted.setChecked(false);
@@ -182,8 +185,10 @@ public final class MainActivity extends Activity {
     private void requestConnect() {
         try{pending=config();PhysicalNetwork.checkPrivateDns(this,PhysicalNetwork.find(this));}
         catch(Exception e){message("Не удалось подключиться",e.getMessage());return;}
-        if(PhysicalNetwork.otherVpn(this))new AlertDialog.Builder(this).setTitle("Другой VPN включён")
-            .setMessage("Android отключит другое VPN-подключение при включении Smart DNS. Продолжить?").setNegativeButton("Отмена",null).setPositiveButton("Продолжить",(d,w)->prepareVpn()).show();
+        if(PhysicalNetwork.otherVpn(this)){
+            CardDialog dialog=new CardDialog("Другой VPN включён","Android отключит другое VPN-подключение при включении Smart DNS. Продолжить?");
+            dialog.action("Продолжить",true,true,this::prepareVpn);dialog.action("Отмена",false,true,()->pending=null);dialog.show();
+        }
         else prepareVpn();
     }
     private void prepareVpn() {Intent permission=VpnService.prepare(this);if(permission==null)startDns();else startActivityForResult(permission,100);}
@@ -195,7 +200,29 @@ public final class MainActivity extends Activity {
         try{startForegroundService(start);}catch(Exception e){message("Ошибка подключения",e.getMessage());}pending=null;
     }
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==100){if(result==RESULT_OK){try{if(pending==null)pending=config();startDns();}catch(Exception e){message("Ошибка настройки",e.getMessage());}}else{pending=null;message("Подключение отменено","Разрешение VPN не предоставлено. DNS не изменён.");}}}
-    private void message(String title,String body){if(!isFinishing()&&!isDestroyed())new AlertDialog.Builder(this).setTitle(title).setMessage(body).setPositiveButton("Понятно",null).show();}
+    private void message(String title,String body){if(!isFinishing()&&!isDestroyed()){CardDialog dialog=new CardDialog(title,body);dialog.action("Понятно",true,true,()->{});dialog.show();}}
+    private final class CardDialog {
+        final Dialog dialog=new Dialog(MainActivity.this);
+        final LinearLayout panel=new LinearLayout(MainActivity.this);
+        final ScrollView scroll=new ScrollView(MainActivity.this);
+        final TextView description;
+        CardDialog(String title,String message){
+            dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(24),dp(24),dp(24),dp(24));panel.setBackground(shape(card,24));
+            TextView heading=text(title,21,ink,true);panel.addView(heading);
+            description=text(message,14,muted,false);LinearLayout.LayoutParams textParams=new LinearLayout.LayoutParams(-1,-2);textParams.topMargin=dp(12);textParams.bottomMargin=dp(12);panel.addView(description,textParams);
+            scroll.setVerticalScrollBarEnabled(false);scroll.addView(panel);dialog.setContentView(scroll);
+            dialog.setOnDismissListener(d->dialogs.remove(dialog));dialogs.add(dialog);
+        }
+        void action(String label,boolean primary,boolean close,Runnable action){
+            Button button=primary?button(label):secondaryButton(label);LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);params.topMargin=dp(12);panel.addView(button,params);
+            button.setOnClickListener(v->{if(close)dialog.dismiss();action.run();});
+        }
+        void show(){
+            if(isFinishing()||isDestroyed()){dialog.dismiss();return;}
+            Window window=dialog.getWindow();if(window!=null){window.setBackgroundDrawableResource(android.R.color.transparent);window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);window.setDimAmount(.6f);window.setWindowAnimations(R.style.ProviderSheetMotion);}
+            dialog.show();if(window!=null){int width=Math.min(getResources().getDisplayMetrics().widthPixels-dp(32),dp(440));int maxHeight=(int)(getResources().getDisplayMetrics().heightPixels*.85f);scroll.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(maxHeight,View.MeasureSpec.AT_MOST));window.setLayout(width,Math.min(scroll.getMeasuredHeight(),maxHeight));}
+        }
+    }
     private void testDns() {
         if(testing){testGeneration++;if(runningTest!=null)runningTest.cancel(true);testing=false;test.setText(R.string.test_dns);probe.setText(R.string.test_stopped);updateState();return;}
         final DnsConfig config;try{config=config();}catch(Exception e){message("Ошибка настройки",e.getMessage());return;}
@@ -226,11 +253,20 @@ public final class MainActivity extends Activity {
         else scroll.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());
     }
     private void chooseWidget(){
-        new AlertDialog.Builder(this).setTitle("Виджеты Smart DNS").setItems(new String[]{"Компактный · 2 × 1","Расширенный · 4 × 2"},(dialog,which)->{
-            AppWidgetManager manager=AppWidgetManager.getInstance(this);
-            if(manager.isRequestPinAppWidgetSupported())manager.requestPinAppWidget(new ComponentName(this,which==0?CompactDnsWidget.class:DnsWidget.class),null,null);
-            else message("Добавление виджета","Удерживайте пустое место на главном экране, откройте «Виджеты» и выберите Smart DNS.");
-        }).setNegativeButton("Отмена",null).show();
+        CardDialog dialog=new CardDialog("Виджеты Smart DNS","Выберите размер. Если лаунчер не показывает окно добавления, используйте ручной способ ниже.");
+        dialog.action("Компактный · 2 × 1",true,false,()->pinWidget(dialog,CompactDnsWidget.class));
+        dialog.action("Расширенный · 4 × 2",false,false,()->pinWidget(dialog,DnsWidget.class));
+        dialog.action("Как добавить вручную",false,true,()->message("Добавить виджет вручную",widgetInstructions()));
+        dialog.action("Закрыть",false,true,()->{});dialog.show();
+    }
+    private String widgetInstructions(){return getString(R.string.widget_manual_instructions);}
+    private void pinWidget(CardDialog dialog,Class<?> type){
+        AppWidgetManager manager=AppWidgetManager.getInstance(this);
+        WidgetPinning.Result result=WidgetPinning.request(new WidgetPinning.Launcher(){
+            public boolean supported(){return manager.isRequestPinAppWidgetSupported();}
+            public boolean request(){return manager.requestPinAppWidget(new ComponentName(MainActivity.this,type),null,null);}
+        });
+        dialog.description.setText(getString(result==WidgetPinning.Result.REQUESTED?R.string.widget_pin_requested:R.string.widget_pin_manual,widgetInstructions()));
     }
     private void handleWidgetIntent(){
         if(!DnsWidget.CONNECT.equals(getIntent().getAction()))return;
@@ -244,5 +280,5 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume(){super.onResume();resumed=true;settleMotion();lastUiState=null;updateState();connect.resumeUi();handler.removeCallbacks(refresh);handler.post(refresh);DnsWidget.updateAll(this);}
     @Override protected void onPause(){resumed=false;handler.removeCallbacks(refresh);settleMotion();if(connect!=null)connect.pauseUi();super.onPause();}
-    @Override protected void onDestroy(){if(providerDialog!=null)providerDialog.dismiss();handler.removeCallbacksAndMessages(null);tests.shutdownNow();super.onDestroy();}
+    @Override protected void onDestroy(){if(providerDialog!=null)providerDialog.dismiss();for(Dialog dialog:new java.util.ArrayList<>(dialogs))dialog.dismiss();handler.removeCallbacksAndMessages(null);tests.shutdownNow();super.onDestroy();}
 }

@@ -57,7 +57,7 @@ static class ElevationTests
                 Assert(DnsRequest.TryParse(request.Arguments.Split(' '),out parsed) && parsed.Set==200+provider,"Encrypted provider changed");
             }
             DnsRequest rejected; var good=Request(true,200).Arguments;
-            Assert(!DnsRequest.TryParse(good.Replace("secure-enable 0","secure-enable 6").Split(' '),out rejected),"Unknown encrypted provider accepted");
+            Assert(!DnsRequest.TryParse(good.Replace("secure-enable 0","secure-enable 7").Split(' '),out rejected),"Unknown encrypted provider accepted");
             Assert(!DnsRequest.TryParse(good.Replace("secure-enable 0","secure-enable https://example.com").Split(' '),out rejected),"Arbitrary template accepted");
         });
         Test("Keeping Antigravity requires a separate constrained action", () => {
@@ -68,7 +68,7 @@ static class ElevationTests
                 Assert(DnsRequest.TryParse(request.Arguments.Split(' '), out parsed) && parsed.Enable && parsed.Set == 300 + provider, "Consent flag lost");
             }
             string good = Request(true, 300).Arguments; DnsRequest rejected;
-            foreach (string value in new[] {"-1", "6", "https://example.com"})
+            foreach (string value in new[] {"-1", "7", "https://example.com"})
                 Assert(!DnsRequest.TryParse(good.Replace("secure-keep-ag 0", "secure-keep-ag " + value).Split(' '), out rejected), "Unbounded consent action");
             int code; var reply = Exchange(Request(true, 300), (on, set) => {Assert(on && set == 300, "Wrong consent operation"); return null;}, out code);
             Assert(code == 0 && reply.Code == 0, "Consent operation failed IPC");
@@ -91,7 +91,7 @@ static class ElevationTests
         Test("Arbitrary commands and malformed arguments are rejected", () => {
             string good = Request(true, 0).Arguments;
             foreach (string invalid in new[] { "", good + " extra", good.Replace("enable", "script"),
-                good.Replace("enable 0", "enable 6"), good.Replace("enable 0", "enable -1"),
+                good.Replace("enable 0", "enable 7"), good.Replace("enable 0", "enable -1"),
                 good.Replace("enable 0", "restore 3"), good.Replace("enable 0", "restore 1"),
                 good.Replace("enable 0", "reset-known 1"), "--dns-operation enable 0 not-a-guid 1",
                 good.Replace("enable 0", "ag-enable 4"), good.Replace("enable 0", "ag-disable 1"),
