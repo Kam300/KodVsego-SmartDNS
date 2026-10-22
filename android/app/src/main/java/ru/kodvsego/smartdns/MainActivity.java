@@ -74,7 +74,14 @@ public final class MainActivity extends Activity {
         scroll.requestApplyInsets();
         LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
         top.addView(text("SMART DNS · Android",13,accent,true),new LinearLayout.LayoutParams(0,-2,1));
-        Button theme=button(dark?"☀":"☾");theme.setContentDescription("Переключить тему");top.addView(theme,new LinearLayout.LayoutParams(dp(64),dp(48)));
+        ImageButton theme=new ImageButton(this);theme.setImageResource(dark?R.drawable.ic_theme_sun:R.drawable.ic_theme_moon);
+        theme.setContentDescription(dark?"Включить светлую тему":"Включить тёмную тему");theme.setPadding(dp(12),dp(12),dp(12),dp(12));theme.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        GradientDrawable themeSurface=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{dark?0xFF173442:0xFFE1F2F7,dark?0xFF14212D:0xFFF1F7FB});themeSurface.setCornerRadius(dp(16));themeSurface.setStroke(dp(1),dark?0xFF285365:0xFFB5DAE5);
+        theme.setBackground(new RippleDrawable(ColorStateList.valueOf(0x3302A5CF),themeSurface,null));
+        android.animation.StateListAnimator press=new android.animation.StateListAnimator();
+        press.addState(new int[]{android.R.attr.state_pressed},android.animation.ObjectAnimator.ofPropertyValuesHolder(theme,android.animation.PropertyValuesHolder.ofFloat("scaleX",.93f),android.animation.PropertyValuesHolder.ofFloat("scaleY",.93f)).setDuration(100));
+        press.addState(new int[]{},android.animation.ObjectAnimator.ofPropertyValuesHolder(theme,android.animation.PropertyValuesHolder.ofFloat("scaleX",1),android.animation.PropertyValuesHolder.ofFloat("scaleY",1)).setDuration(160));theme.setStateListAnimator(press);
+        top.addView(theme,new LinearLayout.LayoutParams(dp(48),dp(48)));
         theme.setOnClickListener(v->{dark=!dark;prefs.edit().putBoolean("dark",dark).apply();render();});content.addView(top);
         space(14);TextView title=text("Доступ",30,ink,true);title.setTypeface(heading);content.addView(title);
         TextView highlight=text("к сервисам",28,Color.rgb(21,29,34),true);highlight.setTypeface(heading);highlight.setPadding(dp(8),0,dp(8),dp(4));highlight.setBackground(shape(0xFF02A5CF,8));content.addView(highlight,new LinearLayout.LayoutParams(-2,-2));space(10);

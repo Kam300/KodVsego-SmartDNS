@@ -1,6 +1,6 @@
 ﻿# Creates the form and renders its canvas only; never invokes DNS changes.
 param(
-    [string]$AssemblyPath = (Join-Path $PSScriptRoot 'KodVsego_SmartDNS.2.23.0.exe'),
+    [string]$AssemblyPath = (Join-Path $PSScriptRoot 'KodVsego_SmartDNS.2.23.1.exe'),
     [int]$Dpi = 96,
     [ValidateRange(-1,6)][int]$DnsSet = -1,
     [ValidateRange(-1,6)][int]$AutoGoal = -1,
@@ -91,7 +91,7 @@ if ($Dialog -ne 'None') {
     if ($Dialog -eq 'Force') { $d.GetType().GetMethod('SetPrimaryText', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @('Заменить')) | Out-Null }
     if ($Dialog -eq 'Update') {
         $d.GetType().GetMethod('AddUpdateControls', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @([Action]{})) | Out-Null
-        $d.GetType().GetMethod('ShowUpdateStatus', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @("Доступна версия 2.23.0.`nПосле установки программа перезапустится.", 'Доступно обновление', 'Обновить', $true)) | Out-Null
+        $d.GetType().GetMethod('ShowUpdateStatus', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @("Доступна версия 2.23.1.`nПосле установки программа перезапустится.", 'Доступно обновление', 'Обновить', $true)) | Out-Null
     }
     if ($Dialog -eq 'DohConflict') { $d.GetType().GetMethod('SetPrimaryText', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @('Подключить')) | Out-Null }
     if ($Dialog -eq 'Cleanup') { $d.GetType().GetMethod('SetPrimaryText', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($d, @('Удалить')) | Out-Null }

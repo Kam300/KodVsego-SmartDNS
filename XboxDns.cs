@@ -164,7 +164,7 @@ namespace HbAi.XboxDns
         readonly List<IntPtr> fontMemory = new List<IntPtr>();
         Bitmap lightBackground, darkBackground, toggleGlow;
         float themeMix, powerMix, hoverMix, selectionLeft, scrollMix;
-        bool motionReady, powerHovered, resourcesDisposed;
+        bool motionReady, powerHovered, themeHovered, resourcesDisposed;
         readonly Stopwatch frameClock = Stopwatch.StartNew();
         long lastFrame;
         FontFamily fHead, fBold, fMed;
@@ -533,31 +533,44 @@ namespace HbAi.XboxDns
 
         void DrawThemeButton(Graphics g)
         {
+            Color surface = Mix(CardBg, Accent, themeHovered ? .16f : .07f);
             using (var path = RoundPath(rTheme, 12))
-            using (var fill = new SolidBrush(CardBg))
-            using (var line = new Pen(CardLine))
+            using (var fill = new LinearGradientBrush(rTheme, Mix(surface, Accent, .07f), surface, 90f))
+            using (var line = new Pen(Mix(CardLine, Accent, themeHovered ? .65f : .25f)))
             { g.FillPath(fill, path); g.DrawPath(line, path); }
-            float x = rTheme.X + 18, y = rTheme.Y + 17;
-            using (var pen = new Pen(Accent, 1.7f))
-            using (var fill = new SolidBrush(Accent))
-            using (var cutout = new SolidBrush(CardBg))
+            var state = g.Save();
+            g.TranslateTransform(rTheme.X + 6, rTheme.Y + 5);
+            using (var pen = new Pen(Accent, 1.7f) { StartCap=LineCap.Round, EndCap=LineCap.Round, LineJoin=LineJoin.Round })
             {
                 if (darkTheme)
                 {
-                    g.DrawEllipse(pen, x - 5, y - 5, 10, 10);
+                    using (var fill = new SolidBrush(Color.FromArgb(40, Accent))) g.FillEllipse(fill,8,8,8,8);
+                    g.DrawEllipse(pen,8,8,8,8);
                     for (int i = 0; i < 8; i++)
                     {
                         double a = i * Math.PI / 4;
-                        g.DrawLine(pen, x + (float)Math.Cos(a) * 8, y + (float)Math.Sin(a) * 8,
-                            x + (float)Math.Cos(a) * 11, y + (float)Math.Sin(a) * 11);
+                        g.DrawLine(pen,12+(float)Math.Cos(a)*7,12+(float)Math.Sin(a)*7,
+                            12+(float)Math.Cos(a)*9.5f,12+(float)Math.Sin(a)*9.5f);
                     }
                 }
                 else
                 {
-                    g.FillEllipse(fill, x - 9, y - 9, 18, 18);
-                    g.FillEllipse(cutout, x - 3, y - 12, 17, 17);
+                    using(var moon=new GraphicsPath())
+                    {
+                        moon.AddBezier(12.4f,3.2f,7.4f,2.7f,3.3f,6.5f,3.3f,11.5f);
+                        moon.AddBezier(3.3f,11.5f,3.3f,16.6f,7.4f,20.7f,12.5f,20.7f);
+                        moon.AddBezier(12.5f,20.7f,16.2f,20.7f,19.3f,18.5f,20.6f,15.4f);
+                        moon.AddBezier(20.6f,15.4f,16.1f,16.5f,11.7f,13.4f,11.7f,8.8f);
+                        moon.AddBezier(11.7f,8.8f,11.7f,6.8f,12,5,12.4f,3.2f);moon.CloseFigure();
+                        using(var fill=new SolidBrush(Color.FromArgb(36,Accent)))g.FillPath(fill,moon);
+                        g.DrawPath(pen,moon);
+                    }
+                    using(var star=new GraphicsPath())using(var fill=new SolidBrush(Accent)){
+                        star.AddPolygon(new[]{new PointF(18,2.5f),new PointF(19,5.1f),new PointF(21.5f,6),new PointF(19,7),new PointF(18,9.5f),new PointF(17,7),new PointF(14.5f,6),new PointF(17,5.1f)});g.FillPath(fill,star);
+                    }
                 }
             }
+            g.Restore(state);
         }
 
         Rectangle rToggleGlow()
@@ -1192,6 +1205,7 @@ namespace HbAi.XboxDns
             double dx = e.X - c.X, dy = e.Y - c.Y;
             bool overPower = dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0;
             if (powerHovered != overPower) { powerHovered = overPower; Invalidate(rToggleGlow()); }
+            bool overTheme=rTheme.Contains(e.Location);if(themeHovered!=overTheme){themeHovered=overTheme;Invalidate();}
             bool hand = rSettings.Contains(e.Location) || rVersion.Contains(e.Location) || (rSecureOption.Contains(e.Location) && EncryptedDns.Templates[dnsSet] != null) || rAgOption.Contains(e.Location) || rTheme.Contains(e.Location) || rClose.Contains(e.Location) || rGroup.Contains(e.Location) || rSite.Contains(e.Location) || rBrand.Contains(e.Location) || ProviderBar.Contains(e.Location) || DnsTestButton.Contains(e.Location)
                         || dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0;
             Cursor = hand && !busy ? Cursors.Hand : Cursors.Default;
@@ -1206,6 +1220,7 @@ namespace HbAi.XboxDns
         {
             base.OnMouseLeave(e);
             if (powerHovered) { powerHovered = false; Invalidate(rToggleGlow()); }
+            if(themeHovered){themeHovered=false;Invalidate();}
         }
 
         static void Open(string url) { try { Process.Start(url); } catch { } }
