@@ -4,6 +4,10 @@
 
 Для Windows доступны два варианта: **портативный EXE без установки** и **установщик** с ярлыками и удалением через настройки Windows. [Различия, сборка и удаление](docs/DISTRIBUTION.md).
 
+| Windows · EXE 2.23.0 | Android · APK 1.4.0 |
+| :---: | :---: |
+| <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.0/KodVsego_SmartDNS.2.23.0.exe"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Windows — EXE 2.23.0"></a> | <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.4.0/KodVsego-SmartDNS-Android-1.4.0.apk"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Android — APK 1.4.0"></a> |
+
 | Платформа | Скачать | Требования |
 | --- | --- | --- |
 | Windows · EXE 2.23.0 | [Скачать EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.0/KodVsego_SmartDNS.2.23.0.exe) | Windows 10 2004+ / Windows 11, .NET Framework 4.8 |
