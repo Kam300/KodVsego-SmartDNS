@@ -5,4 +5,5 @@
     <item name="provider_sheet" type="id" />
     <item name="network_settings" type="id" />
     <item name="encrypted_dns_switch" type="id" />
+    <item name="check_updates" type="id" />
 </resources>

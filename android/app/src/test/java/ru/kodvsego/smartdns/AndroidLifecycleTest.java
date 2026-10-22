@@ -25,7 +25,7 @@ public class AndroidLifecycleTest {
     private ServiceController<DnsVpnService> service;
     private final CountDownLatch cleanupEntered=new CountDownLatch(1),releaseCleanup=new CountDownLatch(1);
 
-    @Before public void before(){DnsVpnService.active=false;DnsVpnService.connecting=false;DnsVpnService.current=null;DnsVpnService.status="DNS выключен";}
+    @Before public void before(){RuntimeEnvironment.getApplication().getSharedPreferences("updates",0).edit().putLong("lastCheck",System.currentTimeMillis()).apply();DnsVpnService.active=false;DnsVpnService.connecting=false;DnsVpnService.current=null;DnsVpnService.status="DNS выключен";}
     @After public void after(){releaseCleanup.countDown();if(activity!=null)activity.pause().stop().destroy();if(service!=null)service.destroy();}
     private MainActivity screen(){activity=Robolectric.buildActivity(MainActivity.class).setup();return activity.get();}
     private DnsVpnService blockedService(boolean connecting) {

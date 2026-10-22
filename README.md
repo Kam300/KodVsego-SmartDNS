@@ -4,15 +4,15 @@
 
 Для Windows доступны два варианта: **портативный EXE без установки** и **установщик** с ярлыками и удалением через настройки Windows. [Различия, сборка и удаление](docs/DISTRIBUTION.md).
 
-| Windows · EXE 2.23.1 | Android · APK 1.4.1 |
+| Windows · EXE 2.23.1 | Android · APK 1.5.0 |
 | :---: | :---: |
-| <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.1/KodVsego_SmartDNS.2.23.1.exe"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Windows — EXE 2.23.1"></a> | <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.4.1/KodVsego-SmartDNS-Android-1.4.1.apk"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Android — APK 1.4.1"></a> |
+| <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.1/KodVsego_SmartDNS.2.23.1.exe"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Windows — EXE 2.23.1"></a> | <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.0/KodVsego-SmartDNS-Android-1.5.0.apk"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Android — APK 1.5.0"></a> |
 
 | Платформа | Скачать | Требования |
 | --- | --- | --- |
 | Windows · EXE 2.23.1 | [Скачать EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.1/KodVsego_SmartDNS.2.23.1.exe) | Windows 10 2004+ / Windows 11, .NET Framework 4.8 |
 | Windows · установщик 2.22.1 (предыдущая версия) | [Скачать установщик](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.22.1/KodVsego_SmartDNS.Setup.2.22.1.exe) | Те же требования; установка для текущего пользователя |
-| Android · APK 1.4.1, предварительная версия | [Скачать APK](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.4.1/KodVsego-SmartDNS-Android-1.4.1.apk) | Android 8.0+, без root |
+| Android · APK 1.5.0, предварительная версия | [Скачать APK](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.0/KodVsego-SmartDNS-Android-1.5.0.apk) | Android 8.0+, без root |
 
 [Канал «Код Всего» — @TotalC0de](https://t.me/TotalC0de) · [Поддержка — @TotalCodeAdmin](https://t.me/TotalCodeAdmin) · [Сообщить об ошибке](https://github.com/Kam300/KodVsego-SmartDNS/issues)
 
@@ -20,7 +20,7 @@ Smart DNS может помочь с доступом к сервисам, по�
 
 Ссылка канала содержит цифру **0**: https://t.me/TotalC0de. Поддержка — отдельный аккаунт @TotalCodeAdmin.
 
-**Windows 2.23.1 / Android 1.4.1:** добавлен MagicDNS (обычный DNS и DoH), для GeoHide EU и Xbox явно показана недоступность DoH. В Android обновлены диалоги и добавлена ручная инструкция для лаунчеров, не принимающих запрос виджета. Сохранены возможности Windows 2.22.1: Добавлены установщик, настройки сервиса по умолчанию, ссылки поддержки и переход на новую версию при повторном запуске. Режим [«Авто»](docs/AUTO.md) помечен **beta (нестабильный)**. Сохранены [обновление из программы](docs/UPDATES.md) и исправления отзывчивости окна. Android обновлён до версии 1.4.1.
+**Windows 2.23.1 / Android 1.5.0:** добавлен MagicDNS (обычный DNS и DoH), для GeoHide EU и Xbox явно показана недоступность DoH. В Android обновлены диалоги и добавлена ручная инструкция для лаунчеров, не принимающих запрос виджета. Сохранены возможности Windows 2.22.1: Добавлены установщик, настройки сервиса по умолчанию, ссылки поддержки и переход на новую версию при повторном запуске. Режим [«Авто»](docs/AUTO.md) помечен **beta (нестабильный)**. Сохранены [обновление из программы](docs/UPDATES.md) и исправления отзывчивости окна. Android обновлён до версии 1.5.0.
 
 Кнопка смены темы обновлена: векторные солнце и полумесяц со звездой, голубая подложка и отклик на наведение/нажатие.
 
@@ -48,7 +48,11 @@ Smart DNS может помочь с доступом к сервисам, по�
 
 ## На телефоне — Android
 
-1. Скачайте `KodVsego-SmartDNS-Android-1.4.1.apk` из [Android-релиза](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/android-v1.4.1).
+Начиная с Android 1.5.0 приложение автоматически проверяет GitHub при открытии или возвращении на экран (не чаще раза в час). Для нового APK появляется окно **«Доступно обновление» → «Обновить» / «Позже»**. Есть ручная кнопка «Проверить обновления». Загрузка начинается после согласия, установка подтверждается системным окном Android. [Как работают обновления и как выпускать APK](android/UPDATES.md).
+
+**Первый переход с 1.4.1 и более старых версий на 1.5.0 нужно установить вручную**: в старых APK этой функции ещё нет.
+
+1. Скачайте `KodVsego-SmartDNS-Android-1.5.0.apk` из [Android-релиза](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/android-v1.5.0).
 2. Откройте APK и разрешите установку из выбранного источника, если Android попросит.
 3. Выберите провайдера, обычный DNS или DoH и нажмите «Включить DNS».
 4. Подтвердите системный запрос VPN. Для постоянного отображения состояния разрешите уведомления.
@@ -72,7 +76,7 @@ Android-версия использует **локальный DNS-туннел�
 
 **В Android 1.3.0** выбор провайдера открывается в нижней панели с карточками, списком сервисов и отметкой текущего DNS. Увеличены отступы между действиями, скрыта полоса прокрутки и убран блок «Как работает на телефоне». Виджеты и сетевые настройки доступны отдельными кнопками. При нажатии на старт появляется короткая голубая волна, во время подключения — вращающийся индикатор.
 
-**Статус Android 1.4.1:** предварительная версия. Ядро, возврат из фона, клики, остановка и действия виджетов проверяются JUnit/Robolectric (Android 9 и 15), сборка — Android Lint. Подключённого телефона/эмулятора при разработке не было: системный диалог VPN, смена Wi-Fi/мобильной сети и реальный TUN на устройстве ещё требуют проверки. Это не подтверждение работоспособности на всех телефонах. [Устройство Android-версии и сборка](android/README.md).
+**Статус Android 1.5.0:** предварительная версия. Ядро, возврат из фона, клики, остановка и действия виджетов проверяются JUnit/Robolectric (Android 9 и 15), сборка — Android Lint. Подключённого телефона/эмулятора при разработке не было: системный диалог VPN, смена Wi-Fi/мобильной сети и реальный TUN на устройстве ещё требуют проверки. Это не подтверждение работоспособности на всех телефонах. [Устройство Android-версии и сборка](android/README.md).
 
 ## Провайдеры
 

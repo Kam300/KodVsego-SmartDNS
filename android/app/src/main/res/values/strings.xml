@@ -1,4 +1,12 @@
 <resources>
+    <string name="check_updates">Проверить обновления</string>
+    <string name="update_checking">Проверяем GitHub…</string>
+    <string name="update_verifying">Проверяем APK…</string>
+    <string name="update_available_button">Доступно обновление %1$s</string>
+    <string name="update_install_button">Установить версию %1$s</string>
+    <string name="update_download_button">Загрузка обновления · %1$d%%</string>
+    <string name="update_offer">Доступна версия %1$s (установлена %2$s).\n\nAPK будет скачан из GitHub и проверен перед установкой. Подтверждение установки выполняется в системном окне Android.</string>
+    <string name="update_ready">Версия %1$s скачана. Контрольная сумма, пакет и подпись проверены.\n\nНажмите «Установить», чтобы открыть системное окно Android. Настройки приложения сохранятся.</string>
     <string name="widget_manual_instructions">1. Вернитесь на главный экран телефона.\n2. Удерживайте пустое место и откройте «Виджеты» (на некоторых телефонах — через настройки главного экрана).\n3. Найдите «Код Всего · Smart DNS» и перетащите нужный виджет на экран.</string>
     <string name="widget_pin_requested">Запрос отправлен лаунчеру. Подтвердите добавление в его окне. Если окно не появилось, добавьте виджет вручную.\n\n%1$s</string>
     <string name="widget_pin_manual">Лаунчер не принял запрос. Добавьте виджет вручную:\n\n%1$s</string>

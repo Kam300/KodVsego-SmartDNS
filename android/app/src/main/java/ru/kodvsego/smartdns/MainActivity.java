@@ -30,15 +30,21 @@ public final class MainActivity extends Activity {
     private int ink,muted,accent,card;
     private DnsConfig pending;
     private Dialog providerDialog;
+    private UpdateController updater;
+    private Button updateButton;
+    private boolean manualUpdateCheck,installAfterPermission,preparingInstall;
+    private String updatePromptKey="";
+    private final UpdateController.Listener updateListener=this::onUpdateChanged;
     private final java.util.List<Dialog> dialogs=new java.util.ArrayList<>();
     private Future<?> runningTest;private int testGeneration;
     private Typeface heading,body,bold;
     private final Map<String,Drawable.ConstantState> iconCache=new HashMap<>();
     private String lastUiState,providerContent;
     private boolean updatingProvider;
-    private final Runnable refresh=new Runnable(){public void run(){updateState();handler.postDelayed(this,1000);}};
+    private final Runnable refresh=new Runnable(){public void run(){updateState();showUpdatePrompt(false);handler.postDelayed(this,1000);}};
     @Override public void onCreate(Bundle saved) {
-        super.onCreate(saved);prefs=getSharedPreferences("smartdns",MODE_PRIVATE);
+        super.onCreate(saved);prefs=getSharedPreferences("smartdns",MODE_PRIVATE);updater=UpdateController.get(this);
+        installAfterPermission=saved!=null&&saved.getBoolean("installAfterPermission",false);
         selected=prefs.getInt("provider",0);if(selected<0||selected>=Provider.ALL.length)selected=0;
         prefs.edit().remove("ag").remove("agProvider").apply();
         heading=font("Unbounded-ExtraBold.ttf",Typeface.DEFAULT_BOLD);body=font("Manrope-Medium.ttf",Typeface.DEFAULT);bold=font("Manrope-Bold.ttf",Typeface.DEFAULT_BOLD);
@@ -107,12 +113,13 @@ public final class MainActivity extends Activity {
         probe=text("Тест не меняет DNS. Проверяется ответ провайдера, а не доступ к аккаунту или сайту.",13,muted,false);content.addView(probe);
         space(20);Button widgets=secondaryButton("Добавить виджет");widgets.setId(R.id.add_widget);content.addView(widgets);widgets.setOnClickListener(v->chooseWidget());
         space(12);Button privateDns=secondaryButton("Сетевые настройки Android");privateDns.setId(R.id.network_settings);content.addView(privateDns);privateDns.setOnClickListener(v->{try{startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));}catch(ActivityNotFoundException ignored){}});
+        space(12);updateButton=secondaryButton(getString(R.string.check_updates));updateButton.setId(R.id.check_updates);content.addView(updateButton);updateButton.setOnClickListener(v->updateClicked());
         space(24);content.addView(text("Код Всего · Android "+BuildConfig.VERSION_NAME,13,accent,true));space(8);
         Button channel=button("Telegram · TotalC0de ↗");channel.setTextColor(Color.WHITE);GradientDrawable channelBg=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{0xFF7E53FF,0xFF4B74FF});channelBg.setCornerRadius(dp(16));channel.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33FFFFFF),channelBg,null));content.addView(channel);channel.setOnClickListener(v->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://t.me/TotalC0de"))));
         encrypted.setOnCheckedChangeListener((b,on)->{if(!rendering&&!updatingProvider){updateProvider();save();}});
         updateProvider();rendering=false;updateState();
         if(ValueAnimator.areAnimatorsEnabled()){content.setAlpha(.7f);content.setTranslationY(dp(5));content.animate().alpha(1).translationY(0).setDuration(180).start();}
-        if(resumed)connect.resumeUi();
+        if(resumed)connect.resumeUi();updateButtonState();
     }
     private Button secondaryButton(String label){
         Button b=button(label);b.setTextColor(accent);
@@ -206,19 +213,20 @@ public final class MainActivity extends Activity {
         Intent start=new Intent(this,DnsVpnService.class).setAction(DnsVpnService.START).putExtra("provider",pending.provider).putExtra("encrypted",pending.encrypted);
         try{startForegroundService(start);}catch(Exception e){message("Ошибка подключения",e.getMessage());}pending=null;
     }
-    @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==100){if(result==RESULT_OK){try{if(pending==null)pending=config();startDns();}catch(Exception e){message("Ошибка настройки",e.getMessage());}}else{pending=null;message("Подключение отменено","Разрешение VPN не предоставлено. DNS не изменён.");}}}
+    @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==202){installAfterPermission=getPackageManager().canRequestPackageInstalls();return;}if(request==100){if(result==RESULT_OK){try{if(pending==null)pending=config();startDns();}catch(Exception e){message("Ошибка настройки",e.getMessage());}}else{pending=null;message("Подключение отменено","Разрешение VPN не предоставлено. DNS не изменён.");}}}
     private void message(String title,String body){if(!isFinishing()&&!isDestroyed()){CardDialog dialog=new CardDialog(title,body);dialog.action("Понятно",true,true,()->{});dialog.show();}}
     private final class CardDialog {
         final Dialog dialog=new Dialog(MainActivity.this);
         final LinearLayout panel=new LinearLayout(MainActivity.this);
         final ScrollView scroll=new ScrollView(MainActivity.this);
         final TextView description;
+        Runnable onDismiss=()->{};
         CardDialog(String title,String message){
             dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(24),dp(24),dp(24),dp(24));panel.setBackground(shape(card,24));
             TextView heading=text(title,21,ink,true);panel.addView(heading);
             description=text(message,14,muted,false);LinearLayout.LayoutParams textParams=new LinearLayout.LayoutParams(-1,-2);textParams.topMargin=dp(12);textParams.bottomMargin=dp(12);panel.addView(description,textParams);
             scroll.setVerticalScrollBarEnabled(false);scroll.addView(panel);dialog.setContentView(scroll);
-            dialog.setOnDismissListener(d->dialogs.remove(dialog));dialogs.add(dialog);
+            dialog.setOnDismissListener(d->{dialogs.remove(dialog);onDismiss.run();});dialogs.add(dialog);
         }
         void action(String label,boolean primary,boolean close,Runnable action){
             Button button=primary?button(label):secondaryButton(label);LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);params.topMargin=dp(12);panel.addView(button,params);
@@ -275,6 +283,68 @@ public final class MainActivity extends Activity {
         });
         dialog.description.setText(getString(result==WidgetPinning.Result.REQUESTED?R.string.widget_pin_requested:R.string.widget_pin_manual,widgetInstructions()));
     }
+    private void updateButtonState(){
+        if(updateButton==null||updater==null)return;
+        switch(updater.phase){
+            case CHECKING:updateButton.setText(R.string.update_checking);break;
+            case VERIFYING:updateButton.setText(R.string.update_verifying);break;
+            case DOWNLOADING:updateButton.setText(getString(R.string.update_download_button,updater.percent));break;
+            case AVAILABLE:updateButton.setText(getString(R.string.update_available_button,updater.release.version));break;
+            case READY:updateButton.setText(getString(R.string.update_install_button,updater.release.version));break;
+            default:updateButton.setText(R.string.check_updates);
+        }
+        updateButton.setEnabled(updater.phase!=UpdateController.Phase.CHECKING&&updater.phase!=UpdateController.Phase.VERIFYING);
+    }
+    private void updateClicked(){
+        if(updater.phase==UpdateController.Phase.READY){requestUpdateInstall();return;}
+        if(updater.phase==UpdateController.Phase.AVAILABLE){showUpdatePrompt(true);return;}
+        if(updater.phase==UpdateController.Phase.DOWNLOADING){
+            CardDialog dialog=new CardDialog("Загрузка обновления","APK загружается в кэш приложения. При закрытии экрана загрузка продолжится, пока Android сохраняет процесс приложения.");
+            dialog.action("Продолжить загрузку",true,true,()->{});dialog.action("Отменить загрузку",false,true,()->{updater.later();updater.cancelDownload();});dialog.show();return;
+        }
+        manualUpdateCheck=true;updater.check(true);
+    }
+    private void onUpdateChanged(UpdateController update){
+        updateButtonState();if(!resumed||isFinishing()||isDestroyed())return;
+        if(preparingInstall){if(update.phase==UpdateController.Phase.ERROR){preparingInstall=false;message("APK не прошёл проверку",update.error);}return;}
+        if(installAfterPermission&&update.phase==UpdateController.Phase.READY){installAfterPermission=false;requestUpdateInstall();return;}
+        if(manualUpdateCheck&&!update.busy()){
+            manualUpdateCheck=false;
+            if(update.phase==UpdateController.Phase.IDLE)message("Обновлений нет","У вас последняя доступная Android-версия "+BuildConfig.VERSION_NAME+".");
+            else if(update.phase==UpdateController.Phase.ERROR)message("Не удалось обновить",update.error+"\n\nПовторите проверку позже.");
+            else showUpdatePrompt(true);
+        }else if(update.phase==UpdateController.Phase.ERROR&&update.release!=null&&updatePromptKey.startsWith("DOWNLOADING")){
+            updatePromptKey="";message("Не удалось загрузить APK",update.error);
+        }else showUpdatePrompt(false);
+    }
+    private void showUpdatePrompt(boolean force){
+        if(updater==null||!resumed||isFinishing()||isDestroyed()||updater.release==null||installAfterPermission||!dialogs.isEmpty()||providerDialog!=null)return;
+        boolean ready=updater.phase==UpdateController.Phase.READY;
+        if(!ready&&updater.phase!=UpdateController.Phase.AVAILABLE)return;
+        String key=updater.phase+":"+updater.release.version;
+        if(!force&&(key.equals(updatePromptKey)||!updater.shouldPrompt()))return;updatePromptKey=key;
+        AndroidUpdate.Release offered=updater.release;
+        CardDialog dialog=new CardDialog(ready?"Обновление готово":"Доступно обновление",getString(ready?R.string.update_ready:R.string.update_offer,updater.release.version,BuildConfig.VERSION_NAME));
+        dialog.onDismiss=()->{if(!isChangingConfigurations())updater.later();};
+        dialog.action(ready?"Установить":"Обновить",true,true,()->{updater.remindNow();if(updater.release!=offered){updatePromptKey="";handler.post(()->showUpdatePrompt(true));return;}if(ready)requestUpdateInstall();else{updatePromptKey="DOWNLOADING:"+offered.version;updater.download();}});
+        dialog.action("Позже",false,true,updater::later);dialog.show();
+    }
+    private void requestUpdateInstall(){
+        if(updater.phase!=UpdateController.Phase.READY)return;preparingInstall=true;
+        updater.verifyForInstall(()->{
+            preparingInstall=false;
+            if(!resumed||isFinishing()||isDestroyed())return;
+            if(!getPackageManager().canRequestPackageInstalls()){
+                CardDialog dialog=new CardDialog("Разрешите установку обновления","Android требует разрешить установку из приложения «Код Всего · Smart DNS». В следующем окне включите разрешение и вернитесь сюда.");
+                dialog.action("Открыть настройки",true,true,()->{try{installAfterPermission=true;startActivityForResult(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,android.net.Uri.parse("package:"+getPackageName())),202);}catch(ActivityNotFoundException e){installAfterPermission=false;message("Откройте настройки вручную","Разрешите установку из Smart DNS в настройках Android → Приложения → Специальный доступ → Установка неизвестных приложений.");}});
+                dialog.action("Позже",false,true,updater::later);dialog.show();return;
+            }
+            try{
+                android.net.Uri uri=UpdateFileProvider.uri(this);Intent install=new Intent(Intent.ACTION_INSTALL_PACKAGE).setDataAndType(uri,"application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                install.setClipData(ClipData.newRawUri("Smart DNS APK",uri));updater.later();startActivity(install);
+            }catch(ActivityNotFoundException|SecurityException e){message("Не удалось открыть установку","Системный установщик недоступен. Попробуйте скачать APK вручную из GitHub Releases.");}
+        });
+    }
     private void handleWidgetIntent(){
         if(!DnsWidget.CONNECT.equals(getIntent().getAction()))return;
         getIntent().setAction(null);
@@ -285,7 +355,8 @@ public final class MainActivity extends Activity {
         if(content!=null){content.animate().cancel();content.setAlpha(1);content.setTranslationY(0);}
         if(serviceRow!=null){serviceRow.animate().cancel();serviceRow.setAlpha(1);serviceRow.setTranslationY(0);}
     }
-    @Override protected void onResume(){super.onResume();resumed=true;settleMotion();lastUiState=null;updateState();connect.resumeUi();handler.removeCallbacks(refresh);handler.post(refresh);DnsWidget.updateAll(this);}
-    @Override protected void onPause(){resumed=false;handler.removeCallbacks(refresh);settleMotion();if(connect!=null)connect.pauseUi();super.onPause();}
-    @Override protected void onDestroy(){if(providerDialog!=null)providerDialog.dismiss();for(Dialog dialog:new java.util.ArrayList<>(dialogs))dialog.dismiss();handler.removeCallbacksAndMessages(null);tests.shutdownNow();super.onDestroy();}
+    @Override protected void onResume(){super.onResume();resumed=true;updatePromptKey="";settleMotion();lastUiState=null;updateState();connect.resumeUi();handler.removeCallbacks(refresh);handler.post(refresh);DnsWidget.updateAll(this);updater.attach(updateListener);android.net.ConnectivityManager network=getSystemService(android.net.ConnectivityManager.class);if(network!=null&&network.getActiveNetwork()!=null)updater.check(false);}
+    @Override protected void onPause(){resumed=false;updater.detach(updateListener);handler.removeCallbacks(refresh);settleMotion();if(connect!=null)connect.pauseUi();super.onPause();}
+    @Override protected void onSaveInstanceState(Bundle state){state.putBoolean("installAfterPermission",installAfterPermission);super.onSaveInstanceState(state);}
+    @Override protected void onDestroy(){updater.detach(updateListener);if(providerDialog!=null)providerDialog.dismiss();for(Dialog dialog:new java.util.ArrayList<>(dialogs))dialog.dismiss();handler.removeCallbacksAndMessages(null);tests.shutdownNow();super.onDestroy();}
 }
