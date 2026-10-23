@@ -98,11 +98,11 @@ namespace HbAi.XboxDns
                 Bounds = new Rectangle(pad, px(24), width - pad * 2 - px(36), px(32)), UseMnemonic = false, UseCompatibleTextRendering = true };
             Controls.Add(heading);
             bool warning = icon == MessageBoxIcon.Warning || icon == MessageBoxIcon.Error;
-            var marker = new DialogStatusIcon { Kind = icon==MessageBoxIcon.Error?DialogStatusKind.Error:warning?DialogStatusKind.Warning:DialogStatusKind.Success,
+            var marker = new DialogStatusIcon { Kind = icon==MessageBoxIcon.Error?DialogStatusKind.Error:warning?DialogStatusKind.Warning:DialogStatusKind.Information,
                 ForeColor = accent,
                 Bounds = new Rectangle(pad, px(66), px(28), px(28)) };
             Controls.Add(marker);
-            var caption = new Label { Text = warning ? "Обратите внимание" : "Готово", Font = buttonFont,
+            var caption = new Label { Text = warning ? "Обратите внимание" : buttons == MessageBoxButtons.YesNo ? "Подтвердите действие" : "Информация", Font = buttonFont,
                 ForeColor = accent, UseMnemonic = false,
                 Bounds = new Rectangle(pad + px(38), px(70), width - pad * 2 - px(38), px(26)) };
             Controls.Add(caption);
@@ -651,13 +651,13 @@ namespace HbAi.XboxDns
         }
     }
 
-    enum DialogStatusKind { Success, Search, Download, Warning, Error }
+    enum DialogStatusKind { Success, Search, Download, Warning, Error, Information }
     sealed class DialogStatusIcon : Control
     {
         DialogStatusKind kind;
         internal DialogStatusKind Kind {
             get{return kind;}
-            set{kind=value;AccessibleName=value==DialogStatusKind.Success?"Успешно":value==DialogStatusKind.Search?"Проверка":value==DialogStatusKind.Download?"Загрузка обновления":value==DialogStatusKind.Warning?"Предупреждение":"Ошибка";Invalidate();}
+            set{kind=value;AccessibleName=value==DialogStatusKind.Success?"Успешно":value==DialogStatusKind.Search?"Проверка":value==DialogStatusKind.Download?"Загрузка обновления":value==DialogStatusKind.Warning?"Предупреждение":value==DialogStatusKind.Information?"Информация":"Ошибка";Invalidate();}
         }
         internal DialogStatusIcon()
         {SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.SupportsTransparentBackColor,true);BackColor=Color.Transparent;TabStop=false;AccessibleRole=AccessibleRole.Graphic;}
@@ -671,6 +671,9 @@ namespace HbAi.XboxDns
                     pen.StartCap=LineCap.Round;pen.EndCap=LineCap.Round;pen.LineJoin=LineJoin.Round;
                     if(kind==DialogStatusKind.Success) {
                         g.DrawEllipse(pen,3,3,22,22);g.DrawLines(pen,new[]{new PointF(8,14),new PointF(12,18),new PointF(20,10)});
+                    } else if(kind==DialogStatusKind.Information) {
+                        g.DrawEllipse(pen,3,3,22,22);g.DrawLine(pen,14,13,14,20);
+                        using(var dot=new SolidBrush(color))g.FillEllipse(dot,12.5f,7,3,3);
                     } else if(kind==DialogStatusKind.Search) {
                         g.DrawEllipse(pen,4,3,15,15);g.DrawLine(pen,17,17,24,24);
                     } else if(kind==DialogStatusKind.Download) {

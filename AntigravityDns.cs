@@ -11,6 +11,8 @@ namespace HbAi.XboxDns
     {
         internal string Id, Comment, DisplayName;
         internal string[] Names, Servers;
+        internal bool Local;
+        internal int? Version, ConfigOptions;
     }
     interface IAgRules
     {
@@ -144,7 +146,7 @@ namespace HbAi.XboxDns
     }
     sealed class AgStatus
     {
-        internal bool Checked, Complete, External, RecoveryNeeded;
+        internal bool Checked, Complete, External, RecoveryNeeded, WindowsUpdateException;
         internal int Provider = -1;
         internal string Error;
     }
@@ -211,6 +213,7 @@ namespace HbAi.XboxDns
             int provider = DetectProvider(ours);
             return new AgStatus { Checked = ours.Length > 0,
                 Complete = provider >= 0, Provider = provider,
+                WindowsUpdateException = all.Any(EncryptedDns.IsWindowsUpdateException),
                 External = all.Any(r => !Owned(r) && Relevant(r)) };
         }
         internal static AgStatus GetStatus()

@@ -53,6 +53,11 @@ static class AntigravityTests
         return new AgRule { Id = Guid.NewGuid().ToString("B"), Comment = "Another app", DisplayName = "Another app",
             Names = new[] { pattern }, Servers = new[] { "192.0.2.53" } };
     }
+    static AgRule WindowsUpdateRule()
+    {
+        return new AgRule { Id="DNS_RESILIENCY_slscr.update.microsoft.com", Names=new[]{"slscr.update.microsoft.com"},
+            Servers=new[]{"162.159.36.2"}, Local=true, Version=2, ConfigOptions=8 };
+    }
     static void Main()
     {
         Test("Opt-in creates exactly two FQDN rules with expected resolvers", () => {
@@ -234,7 +239,46 @@ static class AntigravityTests
         Test("Strict DoH reports conflicting domains and allows an empty policy", () => {
             Assert(EncryptedDns.PolicyConflict(new AgRule[0]) == null, "Empty policy blocked");
             var text = EncryptedDns.PolicyConflict(new[] {Foreign(AntigravityDns.Domains[0])});
-            Assert(text.Contains(AntigravityDns.Domains[0]) && text.Contains("анлокера"), "Conflict is not actionable");
+            Assert(text.Contains(AntigravityDns.Domains[0]) && text.Contains("DoH") && !text.Contains("анлокера"), "Unknown rule misattributed to an unlocker");
+        });
+        Test("Exact local Windows Update exception permits adapter DoH and remains unchanged", () => {
+            var rule=WindowsUpdateRule();
+            Assert(EncryptedDns.IsWindowsUpdateException(rule)&&EncryptedDns.PolicyConflict(new[]{rule})==null,"Windows Update falsely blocks adapter DoH");
+            Assert(!EncryptedDns.CanKeepAntigravity(new[]{rule},new[]{rule}),"Windows Update triggers Antigravity consent");
+            system.Rules.Add(rule);var status=AntigravityDns.Status(system);
+            Assert(status.WindowsUpdateException&&!status.Checked&&!status.External,"Windows Update mistaken for Antigravity");
+            AntigravityDns.Change(system,false);
+            Assert(system.Rules.Count==1&&object.ReferenceEquals(system.Rules[0],rule)&&rule.Servers[0]=="162.159.36.2","Windows Update rule changed or removed");
+        });
+        Test("Resiliency metadata is read only from the local store with the exact schema", () => {
+            var fields=new Dictionary<string,object>{{"Name",new[]{"slscr.update.microsoft.com"}},{"GenericDNSServers","162.159.36.2"},{"Version",2},{"ConfigOptions",8}};
+            Func<string,object> value=key=>fields.ContainsKey(key)?fields[key]:null;
+            string id="DNS_RESILIENCY_slscr.update.microsoft.com";
+            Assert(EncryptedDns.IsWindowsUpdateException(NrptRegistryReader.Parse(id,value,true)),"Local metadata lost");
+            Assert(!EncryptedDns.IsWindowsUpdateException(NrptRegistryReader.Parse(id,value)),"Unknown/organization source accepted");
+            fields["Version"]="2";
+            Assert(!EncryptedDns.IsWindowsUpdateException(NrptRegistryReader.Parse(id,value,true)),"Wrong registry type accepted");
+        });
+        Test("Similar names, broad policies and incomplete metadata cannot bypass the DoH guard", () => {
+            Action<AgRule>[] invalid={r=>r.Local=false,r=>r.Id=Guid.NewGuid().ToString("B"),r=>r.Version=1,r=>r.Version=null,
+                r=>r.ConfigOptions=6,r=>r.ConfigOptions=null,r=>r.Names=new[]{".microsoft.com"},r=>r.Names=new[]{"."},
+                r=>r.Names=new[]{"slscr.update.microsoft.com",AntigravityDns.Domains[0]},r=>r.Names=AntigravityDns.Domains,
+                r=>r.Id="DNS_RESILIENCY_"+AntigravityDns.Domains[0],r=>r.Comment="Another app",r=>r.DisplayName="Another app",
+                r=>r.Servers=new string[0],r=>r.Servers=new[]{"invalid"}};
+            foreach(var change in invalid) {
+                var rule=WindowsUpdateRule();change(rule);
+                Assert(!EncryptedDns.IsWindowsUpdateException(rule)&&EncryptedDns.PolicyConflict(new[]{rule})!=null,"Unexpected policy bypassed validation");
+            }
+        });
+        Test("Windows Update exception does not mask a second conflicting policy", () => {
+            var systemRule=WindowsUpdateRule();var other=Foreign(AntigravityDns.Domains[0]);
+            string message=EncryptedDns.PolicyConflict(new[]{systemRule,other});
+            Assert(message.Contains(AntigravityDns.Domains[0])&&!message.Contains("slscr.update.microsoft.com"),"Conflict includes unrelated Windows Update rule");
+            Assert(!EncryptedDns.CanKeepAntigravity(new[]{systemRule,other},new[]{systemRule,other}),"Unknown rule accepted by Antigravity consent");
+            other.Comment="AG_UNLOCKER_NRPT_V2";
+            Assert(EncryptedDns.CanKeepAntigravity(new[]{systemRule,other},new[]{systemRule,other}),"Independent exception blocks known Antigravity consent");
+            var organization=WindowsUpdateRule();organization.Local=false;
+            Assert(!EncryptedDns.CanKeepAntigravity(new[]{systemRule,other},new[]{systemRule,other,organization}),"Organization policy was ignored");
         });
         Test("Known local Antigravity rules may be preserved without mutation", () => {
             var rules = AntigravityDns.Domains.Select(name => {var r = Foreign(name); r.Comment = "AG_UNLOCKER_NRPT_V2"; return r;}).ToArray();

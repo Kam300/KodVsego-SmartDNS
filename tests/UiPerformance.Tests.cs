@@ -107,6 +107,29 @@ static class UiPerformanceTests
             form.ScrollProviderPage(-1);form.ScrollProviderPage(-1);
             Check((int)Get(form,"providerScroll")==0,"Backward paging stops at first provider");
             var segments=(Rectangle[])Get(form,"rSeg");
+            var savedAgStatus=(AgStatus)Get(form,"agStatus");
+            bool savedSecure=(bool)Get(form,"secureDns");
+            Set(form,"dnsSet",6);Set(form,"secureDns",true);Set(form,"agStatus",new AgStatus{WindowsUpdateException=true});
+            Check(form.EncryptionNote.Contains("Windows Update"),"Adapter DoH label discloses the preserved Windows Update exception");
+            Set(form,"agStatus",new AgStatus{WindowsUpdateException=true,Checked=true});
+            Check(form.EncryptionNote.Contains("Windows Update")&&form.EncryptionNote.Contains("Antigravity"),"All known DNS exceptions stay visible when combined");
+            bool savedAgLoading=(bool)Get(form,"agLoading"),savedActive=(bool)Get(form,"active"),savedConfirmed=(bool)Get(form,"dnsConfirmed");
+            Set(form,"agLoading",false);Set(form,"agStatus",new AgStatus());Set(form,"active",false);Set(form,"dnsConfirmed",false);
+            Check(form.AntigravityUsesSharedDoh&&form.SharedAntigravityNote.Contains("большой кнопкой"),"Disconnected DoH mode replaces the redundant Antigravity checkbox with a connection hint");
+            int revisionBefore=(int)Get(form,"operationRevision");
+            typeof(MainForm).GetMethod("ToggleAntigravity",flags).Invoke(form,null);
+            Check(!(bool)Get(form,"busy")&&(int)Get(form,"operationRevision")==revisionBefore,"Shared DoH card cannot open a redundant success dialog or change DNS rules");
+            using(var preview=new Bitmap(form.ClientSize.Width,form.ClientSize.Height)) {
+                form.DrawToBitmap(preview,form.ClientRectangle);preview.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(),"SmartDNS-shared-doh-card.png"));
+            }
+            Set(form,"active",true);Set(form,"dnsConfirmed",true);
+            Check(!form.SharedAntigravityNote.Contains("Включите"),"Confirmed DoH connection shows current use instead of asking to connect again");
+            Set(form,"agStatus",new AgStatus{Checked=true});
+            Check(!form.AntigravityUsesSharedDoh,"Existing separate Antigravity rules remain available for removal");
+            Set(form,"agStatus",new AgStatus{External=true});
+            Check(!form.AntigravityUsesSharedDoh,"Foreign Antigravity rules keep the cleanup action available");
+            Set(form,"agLoading",savedAgLoading);Set(form,"active",savedActive);Set(form,"dnsConfirmed",savedConfirmed);
+            Set(form,"dnsSet",selected);Set(form,"agStatus",savedAgStatus);Set(form,"secureDns",savedSecure);
             Check(segments[1].IsEmpty&&segments[2].IsEmpty&&segments[3].Left==segments[0].Right&&segments[4].Left==segments[3].Right,"Disabled GeoHide tiles have no hit areas or gaps in the provider bar");
             Set(form,"dnsSet",1);
             typeof(MainForm).GetMethod("CheckDnsServers",flags).Invoke(form,null);
@@ -122,6 +145,14 @@ static class UiPerformanceTests
             Check((int)typeof(MainForm).GetProperty("SelectedSegment",flags).GetValue(form,null)==Dns.Name.Length,"Auto selection has its own segment without changing DNS provider indices");
             typeof(MainForm).GetMethod("PickSet",flags).Invoke(form,new object[]{0});
             Check((int)Get(form,"autoGoal")==-1,"Manual choice exits auto even when provider itself is unchanged");
+            using(var info=form.CreateDialog("Включите DNS большой кнопкой.","Режим DoH",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1)) {
+                var caption=(Label)typeof(StyledDialog).GetField("statusCaption",flags).GetValue(info);
+                var marker=(DialogStatusIcon)typeof(StyledDialog).GetField("statusMarker",flags).GetValue(info);
+                Check(caption.Text=="Информация"&&marker.Kind==DialogStatusKind.Information&&marker.AccessibleName=="Информация","Instructions use an information icon and never claim a completed operation");
+                info.AddDnsTestControls(new[]{"MagicDNS"},0,index=>{});
+                info.ShowDnsTestStatus("Проверка завершена","Проверено",false,false);
+                Check(marker.Kind==DialogStatusKind.Success,"Successful DNS tests retain a distinct success icon");
+            }
             using(var dialog=form.CreateDialog("Auto test","Авто",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1)) {
                 bool changed=false;
                 dialog.AddAutoDnsControls(new[]{"Gemini","ChatGPT"},0,i=>{},()=>changed=true);

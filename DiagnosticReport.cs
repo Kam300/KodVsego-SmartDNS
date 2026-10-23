@@ -94,6 +94,8 @@ namespace HbAi.XboxDns
             try {
                 var rules = NrptRegistryReader.Read(false);
                 text.AppendLine("Локальных правил NRPT: " + rules.Length);
+                foreach (var rule in rules.Where(EncryptedDns.IsWindowsUpdateException))
+                    text.AppendLine("NRPT Windows Update exception: " + rule.Names[0] + "; DNS=" + string.Join(",", rule.Servers) + "; preserved outside adapter DoH");
                 foreach (var rule in rules.Where(r => r.Names.Any(n => AntigravityDns.Domains.Any(d => AntigravityDns.Matches(n,d)))).Take(8))
                     text.AppendLine("NRPT Antigravity: targets=" + string.Join(",", rule.Names.Where(n => AntigravityDns.Domains.Contains(n))) + "; DNS=" + string.Join(",", rule.Servers) + "; owned=" + AntigravityDns.Owned(rule));
                 text.AppendLine("Правил организации: " + NrptRegistryReader.ReadOrganization().Length);

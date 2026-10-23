@@ -88,12 +88,13 @@ namespace HbAi.XboxDns
                         using (var row = store.OpenSubKey(id, false))
                         {
                             if (row == null) throw new IOException("DNS-правило изменилось во время чтения. Повторите попытку.");
-                            rules.Add(Parse(id, name => row.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames)));
+                            rules.Add(Parse(id, name => row.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames),
+                                string.Equals(path, Local, StringComparison.OrdinalIgnoreCase)));
                         }
                 }
             return rules.ToArray();
         }
-        internal static AgRule Parse(string id, Func<string, object> value)
+        internal static AgRule Parse(string id, Func<string, object> value, bool local = false)
         {
             // Foreign entries can have a named registry key rather than a GUID.
             // Keep them visible for conflict checks; mutation/backup ownership stays GUID-only.
@@ -105,6 +106,7 @@ namespace HbAi.XboxDns
             var servers = value("GenericDNSServers");
             if (servers != null && !(servers is string)) throw new InvalidDataException("Неизвестный формат серверов NRPT: " + id);
             return new AgRule { Id = id, Names = names, Servers = WindowsAgRules.Strings(servers),
+                Local = local, Version = value("Version") as int?, ConfigOptions = value("ConfigOptions") as int?,
                 Comment = Text(value("Comment")), DisplayName = Text(value("DisplayName")) };
         }
         static string Text(object value)

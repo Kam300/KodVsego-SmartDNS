@@ -41,17 +41,32 @@ namespace HbAi.XboxDns
         // Organization policies, broad matches and unrelated rules cannot be bypassed.
         internal static bool CanKeepAntigravity(AgRule[] local, AgRule[] all)
         {
+            local = local.Where(r => !IsWindowsUpdateException(r)).ToArray();
+            all = all.Where(r => !IsWindowsUpdateException(r)).ToArray();
             return all.Length > 0 && all.Length <= 2 && local.Length == all.Length &&
                 all.SelectMany(r => r.Names).Distinct(StringComparer.OrdinalIgnoreCase).Count() == all.Length &&
                 all.All(r => r.Names.Length == 1 && AntigravityDns.Domains.Contains(r.Names[0]) &&
                     (AgTakeover.KnownTag(r.Comment) || AntigravityDns.Owned(r)) &&
                     local.Any(l => l.Id == r.Id && l.Comment == r.Comment && l.Names.SequenceEqual(r.Names) && l.Servers.SequenceEqual(r.Servers)));
         }
+        // Preserve this exact local, service-scoped resiliency entry. It still follows
+        // its NRPT resolver; allowing adapter DoH does not encrypt or rewrite that exception.
+        // A matching hostname alone is insufficient, especially for organization policies.
+        internal static bool IsWindowsUpdateException(AgRule rule)
+        {
+            const string host = "slscr.update.microsoft.com";
+            return rule != null && rule.Local && rule.Version == 2 && rule.ConfigOptions == 8 &&
+                string.Equals(rule.Id, "DNS_RESILIENCY_" + host, StringComparison.OrdinalIgnoreCase) &&
+                rule.Names != null && rule.Names.Length == 1 && string.Equals(rule.Names[0], host, StringComparison.OrdinalIgnoreCase) &&
+                string.IsNullOrEmpty(rule.Comment) && string.IsNullOrEmpty(rule.DisplayName) &&
+                rule.Servers != null && rule.Servers.Length > 0 && rule.Servers.All(s => { IPAddress ip; return IPAddress.TryParse(s, out ip); });
+        }
         internal static string PolicyConflict(AgRule[] policies)
         {
+            policies = policies.Where(r => !IsWindowsUpdateException(r)).ToArray();
             if (policies.Length == 0) return null;
             string domains = string.Join(", ", policies.SelectMany(p => p.Names).Distinct().Take(4));
-            return "Обнаружены отдельные DNS-правила: " + domains + ".\n\nОтключите DNS-настройку прежнего анлокера и повторите попытку. Для полного шифрования эти правила должны быть отключены.";
+            return "Эти домены используют отдельные DNS-настройки: " + domains + ".\n\nОни могут обходить выбранный DoH. Проверьте правила в программе или политике Windows, которая их создала, и повторите подключение. Настройки не изменены.";
         }
         // Only provider/IP combinations with a verified HTTPS endpoint are offered.
         internal static readonly string[] Templates = ProviderCatalog.All.Select(p=>p.doh).ToArray();

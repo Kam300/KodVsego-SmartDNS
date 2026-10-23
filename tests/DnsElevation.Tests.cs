@@ -50,6 +50,16 @@ static class ElevationTests
             DnsRequest parsed; Assert(DnsRequest.TryParse(Request(false, 0).Arguments.Split(' '), out parsed), "Restore rejected");
             Assert(!parsed.Enable && parsed.Set == 0, "Restore changed");
         });
+        Test("Returned adapters use a constrained restore action and authenticated IPC", () => {
+            var request=Request(false,5); DnsRequest parsed;
+            Assert(request.Arguments.StartsWith("--dns-operation restore-returned 0 "),"Returned restore action missing");
+            Assert(DnsRequest.TryParse(request.Arguments.Split(' '),out parsed)&&!parsed.Enable&&parsed.Set==5,"Returned restore changed");
+            DnsRequest rejected;
+            foreach(string value in new[]{"1","5","https://example.com","-1"})
+                Assert(!DnsRequest.TryParse(request.Arguments.Replace("restore-returned 0","restore-returned "+value).Split(' '),out rejected),"Arbitrary restore selector accepted");
+            int code;var reply=Exchange(parsed,(on,set)=>{Assert(!on&&set==5,"Wrong returned restore operation");return null;},out code);
+            Assert(code==0&&reply.Code==0,"Returned restore IPC failed");
+        });
         Test("Encrypted DNS action round-trips without exposing arbitrary templates", () => {
             for (int provider=0;provider<Dns.V4.Length;provider++) {
                 var request=Request(true,200+provider); DnsRequest parsed;
