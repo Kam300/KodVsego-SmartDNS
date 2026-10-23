@@ -59,4 +59,12 @@ powershell.exe -NoProfile -Command "& './tests/run.ps1' -Only @('AppUpdateTests'
 
 Автоматическая визуальная проверка мастера не завершена: инструмент управления окнами блокирует `msiexec.exe`. Таблицы диалогов и их порядок проверены, а запуск мастера тестового пакета завершился успешной установкой по журналу Windows Installer. Этот тестовый продукт затем удалён.
 
+### Исправление ошибки 2803
+
+В исходном MSI 2.23.2 отсутствовали обязательный `ErrorDialog`, окна занятых файлов `FilesInUse` / `MsiRMFilesInUse` и завершающие окна ошибки/отмены. При обычном запуске Windows Installer мог запросить отсутствующее окно и выдать 2803. Тихая установка `/qn` эти окна не использует, поэтому прежние проверки упаковки не обнаруживали дефект.
+
+Добавлены стандартные ответы на ошибки MSI, список приложений, которые мешают заменить файлы, и понятное завершение при отмене/ошибке. Автоматическое закрытие через Restart Manager доступно по кнопке «Закрыть и продолжить»; можно отменить установку. Восстановление из исправленного MSI также обновляет кэш пакета (`REINSTALLMODE=vamus`), чтобы последующее удаление использовало исправленные окна. Исходная версия уже установленного MSI сама не исправляется: нужно открыть исправленный пакет и выбрать «Восстановить файлы программы».
+
+Регрессионные проверки анализируют `ErrorDialog`, стиль ошибки, `ErrorText`, семь стандартных ответов, обе резервированные формы занятых файлов, завершающие последовательности и все переходы между окнами в фактическом MSI. Новый тест воспроизводит отсутствие `ErrorDialog` в опубликованном пакете по SHA-256 `473407a1799cb35a29a9f0da2a527e4b01703ad087dcbc4c5f308a05814a4908`. Правила интерфейса: [обязательные окна MSI](https://learn.microsoft.com/en-us/windows/win32/msi/dialog-boxes), [окно ошибки](https://learn.microsoft.com/en-us/windows/win32/msi/error-dialog), [код 2803](https://learn.microsoft.com/en-us/windows/win32/msi/windows-installer-error-messages).
+
 Справочные источники: [Windows Installer](https://learn.microsoft.com/en-us/windows/win32/msi/windows-installer-portal), [условия окончательного удаления и UPGRADINGPRODUCTCODE](https://learn.microsoft.com/en-us/windows/win32/msi/conditioning-actions-to-run-during-removal), [права действий MSI](https://learn.microsoft.com/en-us/windows/win32/msi/custom-action-security), [сравнение версий MSI](https://learn.microsoft.com/en-us/windows/win32/msi/productversion), [обновление и откат WiX](https://docs.firegiant.com/wix/schema/wxs/majorupgrade/).

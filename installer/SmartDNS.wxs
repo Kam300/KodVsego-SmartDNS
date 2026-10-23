@@ -100,6 +100,36 @@
       <TextStyle Id="TitleFont" FaceName="Segoe UI" Size="13" Bold="yes" />
       <Property Id="DefaultUIFont" Value="NormalFont" />
       <Property Id="MAINTENANCE" Value="repair" />
+      <Property Id="ErrorDialog" Value="ErrorDlg" />
+      <!-- Windows Installer selects these dialogs for errors and locked files.
+           They must exist even when the normal wizard sequence never shows them. -->
+      <Dialog Id="ErrorDlg" Width="390" Height="180" Title="Smart DNS — сообщение установщика" ErrorDialog="yes">
+        <Control Id="ErrorText" Type="Text" X="18" Y="18" Width="354" Height="110" TabSkip="no" NoPrefix="yes" Text="Не удалось завершить операцию." />
+        <Control Id="Ok" Type="PushButton" X="260" Y="144" Width="100" Height="22" TabSkip="yes" Text="ОК"><Publish Event="EndDialog" Value="ErrorOk" /></Control>
+        <Control Id="Cancel" Type="PushButton" X="260" Y="144" Width="100" Height="22" TabSkip="yes" Text="Отмена"><Publish Event="EndDialog" Value="ErrorCancel" /></Control>
+        <Control Id="Abort" Type="PushButton" X="260" Y="144" Width="100" Height="22" TabSkip="yes" Text="Прервать"><Publish Event="EndDialog" Value="ErrorAbort" /></Control>
+        <Control Id="Retry" Type="PushButton" X="260" Y="144" Width="100" Height="22" TabSkip="yes" Text="Повторить"><Publish Event="EndDialog" Value="ErrorRetry" /></Control>
+        <Control Id="Ignore" Type="PushButton" X="260" Y="144" Width="100" Height="22" TabSkip="yes" Text="Пропустить"><Publish Event="EndDialog" Value="ErrorIgnore" /></Control>
+        <Control Id="Yes" Type="PushButton" X="260" Y="144" Width="100" Height="22" TabSkip="yes" Text="Да"><Publish Event="EndDialog" Value="ErrorYes" /></Control>
+        <Control Id="No" Type="PushButton" X="260" Y="144" Width="100" Height="22" TabSkip="yes" Text="Нет"><Publish Event="EndDialog" Value="ErrorNo" /></Control>
+      </Dialog>
+      <Dialog Id="FilesInUse" Width="390" Height="250" Title="Smart DNS — закройте приложение" KeepModeless="yes">
+        <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Приложение ещё открыто" />
+        <Control Id="Note" Type="Text" X="18" Y="50" Width="354" Height="44" Text="Закройте приложения из списка, затем нажмите «Повторить». Это позволит заменить файлы без перезагрузки компьютера." />
+        <Control Id="List" Type="ListBox" X="18" Y="100" Width="354" Height="98" Property="FileInUseProcess" Sunken="yes" TabSkip="yes" />
+        <Control Id="Cancel" Type="PushButton" X="190" Y="216" Width="82" Height="22" Cancel="yes" Text="Отмена"><Publish Event="EndDialog" Value="Exit" /></Control>
+        <Control Id="Retry" Type="PushButton" X="284" Y="216" Width="88" Height="22" Default="yes" Text="Повторить"><Publish Event="EndDialog" Value="Retry" /></Control>
+      </Dialog>
+      <Dialog Id="MsiRMFilesInUse" Width="390" Height="250" Title="Smart DNS — приложение открыто" KeepModeless="yes">
+        <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Нужно закрыть приложение" />
+        <Control Id="Note" Type="Text" X="18" Y="50" Width="354" Height="44" Text="Для замены файлов установщик может закрыть приложения из списка. Сохраните работу перед продолжением." />
+        <Control Id="List" Type="ListBox" X="18" Y="100" Width="354" Height="98" Property="FileInUseProcess" Sunken="yes" TabSkip="yes" />
+        <Control Id="Cancel" Type="PushButton" X="130" Y="216" Width="82" Height="22" Cancel="yes" Text="Отмена"><Publish Event="EndDialog" Value="Exit" /></Control>
+        <Control Id="Continue" Type="PushButton" X="224" Y="216" Width="148" Height="22" Default="yes" Text="Закрыть и продолжить">
+          <Publish Event="EndDialog" Value="Return" Order="1" />
+          <Publish Event="RMShutdownAndRestart" Value="0" Order="2" />
+        </Control>
+      </Dialog>
       <Dialog Id="WelcomeDlg" Width="390" Height="310" Title="$(var.ProductName) — установка">
         <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Установка Smart DNS" />
         <Control Id="Intro" Type="Text" X="18" Y="48" Width="354" Height="32" Text="Версия $(var.AppVersion). Для текущего пользователя. Перед установкой закройте Smart DNS." />
@@ -126,7 +156,7 @@
         <Control Id="Cancel" Type="PushButton" X="209" Y="192" Width="75" Height="22" Cancel="yes" Text="Отмена"><Publish Event="EndDialog" Value="Exit" /></Control>
         <Control Id="Continue" Type="PushButton" X="294" Y="192" Width="78" Height="22" Default="yes" Text="Продолжить">
           <Publish Property="REINSTALL" Value="ALL" Condition="MAINTENANCE = &quot;repair&quot;" Order="1" />
-          <Publish Property="REINSTALLMODE" Value="amus" Condition="MAINTENANCE = &quot;repair&quot;" Order="2" />
+          <Publish Property="REINSTALLMODE" Value="vamus" Condition="MAINTENANCE = &quot;repair&quot;" Order="2" />
           <Publish Property="REMOVE" Value="ALL" Condition="MAINTENANCE = &quot;remove&quot;" Order="3" />
           <Publish Event="EndDialog" Value="Return" Order="4" />
         </Control>
@@ -147,11 +177,23 @@
         <Control Id="Note" Type="Text" X="18" Y="55" Width="354" Height="85" Text="Операция завершена. После установки приложение доступно в меню «Пуск». При удалении прежние настройки сети восстанавливаются автоматически; настройки программы и кэш очищаются." />
         <Control Id="Finish" Type="PushButton" X="294" Y="165" Width="78" Height="22" Default="yes" Cancel="yes" Text="Закрыть"><Publish Event="EndDialog" Value="Return" /></Control>
       </Dialog>
+      <Dialog Id="FatalErrorDlg" Width="390" Height="180" Title="Smart DNS — операция не завершена">
+        <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Не удалось завершить операцию" />
+        <Control Id="Note" Type="Text" X="18" Y="55" Width="354" Height="65" Text="Закройте установщик и повторите попытку. Если ошибка повторяется, сохраните её текст для сообщения разработчику." />
+        <Control Id="Close" Type="PushButton" X="284" Y="144" Width="88" Height="22" Default="yes" Cancel="yes" Text="Закрыть"><Publish Event="EndDialog" Value="Return" /></Control>
+      </Dialog>
+      <Dialog Id="UserExitDlg" Width="390" Height="180" Title="Smart DNS — операция отменена">
+        <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Операция отменена" />
+        <Control Id="Note" Type="Text" X="18" Y="55" Width="354" Height="65" Text="Установку можно повторить позже. Закройте это окно для выхода из установщика." />
+        <Control Id="Close" Type="PushButton" X="284" Y="144" Width="88" Height="22" Default="yes" Cancel="yes" Text="Закрыть"><Publish Event="EndDialog" Value="Return" /></Control>
+      </Dialog>
       <InstallUISequence>
         <Show Dialog="WelcomeDlg" Before="ExecuteAction" Condition="NOT Installed AND NOT WIX_DOWNGRADE_DETECTED" />
         <Show Dialog="MaintenanceDlg" Before="ExecuteAction" Condition="Installed AND NOT REMOVE~=&quot;ALL&quot; AND NOT REINSTALL" />
         <Show Dialog="ProgressDlg" Before="ExecuteAction" />
         <Show Dialog="ExitDlg" OnExit="success" />
+        <Show Dialog="FatalErrorDlg" OnExit="error" />
+        <Show Dialog="UserExitDlg" OnExit="cancel" />
       </InstallUISequence>
     </UI>
   </Package>

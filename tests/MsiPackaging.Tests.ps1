@@ -62,6 +62,39 @@ $execute=[int]($ui|Where-Object {$_.Values[0] -eq 'ExecuteAction'}).Values[1]
 Check ($welcome -lt $progress -and $progress -lt $execute) 'Welcome and progress dialogs appear in the correct order'
 $conditions=@(Read-MsiRows $database 'SELECT `Condition` FROM `LaunchCondition`' 1 | ForEach-Object {$_.Values[0]})
 Check (@($conditions|Where-Object {$_ -match 'WINDOWSBUILD'}).Count -eq 1) 'Installer checks Windows 10 or later'
+
+# Full UI has an additional Windows Installer contract which quiet installs do
+# not exercise: missing error/files-in-use dialogs cause MSI error 2803.
+$dialogs=@(Read-MsiRows $database 'SELECT `Dialog`, `Attributes`, `Control_First` FROM `Dialog`' 3)
+$dialogIds=@($dialogs|ForEach-Object {$_.Values[0]})
+$errorProperty=@(Read-MsiRows $database "SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = 'ErrorDialog'" 1)
+Check ($errorProperty.Count -eq 1 -and $errorProperty[0].Values[0] -in $dialogIds) 'ErrorDialog resolves to an authored dialog instead of triggering error 2803'
+$errorId=$errorProperty[0].Values[0]
+$errorDialog=@($dialogs|Where-Object {$_.Values[0] -eq $errorId})[0]
+Check (([int]$errorDialog.Values[1] -band 65536) -ne 0 -and $errorDialog.Values[2] -eq 'ErrorText') 'Error dialog has the MSI error style and ErrorText as its first control'
+$errorControls=@(Read-MsiRows $database ('SELECT `Control`, `Type`, `Control_Next` FROM `Control` WHERE `Dialog_` = '''+$errorId+'''') 3)
+Check (@($errorControls|Where-Object {$_.Values[0] -eq 'ErrorText' -and $_.Values[1] -eq 'Text'}).Count -eq 1) 'Installer error message has the required ErrorText receiver'
+$buttons=@($errorControls|Where-Object {$_.Values[1] -eq 'PushButton'})
+Check ($buttons.Count -eq 7 -and @($buttons|Where-Object {$_.Values[2]}).Count -eq 0) 'All seven error responses are available without linking the hidden buttons into the tab order'
+$events=@(Read-MsiRows $database 'SELECT `Dialog_`, `Control_`, `Event`, `Argument` FROM `ControlEvent`' 4)
+$errorResponses=@($events|Where-Object {$_.Values[0] -eq $errorId -and $_.Values[2] -eq 'EndDialog'}|ForEach-Object {$_.Values[3]}|Sort-Object -Unique)
+Check (($errorResponses -join ',') -eq ((@('ErrorAbort','ErrorCancel','ErrorIgnore','ErrorNo','ErrorOk','ErrorRetry','ErrorYes')|Sort-Object) -join ',')) 'Error buttons return the standard Windows Installer response values'
+foreach($terminal in @(-3,-2,-1)) {
+    $exit=@($ui|Where-Object {[int]$_.Values[1] -eq $terminal})
+    Check ($exit.Count -eq 1 -and $exit[0].Values[0] -in $dialogIds) ('Full UI has a valid terminal dialog for sequence '+$terminal)
+}
+foreach($lockedDialog in @('FilesInUse','MsiRMFilesInUse')) {
+    Check ($lockedDialog -in $dialogIds) ('Reserved locked-file dialog exists: '+$lockedDialog)
+    $list=@(Read-MsiRows $database ('SELECT `Type`, `Property` FROM `Control` WHERE `Dialog_` = '''+$lockedDialog+''' AND `Control` = ''List''') 2)
+    Check ($list.Count -eq 1 -and $list[0].Values[0] -eq 'ListBox' -and $list[0].Values[1] -eq 'FileInUseProcess') ($lockedDialog+' displays the processes reported by MSI')
+    Check (@($events|Where-Object {$_.Values[0] -eq $lockedDialog -and $_.Values[2] -eq 'EndDialog' -and $_.Values[3] -eq 'Exit'}).Count -eq 1) ($lockedDialog+' permits cancellation before replacing busy files')
+}
+$restartEvents=@($events|Where-Object {$_.Values[2] -eq 'RMShutdownAndRestart'})
+Check ($restartEvents.Count -eq 1 -and $restartEvents[0].Values[0] -eq 'MsiRMFilesInUse' -and $restartEvents[0].Values[1] -eq 'Continue') 'Restart Manager closes applications only from the explicit confirmation button'
+$danglingDialogs=@($events|Where-Object {$_.Values[2] -in @('SpawnDialog','NewDialog') -and $_.Values[3] -notin $dialogIds})
+Check ($danglingDialogs.Count -eq 0) 'Every wizard dialog transition resolves to an existing dialog'
+$repairMode=@($events|Where-Object {$_.Values[0] -eq 'MaintenanceDlg' -and $_.Values[2] -eq '[REINSTALLMODE]'})
+Check ($repairMode.Count -eq 1 -and $repairMode[0].Values[3] -cmatch 'v') 'Interactive repair refreshes the cached MSI so its dialogs are corrected for later uninstall'
 $null=[Runtime.InteropServices.Marshal]::FinalReleaseComObject($database)
 if ($SkipInstallation) { Write-Output ('All '+$script:passed+' MSI structure/version checks passed.'); return }
 
@@ -102,7 +135,7 @@ try {
     Check (Test-Path -LiteralPath $shortcut) 'Start menu shortcut is created for this user'
     Check (Test-Path -LiteralPath ('HKCU:\'+$packages[0].RegistryBase)) 'Product metadata is registered only for this user'
     [IO.File]::WriteAllText($installedExe,'corrupted fixture data')
-    $null=Run-Installer @('/fa',$packages[0].ProductCode) 'repair'
+    $null=Run-Installer @('/fvamus',('"'+$packages[0].File+'"')) 'repair'
     Check ((Get-FileHash -LiteralPath $installedExe).Hash.ToLowerInvariant() -eq $packages[0].SourceSHA256) 'Repair restores a corrupted executable from Windows Installer cache/source'
     $keep=Join-Path $installFolder 'user-settings.keep'; [IO.File]::WriteAllText($keep,'unrelated user data')
     $null=Run-Installer @('/i',('"'+$packages[1].File+'"')) 'upgrade'
