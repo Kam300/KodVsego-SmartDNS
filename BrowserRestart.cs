@@ -91,6 +91,8 @@ namespace HbAi.XboxDns
         internal static bool Matches(BrowserChoice browser, string path)
         {
             if (string.Equals(browser.Exe, path, StringComparison.OrdinalIgnoreCase)) return true;
+            if (browser.Name == "Antigravity")
+                return string.Equals(path, Path.Combine(Path.GetDirectoryName(browser.Exe), @"resources\bin\language_server.exe"), StringComparison.OrdinalIgnoreCase);
             // Opera's launcher starts opera.exe from a version subdirectory.
             string root = Path.GetDirectoryName(browser.Exe).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
             return browser.Name == "Opera" && Path.GetFileName(path).Equals("opera.exe", StringComparison.OrdinalIgnoreCase) &&
@@ -171,11 +173,13 @@ namespace HbAi.XboxDns
         {
             readonly Process process;
             readonly bool yandex;
+            internal bool Background;
             internal Instance(Process process, bool yandex) { this.process = process; this.yandex = yandex; }
             public bool Exited { get { return process.HasExited; } }
-            public bool HasWindow { get { return !Exited && Windows(process.Id).Length > 0; } }
+            public bool HasWindow { get { return !Background && !Exited && Windows(process.Id).Length > 0; } }
             public bool CloseWindow()
             {
+                if (Background) return false;
                 if (yandex) return CloseYandex(process);
                 foreach (var window in Windows(process.Id))
                 {
@@ -214,18 +218,25 @@ namespace HbAi.XboxDns
             using (var current = Process.GetCurrentProcess()) session = current.SessionId;
             try
             {
-                foreach (string name in new[] { Path.GetFileNameWithoutExtension(browser.Exe), browser.Name == "Opera" ? "opera" : null }.Where(n => n != null).Distinct(StringComparer.OrdinalIgnoreCase))
+                foreach (string name in new[] { Path.GetFileNameWithoutExtension(browser.Exe), browser.Name == "Opera" ? "opera" : null, browser.Name == "Antigravity" ? "language_server" : null }.Where(n => n != null).Distinct(StringComparer.OrdinalIgnoreCase))
                     foreach (var process in Process.GetProcessesByName(name))
                     {
                         bool keep = false;
                         try
                         {
-                            if (!process.HasExited && process.SessionId == session && BrowserCatalog.Matches(browser, ProcessSecurity.ImagePath(process.Id)))
+                            if (process.HasExited || process.SessionId != session) continue;
+                            string image = ProcessSecurity.ImagePath(process.Id);
+                            if (BrowserCatalog.Matches(browser, image))
                             {
                                 var instance = new Instance(process, browser.Name == "Яндекс Браузер");
-                                // Crash handlers/renderers can outlive the browser root after a normal exit.
-                                if (BrowserProfiles.Option(BrowserProfiles.Split(instance.Command()), "--type") == null)
-                                { found.Add(instance); keep = true; }
+                                bool desktop = browser.Name == "Antigravity";
+                                bool backend = desktop && !string.Equals(image, browser.Exe, StringComparison.OrdinalIgnoreCase);
+                                string type = backend ? null : BrowserProfiles.Option(BrowserProfiles.Split(instance.Command()), "--type");
+                                // Desktop's localhost UI is served by a separate language_server.
+                                // Wait for its server/renderers too; never send them window-close messages.
+                                // Detached crash reporters may intentionally survive a clean shutdown.
+                                if (backend || type == null || desktop && AntigravityRestart.WaitForType(type))
+                                { instance.Background = backend || type != null; found.Add(instance); keep = true; }
                             }
                         }
                         catch (InvalidOperationException) { }
@@ -263,9 +274,13 @@ namespace HbAi.XboxDns
         {
             // Only newly constructed profile arguments, never the original command line.
             foreach (var launch in launches)
-                using (var process = Process.Start(new ProcessStartInfo(browser.Exe, launch.Arguments) {
+            {
+                var start = new ProcessStartInfo(browser.Exe, launch.Arguments) {
                     UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(browser.Exe)
-                })) { }
+                };
+                if (browser.Name == "Antigravity") AntigravityRestart.PrepareEnvironment(start);
+                using (var process = Process.Start(start)) { }
+            }
         }
         public void Wait() { Thread.Sleep(100); }
     }
@@ -285,9 +300,13 @@ namespace HbAi.XboxDns
                 if (launches == null || launches.Length == 0) throw new IOException("Не удалось сохранить профиль для перезапуска. Окна не закрыты.");
                 foreach (var window in windows)
                     if (!window.Exited && !window.CloseWindow()) throw new IOException("Браузер не принял запрос закрытия. Закройте его вручную.");
-                for (int i = 0; i < 150 && processes.Any(p => !p.Exited); i++) system.Wait();
+                bool desktop = browser.Name == "Antigravity";
+                if (desktop) DiagnosticReport.Record("Antigravity restart", "graceful close; windows="+windows.Length+"; tracked processes="+processes.Length);
+                int waitLimit = desktop ? 300 : 150;
+                for (int i = 0; i < waitLimit && processes.Any(p => !p.Exited); i++) system.Wait();
                 if (processes.Any(p => !p.Exited))
-                    throw new IOException("Браузер не завершился. Возможно, он ждёт сохранения данных или остался в фоне. Закройте его вручную; принудительное завершение не выполняется.");
+                    throw new IOException(desktop ? "Antigravity или его фоновый сервер не завершился за 30 секунд. Закройте приложение обычным способом и повторите попытку. Повторный запуск отменён." :
+                        "Браузер не завершился. Возможно, он ждёт сохранения данных или остался в фоне. Закройте его вручную; принудительное завершение не выполняется.");
                 var remaining = system.Running(browser);
                 try
                 {
@@ -297,6 +316,16 @@ namespace HbAi.XboxDns
                         "Браузер снова запущен или ещё работает в фоне. Повторный запуск отменён.");
                 }
                 finally { foreach (var item in remaining) item.Dispose(); }
+                if (desktop)
+                {
+                    // An exited process can leave IPC/image cleanup in flight. Give it a
+                    // short quiet interval, then catch an updater/backend starting again.
+                    for (int i = 0; i < 5; i++) system.Wait();
+                    var settled = system.Running(browser);
+                    try { if (settled.Any(p => !p.Exited)) throw new IOException("Фоновые процессы Antigravity запустились снова. Повторный запуск отменён; дождитесь завершения обновления приложения."); }
+                    finally { foreach (var item in settled) item.Dispose(); }
+                    DiagnosticReport.Record("Antigravity restart", "all tracked processes exited; requesting fresh Desktop launch");
+                }
                 system.Open(browser, launches);
             }
             finally { foreach (var item in processes) item.Dispose(); }
@@ -304,6 +333,15 @@ namespace HbAi.XboxDns
     }
     static class AntigravityRestart
     {
+        internal static bool WaitForType(string type)
+        { return !string.Equals(type, "crashpad-handler", StringComparison.OrdinalIgnoreCase); }
+        internal static void PrepareEnvironment(ProcessStartInfo start)
+        {
+            // A GUI launch must not inherit Electron's helper/Node execution mode.
+            // Only this child's environment is changed; user network settings remain intact.
+            start.EnvironmentVariables.Remove("ELECTRON_RUN_AS_NODE");
+            start.EnvironmentVariables.Remove("ELECTRON_NO_ASAR");
+        }
         internal static bool Ready(bool enable, bool readOnly, string error, AgStatus status, int provider)
         { return enable && !readOnly && error == null && status.Error == null && status.Checked && status.Complete && status.Provider == provider; }
         internal static BrowserLaunch[] Capture(string[] commands, Func<string, bool> exists)
@@ -321,6 +359,8 @@ namespace HbAi.XboxDns
                         throw new IOException("Не удалось сохранить каталог настроек Antigravity. Окна не закрыты.");
                     result += option[0] + "=" + BrowserProfiles.Quote(Path.GetFullPath(option[1])) + " ";
                 }
+                if (args.Skip(1).TakeWhile(arg => arg != "--").Any(arg => arg.Equals("--disable-gpu", StringComparison.OrdinalIgnoreCase)))
+                    result += "--disable-gpu ";
                 return result.TrimEnd();
             }).Distinct(StringComparer.OrdinalIgnoreCase).Select(arguments => new BrowserLaunch { Arguments = arguments }).ToArray();
         }
@@ -341,7 +381,10 @@ namespace HbAi.XboxDns
             if (choice == null) return; // Never start an application the user was not running.
             if (DnsElevation.IsAdministrator()) throw new IOException("Для автоматического перезапуска Antigravity запустите Smart DNS обычным способом, без прав администратора.");
             try { BrowserRestart.Run(choice, new WindowsBrowserSystem(), true); }
-            catch (Exception error) { throw new IOException("Antigravity не перезапущен. Закройте его обычным способом и откройте снова. Возможно, приложение ожидает сохранения изменений.", error); }
+            catch (Exception error) {
+                DiagnosticReport.Record("Antigravity restart", "failed: "+error.Message);
+                throw new IOException("Antigravity не перезапущен.\n\n"+error.Message, error);
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using HbAi.XboxDns;
@@ -6,7 +7,7 @@ using HbAi.XboxDns;
 sealed class FakeBrowserProcess : IBrowserProcess
 {
     internal bool IsExited, Window = true, AcceptClose = true, Disposed;
-    internal int CloseCalls;
+    internal int CloseCalls, ExitOnWait = -1;
     public bool Exited { get { return IsExited; } }
     public bool HasWindow { get { return Window; } }
     public bool CloseWindow() { CloseCalls++; return AcceptClose; }
@@ -15,7 +16,8 @@ sealed class FakeBrowserProcess : IBrowserProcess
 sealed class FakeBrowserSystem : IBrowserSystem
 {
     internal FakeBrowserProcess[] Processes = new[] { new FakeBrowserProcess() };
-    internal FakeBrowserProcess Respawn;
+    internal FakeBrowserProcess Respawn, LateRespawn;
+    internal IBrowserProcess[] CapturedWindows;
     internal bool Elevated, OpenFails;
     internal bool CaptureFails;
     internal BrowserLaunch[] Plan = new[] { new BrowserLaunch { Arguments = "--profile-directory=\"Profile 2\"" } }, Launched;
@@ -24,19 +26,23 @@ sealed class FakeBrowserSystem : IBrowserSystem
     public IBrowserProcess[] Running(BrowserChoice choice)
     {
         Queries++;
-        return Queries == 1 ? Processes : Respawn == null ? new IBrowserProcess[0] : new[] { Respawn };
+        return Queries == 1 ? Processes : Queries >= 3 && LateRespawn != null ? new[] {LateRespawn} : Respawn == null ? new IBrowserProcess[0] : new[] { Respawn };
     }
     public BrowserLaunch[] Capture(BrowserChoice browser, IBrowserProcess[] windows)
     {
         if (Processes.Any(p => p.CloseCalls > 0)) throw new Exception("Profiles read after close");
         if (CaptureFails) throw new IOException("Cannot capture profiles");
+        CapturedWindows = windows;
         return Plan;
     }
     public void Open(BrowserChoice browser, BrowserLaunch[] launches) { Launched = launches; Opens++; if (OpenFails) throw new IOException("Cannot start browser"); }
     public void Wait()
     {
         Waits++;
-        if (ExitAfter > 0 && Waits >= ExitAfter) foreach (var process in Processes) process.IsExited = true;
+        foreach (var process in Processes) {
+            int after = process.ExitOnWait >= 0 ? process.ExitOnWait : ExitAfter;
+            if (after > 0 && Waits >= after) process.IsExited = true;
+        }
     }
 }
 static class BrowserTests
@@ -47,8 +53,9 @@ static class BrowserTests
     static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
     static void Fail(Action action) { bool failed = false; try { action(); } catch { failed = true; } Assert(failed, "Expected failure"); }
     static void Test(string name, Action action) { system = new FakeBrowserSystem(); action(); passed++; Console.WriteLine("PASS " + name); }
-    static void Main()
+    static void Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--fixture-wait") { System.Threading.Thread.Sleep(15000); return; }
         Test("Normal exit precedes relaunch", () => {
             BrowserRestart.Run(Choice, system);
             Assert(system.Processes[0].CloseCalls == 1 && system.Waits == 1 && system.Opens == 1 && system.Processes[0].Disposed, "Incorrect restart order");
@@ -76,6 +83,71 @@ static class BrowserTests
         Test("Default Antigravity profile is reopened without new arguments", () => {
             var plan=AntigravityRestart.Capture(new[]{"C:\\Apps\\Antigravity.exe", "C:\\Apps\\Antigravity.exe"},path=>true);
             Assert(plan.Length==1 && plan[0].Arguments=="", "Default profile altered or duplicated");
+        });
+        Test("Antigravity tracks only its own Desktop backend", () => {
+            var desktop = new BrowserChoice {Name="Antigravity",Exe=@"C:\Apps\Antigravity\Antigravity.exe"};
+            Assert(BrowserCatalog.Matches(desktop,@"C:\Apps\Antigravity\resources\bin\language_server.exe"),"Desktop backend omitted from exit wait");
+            Assert(!BrowserCatalog.Matches(desktop,@"C:\Other\resources\bin\language_server.exe") && !BrowserCatalog.Matches(desktop,@"C:\Apps\AntigravityOther\resources\bin\language_server.exe"),"Another application's backend included");
+            Assert(!BrowserCatalog.Matches(Choice,@"C:\Browsers\Chrome\resources\bin\language_server.exe"),"Browser restart started tracking an unrelated backend");
+        });
+        Test("Antigravity keeps its existing software-rendering option", () => {
+            var plan = AntigravityRestart.Capture(new[]{"C:\\Apps\\Antigravity.exe --disable-gpu --disable-web-security --inspect=1234"},path=>true);
+            Assert(plan.Single().Arguments=="--disable-gpu","Rendering workaround lost or arbitrary flags replayed");
+        });
+        Test("Antigravity waits for a slow backend without closing it by force", () => {
+            var root = new FakeBrowserProcess {ExitOnWait=1};
+            var backend = new FakeBrowserProcess {Window=false,ExitOnWait=200};
+            system.Processes = new[]{root,backend};
+            BrowserRestart.Run(new BrowserChoice {Name="Antigravity",Exe=@"C:\Apps\Antigravity.exe"},system,true);
+            Assert(system.Opens==1 && system.Waits>=200 && backend.IsExited && backend.CloseCalls==0,"Backend was bypassed or force-closed");
+            Assert(system.CapturedWindows.Length==1 && object.ReferenceEquals(system.CapturedWindows[0],root),"Backend used as a window/profile");
+        });
+        Test("Antigravity with a backend that never exits is not reopened", () => {
+            var backend = new FakeBrowserProcess {Window=false,ExitOnWait=0};
+            system.Processes = new[]{new FakeBrowserProcess {ExitOnWait=1},backend};
+            Fail(()=>BrowserRestart.Run(new BrowserChoice {Name="Antigravity",Exe=@"C:\Apps\Antigravity.exe"},system,true));
+            Assert(system.Opens==0 && backend.CloseCalls==0 && !backend.IsExited && backend.Disposed,"Hung backend was forced or ignored");
+        });
+        Test("Late Antigravity respawn during the settle interval cancels launch", () => {
+            system.LateRespawn = new FakeBrowserProcess {Window=false};
+            Fail(()=>BrowserRestart.Run(new BrowserChoice {Name="Antigravity",Exe=@"C:\Apps\Antigravity.exe"},system,true));
+            Assert(system.Opens==0 && system.LateRespawn.Disposed,"Late backend respawn was ignored");
+        });
+        Test("Desktop tracks renderers and utilities but not detached crash reporters", () => {
+            Assert(AntigravityRestart.WaitForType("renderer") && AntigravityRestart.WaitForType("gpu-process") && AntigravityRestart.WaitForType("utility"),"A Desktop child escaped exit wait");
+            Assert(!AntigravityRestart.WaitForType("crashpad-handler"),"Detached crash reporter blocks a healthy restart");
+        });
+        Test("Desktop GUI launch cannot inherit Electron helper mode", () => {
+            var start = new ProcessStartInfo(@"C:\Apps\Antigravity.exe") {UseShellExecute=false};
+            start.EnvironmentVariables["ELECTRON_RUN_AS_NODE"]="1";
+            start.EnvironmentVariables["ELECTRON_NO_ASAR"]="1";
+            start.EnvironmentVariables["HTTPS_PROXY"]="http://proxy.example:8080";
+            string path=start.EnvironmentVariables["PATH"];
+            AntigravityRestart.PrepareEnvironment(start);
+            Assert(start.EnvironmentVariables["ELECTRON_RUN_AS_NODE"]==null && start.EnvironmentVariables["ELECTRON_NO_ASAR"]==null,"Helper mode leaked into GUI launch");
+            Assert(start.EnvironmentVariables["PATH"]==path && start.EnvironmentVariables["HTTPS_PROXY"]=="http://proxy.example:8080","Unrelated environment modified");
+        });
+        Test("Native Desktop discovery includes only this installation's children", () => {
+            string directory=Path.Combine(Path.GetTempPath(),"SmartDNS-Desktop-process-test-"+Guid.NewGuid().ToString("N"));
+            string backend=Path.Combine(directory,@"resources\bin\language_server.exe");
+            string other=Path.Combine(directory,@"other\language_server.exe");
+            string desktop=Path.Combine(directory,"Antigravity.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(backend));Directory.CreateDirectory(Path.GetDirectoryName(other));
+            string self=System.Reflection.Assembly.GetExecutingAssembly().Location;
+            foreach(string file in new[]{desktop,backend,other})File.Copy(self,file);
+            var children=new System.Collections.Generic.List<Process>();
+            IBrowserProcess[] captured=null;
+            try {
+                foreach(string file in new[]{desktop,backend,other})children.Add(Process.Start(new ProcessStartInfo(file,"--fixture-wait"+(file==desktop?" --type=renderer":"")){UseShellExecute=false,CreateNoWindow=true}));
+                captured=new WindowsBrowserSystem().Running(new BrowserChoice{Name="Antigravity",Exe=desktop});
+                Assert(captured.Length==2 && captured.All(p=>!p.HasWindow && !p.Exited),"Renderer/backend missing, unrelated process included, or background process classified as a window");
+            } finally {
+                if(captured!=null)foreach(var item in captured)item.Dispose();
+                // These exact Process objects were created above from our own test copy.
+                foreach(var child in children)using(child){if(!child.HasExited){child.Kill();child.WaitForExit(3000);}}
+                foreach(string file in new[]{desktop,backend,other})if(File.Exists(file))File.Delete(file);
+                Directory.Delete(Path.GetDirectoryName(backend));Directory.Delete(Path.Combine(directory,"resources"));Directory.Delete(Path.GetDirectoryName(other));Directory.Delete(directory);
+            }
         });
         Test("Invalid Antigravity settings and renderer processes are refused before close", () => {
             foreach(var command in new[]{"C:\\Apps\\Antigravity.exe --user-data-dir=relative", "C:\\Apps\\Antigravity.exe --user-data-dir=\\\\server\\profile", "C:\\Apps\\Antigravity.exe --type=renderer"})
