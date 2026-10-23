@@ -1,4 +1,4 @@
-> GeoHide и GeoHide EU временно отключены в Windows 2.23.5 и подготовленных исходниках Android 1.5.1. Доступность провайдеров для ПК и Android управляется общим файлом [providers.json](config/providers.json).
+> GeoHide и GeoHide EU временно отключены в Windows 2.23.5 и Android 1.5.1. Доступность провайдеров для ПК и Android управляется общим файлом [providers.json](config/providers.json).
 
 # Код Всего · Smart DNS
 
@@ -10,16 +10,16 @@
 
 MSI 2.23.5 при удалении восстанавливает DNS, DoH, IPv6 и изменения правил Antigravity, затем очищает настройки программы и кэш. При ошибке оставшиеся резервные копии сохраняются и удаление останавливается. Обновление через MSI очистку не запускает. [Как устроена очистка](docs/MSI.md).
 
-| Windows · MSI 2.23.5 | Android · APK 1.5.0 |
+| Windows · MSI 2.23.5 | Android · APK 1.5.1 |
 | :---: | :---: |
-| <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.5/KodVsego_SmartDNS.Setup.2.23.5.msi"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Windows — MSI 2.23.5"></a> | <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.0/KodVsego-SmartDNS-Android-1.5.0.apk"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Android — APK 1.5.0"></a> |
+| <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.5/KodVsego_SmartDNS.Setup.2.23.5.msi"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Windows — MSI 2.23.5"></a> | <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.1/KodVsego-SmartDNS-Android-1.5.1.apk"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Android — APK 1.5.1"></a> |
 
 | Платформа | Скачать | Требования |
 | --- | --- | --- |
 | Windows · установщик MSI 2.23.5 | [Скачать MSI](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.5/KodVsego_SmartDNS.Setup.2.23.5.msi) | Windows 10 2004+ / Windows 11, x64, .NET Framework 4.8 |
 | Windows · портативный ZIP 2.23.5 | [Скачать ZIP](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.5/KodVsego_SmartDNS.Portable.2.23.5.zip) | Те же требования; распаковать и запустить |
 | Windows · отдельный EXE 2.23.5 | [Скачать EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.5/KodVsego_SmartDNS.2.23.5.exe) | Windows 10 2004+ / Windows 11, .NET Framework 4.8 |
-| Android · APK 1.5.0, предварительная версия | [Скачать APK](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.0/KodVsego-SmartDNS-Android-1.5.0.apk) | Android 8.0+, без root |
+| Android · APK 1.5.1, предварительная версия | [Скачать APK](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.1/KodVsego-SmartDNS-Android-1.5.1.apk) | Android 8.0+, без root |
 
 [Канал «Код Всего» — @TotalC0de](https://t.me/TotalC0de) · [Поддержка — @TotalCodeAdmin](https://t.me/TotalCodeAdmin) · [Сообщить об ошибке](https://github.com/Kam300/KodVsego-SmartDNS/issues)
 
@@ -27,7 +27,7 @@ Smart DNS может помочь с доступом к сервисам, по�
 
 Ссылка канала содержит цифру **0**: https://t.me/TotalC0de. Поддержка — отдельный аккаунт @TotalCodeAdmin.
 
-**Windows 2.23.5:** отменена автоматическая подстройка DNS при смене сети и фоновое восстановление адаптеров. DNS меняется и восстанавливается по действию пользователя, как до test.3. Сохранены исправления DoH и интерфейса Antigravity. GeoHide и GeoHide EU временно отключены. Доступны установщик MSI, портативный ZIP и отдельный EXE. [Изменения выпуска](docs/releases/2.23.5.md). Режим [«Авто»](docs/AUTO.md) остаётся **beta (нестабильный)**. Android 1.5.0 остаётся отдельной предварительной версией; новый APK в этот Windows-релиз не входит.
+**Windows 2.23.5:** отменена автоматическая подстройка DNS при смене сети и фоновое восстановление адаптеров. DNS меняется и восстанавливается по действию пользователя, как до test.3. Сохранены исправления DoH и интерфейса Antigravity. GeoHide и GeoHide EU временно отключены. Доступны установщик MSI, портативный ZIP и отдельный EXE. [Изменения выпуска](docs/releases/2.23.5.md). Режим [«Авто»](docs/AUTO.md) остаётся **beta (нестабильный)**. Android 1.5.1 остаётся отдельной предварительной версией; новый APK в этот Windows-релиз не входит.
 
 Кнопка смены темы обновлена: векторные солнце и полумесяц со звездой, голубая подложка и отклик на наведение/нажатие.
 
@@ -55,13 +55,13 @@ Smart DNS может помочь с доступом к сервисам, по�
 
 ## На телефоне — Android
 
-**Подготовлена Android 1.5.1 (ещё не опубликована):** обновлён DNS-AI, провайдеры и домены проверок перенесены в общий каталог. 88 тестов прошли, Android Lint release — без замечаний. Для выпуска нужен прежний ключ подписи. [Передача выпуска второму разработчику](android/RELEASE_1.5.1.md). До публикации ссылки ниже ведут на 1.5.0.
+**Выпущена Android 1.5.1:** обновлён DNS-AI, MagicDNS поддерживает обычный DNS и DoH с проверками Antigravity; GeoHide и GeoHide EU временно отключены. Провайдеры и домены проверок берутся из общего каталога. 88 тестов прошли, Android Lint release — без замечаний. APK подписан прежним ключом; пакет и схема настроек сохранены. Установка поверх 1.5.0 и смена сетей на реальном телефоне не проверены. [Описание релиза](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/android-v1.5.1) · [Проверки выпуска](android/RELEASE_1.5.1.md).
 
 Начиная с Android 1.5.0 приложение автоматически проверяет GitHub при открытии или возвращении на экран (не чаще раза в час). Для нового APK появляется окно **«Доступно обновление» → «Обновить» / «Позже»**. Есть ручная кнопка «Проверить обновления». Загрузка начинается после согласия, установка подтверждается системным окном Android. [Как работают обновления и как выпускать APK](android/UPDATES.md).
 
 **Первый переход с 1.4.1 и более старых версий на актуальный APK нужно установить вручную**: в старых APK этой функции ещё нет.
 
-1. Скачайте `KodVsego-SmartDNS-Android-1.5.0.apk` из [Android-релиза](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/android-v1.5.0).
+1. Скачайте `KodVsego-SmartDNS-Android-1.5.1.apk` из [Android-релиза](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/android-v1.5.1).
 2. Откройте APK и разрешите установку из выбранного источника, если Android попросит.
 3. Выберите провайдера, обычный DNS или DoH и нажмите «Включить DNS».
 4. Подтвердите системный запрос VPN. Для постоянного отображения состояния разрешите уведомления.
@@ -85,7 +85,7 @@ Android-версия использует **локальный DNS-туннел�
 
 **В Android 1.3.0** выбор провайдера открывается в нижней панели с карточками, списком сервисов и отметкой текущего DNS. Увеличены отступы между действиями, скрыта полоса прокрутки и убран блок «Как работает на телефоне». Виджеты и сетевые настройки доступны отдельными кнопками. При нажатии на старт появляется короткая голубая волна, во время подключения — вращающийся индикатор.
 
-**Статус Android 1.5.0:** предварительная версия. Ядро, возврат из фона, клики, остановка и действия виджетов проверяются JUnit/Robolectric (Android 9 и 15), сборка — Android Lint. Подключённого телефона/эмулятора при разработке не было: системный диалог VPN, смена Wi-Fi/мобильной сети и реальный TUN на устройстве ещё требуют проверки. Это не подтверждение работоспособности на всех телефонах. [Устройство Android-версии и сборка](android/README.md).
+**Статус Android 1.5.1:** предварительная версия. Ядро, возврат из фона, клики, остановка и действия виджетов проверяются JUnit/Robolectric (Android 9 и 15), сборка — Android Lint. Подключённого телефона/эмулятора при разработке не было: системный диалог VPN, смена Wi-Fi/мобильной сети и реальный TUN на устройстве ещё требуют проверки. Это не подтверждение работоспособности на всех телефонах. [Устройство Android-версии и сборка](android/README.md).
 
 ## Провайдеры
 
