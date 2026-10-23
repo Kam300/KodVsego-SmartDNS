@@ -36,8 +36,8 @@ if (!$MsiPath) {
 $MsiPath=(Resolve-Path -LiteralPath $MsiPath).Path
 $database=$installer.OpenDatabase($MsiPath,0)
 $tables=@(Read-MsiRows $database 'SELECT `Name` FROM `_Tables`' 1 | ForEach-Object {$_.Values[0]})
-$customActions=@(); if ('CustomAction' -in $tables) { $customActions=@(Read-MsiRows $database 'SELECT `Action` FROM `CustomAction`' 1) }
-Check ($customActions.Count -eq 0) 'Package contains no custom actions, scripts or application launch actions'
+$customActions=@(); if ('CustomAction' -in $tables) { $customActions=@(Read-MsiRows $database 'SELECT `Action`, `Type`, `Source`, `Target` FROM `CustomAction`' 4) }
+Check ($customActions.Count -eq 1 -and $customActions[0].Values[0] -eq 'PrepareCleanUninstall' -and $customActions[0].Values[1] -eq '18' -and $customActions[0].Values[2] -eq 'SmartDNSExe' -and $customActions[0].Values[3] -eq '--prepare-uninstall [UILevel]') 'Only custom action is the installed application cleanup; no scripts, arbitrary paths or ignored failures'
 $allUsers=@(Read-MsiRows $database "SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = 'ALLUSERS'" 1)
 Check ($allUsers.Count -eq 0) 'Package is strictly per-user'
 $registry=@(Read-MsiRows $database 'SELECT `Root` FROM `Registry`' 1)
@@ -45,7 +45,12 @@ Check ($registry.Count -gt 0 -and @($registry|Where-Object {$_.Values[0] -ne '1'
 $files=@(Read-MsiRows $database 'SELECT `FileName` FROM `File`' 1 | ForEach-Object {$_.Values[0]})
 Check ($files.Count -eq 8 -and @($files|Where-Object {$_ -match '(?i)\.exe$'}).Count -eq 1 -and @($files|Where-Object {$_ -match 'SmartDNS.Msi.json$'}).Count -eq 1) 'Payload is one application, MSI marker, readme and five license files'
 $sequence=@(Read-MsiRows $database 'SELECT `Action`, `Sequence` FROM `InstallExecuteSequence`' 2)
+$cleanup=[int]($sequence|Where-Object {$_.Values[0] -eq 'PrepareCleanUninstall'}).Values[1]
+$validate=[int]($sequence|Where-Object {$_.Values[0] -eq 'InstallValidate'}).Values[1]
 $initialize=[int]($sequence|Where-Object {$_.Values[0] -eq 'InstallInitialize'}).Values[1]
+Check ($validate -lt $cleanup -and $cleanup -lt $initialize) 'Network recovery must finish before the file-removal transaction begins'
+$cleanupCondition=@(Read-MsiRows $database "SELECT ``Condition`` FROM ``InstallExecuteSequence`` WHERE ``Action`` = 'PrepareCleanUninstall'" 1)[0].Values[0]
+Check ($cleanupCondition -eq 'Installed AND REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE') 'Cleanup runs only during final uninstall, never install, repair or major upgrade'
 $remove=[int]($sequence|Where-Object {$_.Values[0] -eq 'RemoveExistingProducts'}).Values[1]
 $finalize=[int]($sequence|Where-Object {$_.Values[0] -eq 'InstallFinalize'}).Values[1]
 $installExecute=[int]($sequence|Where-Object {$_.Values[0] -eq 'InstallExecute'}).Values[1]
@@ -81,7 +86,7 @@ try {
         $directory=Join-Path $testRoot $testVersion; New-Item -ItemType Directory -Path $directory | Out-Null
         $source=Join-Path $directory 'Fixture.cs'; $exe=Join-Path $directory 'Fixture.exe'
         $fileVersion=(ConvertTo-MsiVersion $testVersion)+'.0'
-        $sourceText='using System; using System.IO; using System.Reflection; [assembly:AssemblyProduct("Smart DNS MSI Fixture")] [assembly:AssemblyVersion("2.23.2.0")] [assembly:AssemblyFileVersion("'+$fileVersion+'")] [assembly:AssemblyInformationalVersion("'+$testVersion+'")] static class Program { static void Main() { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"SHOULD-NOT-LAUNCH.txt"),"fixture was launched"); } }'
+        $sourceText='using System; using System.IO; using System.Reflection; [assembly:AssemblyProduct("Smart DNS MSI Fixture")] [assembly:AssemblyVersion("2.23.2.0")] [assembly:AssemblyFileVersion("'+$fileVersion+'")] [assembly:AssemblyInformationalVersion("'+$testVersion+'")] static class Program { static int Main(string[] args) { string root=AppDomain.CurrentDomain.BaseDirectory; if(args.Length==2 && args[0]=="--prepare-uninstall") { if(File.Exists(Path.Combine(root,"block-cleanup")))return 1; File.AppendAllText(Path.Combine(root,"cleanup-completed.txt"),"cleaned"); return 0; } File.WriteAllText(Path.Combine(root,"SHOULD-NOT-LAUNCH.txt"),"unexpected launch"); return 99; } }'
         [IO.File]::WriteAllText($source,$sourceText,[Text.Encoding]::ASCII)
         & $compiler /nologo /target:winexe ("/out:"+$exe) $source
         if ($LASTEXITCODE -ne 0) { throw 'MSI fixture compilation failed' }
@@ -117,7 +122,14 @@ try {
     $null=Run-Installer @('/i',('"'+$packages[3].File+'"')) 'upgrade-to-stable'
     Check (!(Installed $packages[1].ProductCode) -and (Installed $packages[3].ProductCode) -and (Get-FileHash -LiteralPath $installedExe).Hash.ToLowerInvariant() -eq $packages[3].SourceSHA256) 'Stable release replaces test build registration and executable bytes'
     Check (!(Test-Path -LiteralPath (Join-Path $installFolder 'SHOULD-NOT-LAUNCH.txt'))) 'Install, repair and upgrade never launch the application'
+    $cleanupMarker=Join-Path $installFolder 'cleanup-completed.txt'
+    Check (!(Test-Path -LiteralPath $cleanupMarker)) 'Install, repair and major upgrades never invoke cleanup'
+    $blockCleanup=Join-Path $installFolder 'block-cleanup';[IO.File]::WriteAllText($blockCleanup,'controlled recovery failure')
+    $failedRemoval=Run-Installer @('/x',$packages[3].ProductCode) 'blocked-uninstall' $false
+    Check ($failedRemoval -eq 1603 -and (Installed $packages[3].ProductCode) -and (Get-FileHash -LiteralPath $installedExe).Hash.ToLowerInvariant() -eq $packages[3].SourceSHA256 -and (Test-Path -LiteralPath $shortcut) -and !(Test-Path -LiteralPath $cleanupMarker)) 'Recovery failure aborts uninstall before any program files or shortcut are removed'
+    Remove-Item -LiteralPath $blockCleanup
     $null=Run-Installer @('/x',$packages[3].ProductCode) 'uninstall'
+    Check ((Test-Path -LiteralPath $cleanupMarker) -and [IO.File]::ReadAllText($cleanupMarker) -eq 'cleaned') 'Uninstall invokes cleanup exactly once before removing its executable'
     Check (!(Installed $packages[3].ProductCode) -and !(Test-Path -LiteralPath $installedExe) -and !(Test-Path -LiteralPath $shortcut)) 'Uninstall removes owned files, shortcut and product registration'
     Check ((Test-Path -LiteralPath $keep) -and [IO.File]::ReadAllText($keep) -eq 'unrelated user data') 'Uninstall preserves unrelated user files'
 } finally {

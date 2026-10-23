@@ -10,7 +10,7 @@
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
     <Property Id="ARPHELPLINK" Value="https://github.com/Kam300/KodVsego-SmartDNS/issues" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/Kam300/KodVsego-SmartDNS" />
-    <Property Id="ARPCOMMENTS" Value="Версия программы $(var.AppVersion). Обновляйте эту копию через MSI. Удаление не меняет DNS и не удаляет резервные копии настроек." />
+    <Property Id="ARPCOMMENTS" Value="Версия программы $(var.AppVersion). При удалении восстанавливаются прежние настройки сети и очищаются настройки приложения и кэш." />
     <Property Id="ARPNOMODIFY" Value="1" />
     <Property Id="INSTALLFOLDER">
       <RegistrySearch Id="PreviousInstallFolder" Root="HKCU" Key="$(var.RegistryBase)"
@@ -85,6 +85,16 @@
       <ComponentRef Id="UpstreamLicense" /><ComponentRef Id="StartMenuShortcut" />
     </Feature>
 
+    <!-- A prerequisite outside the file-removal transaction: restoration must
+         succeed before MSI can remove the only remaining recovery executable.
+         Upgrades and repairs must never run this action. -->
+    <CustomAction Id="PrepareCleanUninstall" FileRef="SmartDNSExe"
+                  ExeCommand="--prepare-uninstall [UILevel]" Execute="immediate" Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="PrepareCleanUninstall" After="InstallValidate"
+              Condition="Installed AND REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+
     <UI>
       <TextStyle Id="NormalFont" FaceName="Segoe UI" Size="9" />
       <TextStyle Id="TitleFont" FaceName="Segoe UI" Size="13" Bold="yes" />
@@ -106,7 +116,7 @@
       </Dialog>
       <Dialog Id="MaintenanceDlg" Width="390" Height="230" Title="$(var.ProductName)">
         <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Изменение установки" />
-        <Control Id="Explanation" Type="Text" X="18" Y="50" Width="354" Height="36" Text="Закройте Smart DNS перед продолжением. Удаление программы не меняет DNS и сохраняет настройки." />
+        <Control Id="Explanation" Type="Text" X="18" Y="50" Width="354" Height="36" Text="При удалении прежние DNS, DoH и IPv6 восстанавливаются, настройки и кэш удаляются. Подтвердите запрос Windows, если он появится." />
         <Control Id="Choice" Type="RadioButtonGroup" X="18" Y="96" Width="354" Height="60" Property="MAINTENANCE">
           <RadioButtonGroup Property="MAINTENANCE">
             <RadioButton Value="repair" X="0" Y="0" Width="340" Height="20" Text="Восстановить файлы программы" />
@@ -122,8 +132,8 @@
         </Control>
       </Dialog>
       <Dialog Id="ProgressDlg" Width="390" Height="165" Title="Smart DNS — установка" Modeless="yes">
-        <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Выполняется установка" />
-        <Control Id="Note" Type="Text" X="18" Y="50" Width="354" Height="34" Text="Windows устанавливает файлы программы. Настройки DNS не меняются." />
+        <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Выполняется операция" />
+        <Control Id="Note" Type="Text" X="18" Y="50" Width="354" Height="34" Text="При удалении сеть восстанавливается и настройки очищаются. Установка и обновление DNS не меняют." />
         <Control Id="Progress" Type="ProgressBar" X="18" Y="95" Width="354" Height="18" ProgressBlocks="yes"><Subscribe Event="SetProgress" Attribute="Progress" /></Control>
         <Control Id="Cancel" Type="PushButton" X="294" Y="130" Width="78" Height="22" Cancel="yes" Text="Отмена"><Publish Event="SpawnDialog" Value="CancelDlg" /></Control>
       </Dialog>
@@ -134,7 +144,7 @@
       </Dialog>
       <Dialog Id="ExitDlg" Width="390" Height="205" Title="Smart DNS">
         <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Готово" />
-        <Control Id="Note" Type="Text" X="18" Y="55" Width="354" Height="85" Text="Операция завершена. Для запуска используйте ярлык в меню «Пуск». Перед удалением программы выключите DNS в ней, если хотите восстановить прежние сетевые настройки." />
+        <Control Id="Note" Type="Text" X="18" Y="55" Width="354" Height="85" Text="Операция завершена. После установки приложение доступно в меню «Пуск». При удалении прежние настройки сети восстанавливаются автоматически; настройки программы и кэш очищаются." />
         <Control Id="Finish" Type="PushButton" X="294" Y="165" Width="78" Height="22" Default="yes" Cancel="yes" Text="Закрыть"><Publish Event="EndDialog" Value="Return" /></Control>
       </Dialog>
       <InstallUISequence>

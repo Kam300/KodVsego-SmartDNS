@@ -92,6 +92,7 @@ namespace HbAi.XboxDns
             if (enable && set >= 200 && set < 200 + V4.Length) return EncryptedDns.Run(set - 200);
             if (enable && set >= 100 && set < 100 + AntigravityDns.ServerSets.Length * 2) return AntigravityDns.Run(true, set % 2 == 1, (set - 100) / 2);
             if (!enable && set == 3) return AgCleanup.Run();
+            if (!enable && set == UninstallCleanup.RestoreOperation) return UninstallCleanup.RestoreNetworkDirect();
             if (!enable && set == 2) return AntigravityDns.Run(false);
             if (enable && (set < 0 || set >= V4.Length)) return "Неизвестный DNS-провайдер.";
             if (!enable && set != 0 && set != 1) return "Неизвестная операция DNS.";
@@ -1690,6 +1691,7 @@ namespace HbAi.XboxDns
                 return 3;
             }
             if (args.Length == 1 && args[0] == "--install-update") return AppUpdate.Install();
+            if (args.Length > 0 && args[0] == "--prepare-uninstall") return UninstallCleanup.Handle(args);
             if (args.Length != 0) return DnsElevation.Handle(args, Dns.ExecuteDirect);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);

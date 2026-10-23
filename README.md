@@ -8,6 +8,8 @@
 
 Перед установкой или обновлением через [MSI](docs/MSI.md) закройте работающую копию Smart DNS. MSI-копия обновляется новым MSI; встроенная проверка открывает страницу релиза.
 
+MSI 2.23.2 при удалении восстанавливает DNS, DoH, IPv6 и изменения правил Antigravity, затем очищает настройки программы и кэш. При ошибке оставшиеся резервные копии сохраняются и удаление останавливается. Обновление через MSI очистку не запускает. [Как устроена очистка](docs/MSI.md).
+
 | Windows · MSI 2.23.2 | Android · APK 1.5.0 |
 | :---: | :---: |
 | <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.2/KodVsego_SmartDNS.Setup.2.23.2.msi"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Windows — MSI 2.23.2"></a> | <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.0/KodVsego-SmartDNS-Android-1.5.0.apk"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Android — APK 1.5.0"></a> |
@@ -107,7 +109,7 @@ Android-версия использует **локальный DNS-туннел�
 build.bat
 ```
 
-Результат: `KodVsego_SmartDNS.2.23.2.exe`. Используется системный компилятор .NET Framework; зависимости не скачиваются. Готовый релиз собирается через `build-distribution.ps1` с проверенным Microsoft Roslyn; [состав пакетов и проверки](docs/DISTRIBUTION.md).
+Результат из текущих исходников: `KodVsego_SmartDNS.2.23.2.exe`. Используется системный компилятор .NET Framework; зависимости не скачиваются. Готовый релиз собирается через `build-distribution.ps1` с проверенным Microsoft Roslyn; [состав пакетов и проверки](docs/DISTRIBUTION.md).
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run.ps1
