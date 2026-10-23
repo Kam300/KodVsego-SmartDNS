@@ -153,12 +153,15 @@ namespace HbAi.XboxDns
         internal const string Tag = "KodVsego.SmartDNS.Antigravity.v1";
         internal const string Title = "Код Всего · Antigravity DNS";
         internal static readonly string[] Domains = { "cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com" };
-        internal static readonly string[] ProviderNames = { "GeoHide", "Comss.one", "GeoHide EU", "Bezmezhau" };
+        internal static readonly string[] ProviderNames = { "GeoHide", "Comss.one", "GeoHide EU", "Bezmezhau", "MagicDNS" };
+        // Append only: saved rules and elevated operation IDs use this historical order.
+        static readonly int[] MainSets = { 1, 0, 2, 4, 6 };
         internal static readonly string[][] ServerSets = {
             new[] { "159.194.200.33", "193.233.112.67" },
             new[] { "83.220.169.155", "212.109.195.93" },
             new[] { "143.20.64.192", "45.13.237.213" },
-            new[] { "143.20.64.55", "31.58.216.201" } };
+            new[] { "143.20.64.55", "31.58.216.201" },
+            ProviderCatalog.All[6].ipv4 };
         [ThreadStatic] static int? selectedProvider;
         internal static string[] Servers { get { return ServerSets[selectedProvider ?? 0]; } }
         sealed class ProviderScope : IDisposable
@@ -174,7 +177,8 @@ namespace HbAi.XboxDns
         }
         // Retain the historical Comss slot for identifying/restoring existing rules,
         // but do not offer new activations: coverage of both API hosts is unconfirmed.
-        internal static int ProviderForMainSet(int set) { return set == 1 ? 0 : set == 2 ? 2 : set == 4 ? 3 : -1; }
+        internal static int ProviderForMainSet(int set)
+        { return Dns.IsAvailable(set) && set != 0 ? Array.IndexOf(MainSets, set) : -1; }
         static int DetectProvider(AgRule[] rules)
         {
             for (int provider = 0; provider < ServerSets.Length; provider++)
@@ -183,7 +187,8 @@ namespace HbAi.XboxDns
         }
         internal static bool Owned(AgRule rule)
         {
-            return rule.Comment == Tag && rule.DisplayName == Title && !string.IsNullOrEmpty(rule.Id) &&
+            Guid id;
+            return rule.Comment == Tag && rule.DisplayName == Title && Guid.TryParse(rule.Id, out id) &&
                 rule.Names != null && rule.Names.Length == 1 && Domains.Contains(rule.Names[0]);
         }
         internal static bool Matches(string pattern, string domain)
@@ -269,7 +274,7 @@ namespace HbAi.XboxDns
         }
         internal static string Run(bool enable, bool force = false, int provider = 0)
         {
-            if(enable&&provider>=0&&provider<ProviderNames.Length&&!Dns.IsAvailable(new[]{1,0,2,4}[provider]))return "Провайдер временно недоступен. Выберите другой DNS для Antigravity.";
+            if(enable&&provider>=0&&provider<MainSets.Length&&!Dns.IsAvailable(MainSets[provider]))return "Провайдер временно недоступен. Выберите другой DNS для Antigravity.";
             if (enable && provider == 1) return "Comss пока отключён для доп. DNS Antigravity: работа обоих API-доменов не подтверждена. Выберите другой DNS. Общий DNS Comss остаётся доступен.";
             using (UseProvider(provider))
             using (var mutex = new Mutex(false, @"Global\KodVsego.SmartDns.Antigravity"))

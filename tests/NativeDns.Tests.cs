@@ -126,12 +126,14 @@ static class NativeDnsTests
             new DnsSettingsEngine(system, store).Change(false, new string[0]);
             Original(); Assert(system.Ipv6Enabled, "IPv6 binding not restored");
         });
-        Test("DNS-AI uses encrypted settings for both addresses and restores originals", () => {
-            system.CaptureDoh=true;
-            engine.Change(true,EncryptedDns.ServersFor(5),EncryptedDns.Templates[5]);
-            Assert(system.Values[system.Id+"/IPv4"].SequenceEqual(Dns.V4[5]),"Wrong DNS-AI addresses");
-            Assert(system.Encryption[system.Id+"/IPv4"].Length==2 && system.Encryption[system.Id+"/IPv4"].All(d=>d.Flags==2 && d.Template==EncryptedDns.Templates[5]),"Unencrypted DNS-AI configured");
-            engine.Change(false,new string[0]);Original();Assert(system.Ipv6Enabled,"IPv6 not restored");
+        Test("DNS-AI and MagicDNS use strict encryption for both addresses and restore originals", () => {
+            foreach(int provider in new[]{5,6}) {
+                system.CaptureDoh=true;
+                engine.Change(true,EncryptedDns.ServersFor(provider),EncryptedDns.Templates[provider]);
+                Assert(system.Values[system.Id+"/IPv4"].SequenceEqual(Dns.V4[provider]),"Wrong provider addresses");
+                Assert(system.Encryption[system.Id+"/IPv4"].Length==2 && system.Encryption[system.Id+"/IPv4"].All(d=>d.Flags==2 && d.Template==EncryptedDns.Templates[provider]),"Plaintext fallback configured");
+                engine.Change(false,new string[0]);Original();Assert(system.Ipv6Enabled,"IPv6 not restored");
+            }
         });
         Test("Moving from retired DNS-AI addresses preserves the original backup", () => {
             system.CaptureDoh=true;

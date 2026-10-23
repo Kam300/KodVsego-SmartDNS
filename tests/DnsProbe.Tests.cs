@@ -50,6 +50,10 @@ static class ProbeTests
         Check(Dns.MatchProvider(new[]{"194.87.196.13","186.246.49.127"})==5 && Dns.KnownServers.Contains("186.246.49.127"),"Retired DNS-AI pair remains recognized and recoverable");
         Check(!EncryptedDns.ServersFor(5).Contains("186.246.49.127") && Dns.MatchProvider(new[]{"186.246.49.127","45.151.102.219"})==-1 && Dns.MatchProvider(new[]{"186.246.49.127"})==-1,"Retired address is never newly applied; partial and mixed legacy sets are not attributed to DNS-AI");
         Check(Dns.Name[6]=="MagicDNS" && Dns.V4[6].SequenceEqual(new[]{"109.120.132.43","94.249.177.102"}) && EncryptedDns.Templates[6]=="https://dns.magicdns.ru/dns-query" && !Dns.EncryptedOnly(6), "MagicDNS supports published plain and HTTPS endpoints");
+        var magicSecure=new FamilyBackup{Family="IPv4",Manual=true,Servers=EncryptedDns.ServersFor(6),DohCaptured=true,Doh=EncryptedDns.Strict(2,EncryptedDns.Templates[6])};
+        Check(magicSecure.Servers.SequenceEqual(Dns.V4[6])&&EncryptedDns.ExplicitlyConfigured(magicSecure,6),"MagicDNS configures strict DoH for both published servers");
+        magicSecure.Doh[1].Flags=6;
+        Check(!EncryptedDns.ExplicitlyConfigured(magicSecure,6),"MagicDNS with plaintext fallback is not reported as strict DoH");
         Check(new[]{Dns.V4.Length,Dns.V6.Length,Dns.Site.Length,Dns.Url.Length,Dns.Opens.Length,EncryptedDns.Templates.Length}.All(n=>n==Dns.Name.Length), "Provider metadata stays aligned for DNS changes and restoration");
         Check(DnsProbe.Targets(5).SequenceEqual(new[]{EncryptedDns.Templates[5]}), "DNS-AI tests target HTTPS only, not port 53");
         Check(DnsProbe.HostsForProvider(5).Contains("gemini.google.com") && DnsProbe.HostsForProvider(5).Contains("generativelanguage.googleapis.com"), "DNS-AI checks both Gemini website and API");
@@ -107,7 +111,7 @@ static class ProbeTests
         {
             var hosts = DnsProbe.HostsForProvider(k);
             Check(hosts.Contains("example.com") && hosts.Distinct().Count() == hosts.Length, Dns.Name[k] + " has a unique test suite and baseline");
-            Check(k == 3 ? hosts.Contains("xsts.auth.xboxlive.com") && !hosts.Contains("claude.ai") : k == 6 ? hosts.Contains("gemini.google.com") && hosts.Contains("claude.ai") && !hosts.Contains("cloudcode-pa.googleapis.com") : hosts.Contains("cloudcode-pa.googleapis.com"), Dns.Name[k] + " tests its intended services");
+            Check(k == 3 ? hosts.Contains("xsts.auth.xboxlive.com") && !hosts.Contains("claude.ai") : k == 6 ? hosts.Contains("gemini.google.com") && hosts.Contains("claude.ai") && AntigravityDns.Domains.All(hosts.Contains) : hosts.Contains("cloudcode-pa.googleapis.com"), Dns.Name[k] + " tests its intended services");
             var results = DnsProbe.CheckProvider(k, (server,host) => new DnsProbeResult {Server=server,Host=host,Milliseconds=12,Error=host=="example.com"?null:"simulated failure"});
             Check(results.Length == hosts.Length * DnsProbe.Targets(k).Length && DnsProbe.Targets(k).All(server => results.Count(r=>r.Server==server) == hosts.Length), Dns.Name[k] + " tests every host on each selected transport target");
             string report = DnsProbe.Report(k,results);

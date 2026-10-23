@@ -30,6 +30,12 @@ android {
         }
     }
     buildTypes {
+        preview {
+            initWith debug
+            applicationIdSuffix '.test'
+            versionNameSuffix '-test.1'
+            matchingFallbacks = ['debug']
+        }
         release {
             minifyEnabled false
             if (signingFile.exists()) signingConfig signingConfigs.release

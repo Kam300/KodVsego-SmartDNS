@@ -95,8 +95,10 @@ namespace HbAi.XboxDns
         }
         internal static AgRule Parse(string id, Func<string, object> value)
         {
-            Guid guid;
-            if (!Guid.TryParse(id, out guid)) throw new InvalidDataException("Неизвестный идентификатор правила NRPT.");
+            // Foreign entries can have a named registry key rather than a GUID.
+            // Keep them visible for conflict checks; mutation/backup ownership stays GUID-only.
+            if (string.IsNullOrWhiteSpace(id) || id.Length > 255 || id.IndexOf('\\') >= 0 || id.Any(char.IsControl))
+                throw new InvalidDataException("Неизвестный идентификатор правила NRPT.");
             var names = value("Name") as string[];
             if (names == null || names.Length == 0 || names.Any(string.IsNullOrWhiteSpace))
                 throw new InvalidDataException("Не удалось прочитать домены правила NRPT: " + id);

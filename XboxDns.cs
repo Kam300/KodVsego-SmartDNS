@@ -1,4 +1,4 @@
-﻿// HB AI · Smart DNS — переключатель Smart DNS (Comss.one, GeoHide, xbox-dns.ru) в стиле сообщества «Нейросети и AI на практике».
+// HB AI · Smart DNS — переключатель Smart DNS (Comss.one, GeoHide, xbox-dns.ru) в стиле сообщества «Нейросети и AI на практике».
 // Сборка: build.bat (csc из .NET Framework 4, есть в каждой Windows 10/11).
 using System;
 using System.Collections.Generic;
@@ -1053,7 +1053,7 @@ namespace HbAi.XboxDns
                     agStatus.RecoveryNeeded ? "Снимите галочку: завершить восстановление" : agStatus.External ? "Есть правила другой программы" : agStatus.Checked ?
                     (agStatus.Complete ? (agStatus.Provider == 1 ? "Comss: смените DNS" : "Включено · " + (agStatus.Provider >= 0 ? AntigravityDns.ProviderNames[agStatus.Provider] : "DNS")) +
                         (agStatus.Provider != AntigravityDns.ProviderForMainSet(dnsSet) ? " · смена после отключения" : "") : "Включено частично · снимите для отмены") :
-                    (cleanupDone ? "Старые правила удалены" : secureDns ? "" : dnsSet == 0 ? "Comss для этой опции отключён" : dnsSet == 3 ? "Выберите DNS для нейросетей выше" : dnsSet == 6 ? "Отдельные правила для MagicDNS недоступны" : "Будет использован: " + Dns.Name[dnsSet]);
+                    (cleanupDone ? "Старые правила удалены" : !Dns.IsAvailable(dnsSet) ? "Провайдер отключён · выберите другой DNS" : secureDns ? "С шифрованием — через общий DoH" : dnsSet == 0 ? "Comss для этой опции отключён" : dnsSet == 3 ? "Выберите DNS для нейросетей выше" : "Будет использован: " + Dns.Name[dnsSet]);
                 bool showCleanup = agStatus.External;
                 using (var format = new StringFormat { FormatFlags = StringFormatFlags.NoWrap, Trimming = StringTrimming.EllipsisCharacter })
                     g.DrawString(string.IsNullOrEmpty(note)?"Может помочь при ошибке 400 в Antigravity":note, body, muted, new RectangleF(76, LowerY(788), showCleanup ? W-242 : W-120, 22), format);
@@ -1194,7 +1194,7 @@ namespace HbAi.XboxDns
                 if (EncryptedDns.Templates[dnsSet] == null) return;
                 if (busy) return;
                 if (Dns.EncryptedOnly(dnsSet)) { ShowMessage("DNS-AI работает только через зашифрованный DNS. Шифрование для него обязательно.", "DNS-AI", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-                if (!secureDns && EncryptedDns.Templates[dnsSet] == null) { ShowMessage("Выберите Comss.one, GeoHide, Bezmezhau, DNS-AI или MagicDNS. Для остальных провайдеров параметры системного DoH пока не подтверждены.", "Зашифрованный DNS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+                if (!secureDns && EncryptedDns.Templates[dnsSet] == null) { ShowMessage("Выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS. Для остальных провайдеров параметры системного DoH пока не подтверждены.", "Зашифрованный DNS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
                 if (active) Apply(true, null, false, !secureDns); else { secureDns = !secureDns; Invalidate(); }
                 return;
             }
@@ -1318,6 +1318,7 @@ namespace HbAi.XboxDns
         void CheckDnsServers()
         {
             if (probing) return;
+            if (!Dns.IsAvailable(dnsSet)) { probeLabels[dnsSet] = "Провайдер отключён · выберите другой DNS"; Invalidate(); return; }
             if (secureDns || Dns.EncryptedOnly(dnsSet)) { probeLabels = Enumerable.Repeat("Режим DoH · тест через HTTPS", Dns.Name.Length).ToArray(); Invalidate(); return; }
             if (!networkAvailable) { probeLabels = Enumerable.Repeat("Нет сетевого подключения", Dns.Name.Length).ToArray(); Invalidate(); return; }
             if (liveVpn.NeedsAttention)
@@ -1434,7 +1435,7 @@ namespace HbAi.XboxDns
         void RunDnsTest(StyledDialog dialog, int provider)
         {
             bool encrypted = secureDns || Dns.EncryptedOnly(provider);
-            if (encrypted && EncryptedDns.Templates[provider] == null) { dialog.ShowDnsTestStatus("Для этого провайдера HTTPS-тест пока недоступен. Выберите Comss.one, GeoHide, Bezmezhau, DNS-AI или MagicDNS. Обычные DNS-запросы не отправлялись.", "Нет параметров DoH", false, true); return; }
+            if (encrypted && EncryptedDns.Templates[provider] == null) { dialog.ShowDnsTestStatus("Для этого провайдера HTTPS-тест пока недоступен. Выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS. Обычные DNS-запросы не отправлялись.", "Нет параметров DoH", false, true); return; }
             if (!NetworkCheck.HasConnection()) { dialog.ShowDnsTestStatus(NetworkCheck.OfflineMessage, "Нет подключения", false, true); return; }
             var vpn = VpnCheck.Scan();
             if (vpn.NeedsAttention)
@@ -1522,15 +1523,15 @@ namespace HbAi.XboxDns
         {
             if (busy || agLoading) return;
             bool enable = !agStatus.Checked;
-            if (enable && active && secureDns) {
+            if (enable && secureDns) {
                 if (agStatus.External) RemoveOldAntigravity();
-                else ShowMessage("В режиме DoH отдельная галочка DNS не нужна. Ошибка 400 может требовать другого маршрута подключения, а не смены DNS.", "Режим DoH", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                else ShowMessage(active ? "Antigravity использует общий DoH. Отдельная галочка DNS не нужна." : "Для шифрованного подключения Antigravity включите DNS большой кнопкой. Будет использован выбранный DoH без отдельных DNS-правил.", "Режим DoH", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             int provider = AntigravityDns.ProviderForMainSet(dnsSet);
             if (enable && agStatus.Error == null && provider < 0)
             {
-                ShowMessage(Dns.EncryptedOnly(dnsSet) ? "DNS-AI используется через общий DoH. Включите его большой кнопкой. Отдельные DNS-правила Antigravity для него не создаются." : dnsSet == 0 ? "Comss для доп. DNS Antigravity пока отключён. Выберите другой DNS выше. Общий DNS Comss остаётся доступен." : "Для Antigravity выберите выше Bezmezhau. Xbox DNS предназначен для Xbox.",
+                ShowMessage(Dns.EncryptedOnly(dnsSet) ? "DNS-AI используется через общий DoH. Включите его большой кнопкой. Отдельные DNS-правила Antigravity для него не создаются." : dnsSet == 0 ? "Comss для доп. DNS Antigravity пока отключён. Выберите другой DNS выше. Общий DNS Comss остаётся доступен." : "Для Antigravity выберите выше MagicDNS или Bezmezhau. Xbox DNS предназначен для Xbox.",
                     "Выберите DNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -1585,7 +1586,7 @@ namespace HbAi.XboxDns
             int requestedSet = selectedSet ?? dnsSet;
             if(turnOn&&!Dns.IsAvailable(requestedSet)){ShowMessage("Этот провайдер временно скрыт. Выберите другой DNS.","Провайдер недоступен",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
             bool useEncrypted = (encrypted ?? secureDns) || Dns.EncryptedOnly(requestedSet);
-            if (turnOn && useEncrypted && EncryptedDns.Templates[requestedSet] == null) { ShowMessage("Для DoH выберите Comss.one, GeoHide, Bezmezhau, DNS-AI или MagicDNS либо снимите галочку шифрования.", "DoH недоступен", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+            if (turnOn && useEncrypted && EncryptedDns.Templates[requestedSet] == null) { ShowMessage("Для DoH выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS либо снимите галочку шифрования.", "DoH недоступен", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
             bool keepAntigravity = false;
             if (turnOn)
             {

@@ -107,7 +107,11 @@ static class UiPerformanceTests
             form.ScrollProviderPage(-1);form.ScrollProviderPage(-1);
             Check((int)Get(form,"providerScroll")==0,"Backward paging stops at first provider");
             var segments=(Rectangle[])Get(form,"rSeg");
-            Check(!segments[1].IsEmpty&&!segments[2].IsEmpty&&segments[1].Left==segments[0].Right&&segments[2].Left==segments[1].Right,"Restored GeoHide tiles have consecutive hit areas");
+            Check(segments[1].IsEmpty&&segments[2].IsEmpty&&segments[3].Left==segments[0].Right&&segments[4].Left==segments[3].Right,"Disabled GeoHide tiles have no hit areas or gaps in the provider bar");
+            Set(form,"dnsSet",1);
+            typeof(MainForm).GetMethod("CheckDnsServers",flags).Invoke(form,null);
+            Check(!(bool)Get(form,"probing")&&((string[])Get(form,"probeLabels"))[1].Contains("отключён"),"A still-configured disabled provider is not queried in the background");
+            Set(form,"dnsSet",selected);
             var viewport=(Rectangle)Get(form,"providerViewport");
             Check(!viewport.IntersectsWith((Rectangle)Get(form,"providerPrevious"))&&!viewport.IntersectsWith((Rectangle)Get(form,"providerNext"))&&viewport.Width==3*108,"Three full provider tiles fit between separate arrow hit areas");
             Set(form, "busy", true);

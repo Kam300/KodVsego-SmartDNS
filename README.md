@@ -1,4 +1,4 @@
-> GeoHide и GeoHide EU включены. Доступность провайдеров для ПК и Android управляется общим файлом [providers.json](config/providers.json).
+> GeoHide и GeoHide EU временно отключены в Windows 2.23.3 и подготовленных исходниках Android 1.5.1. Доступность провайдеров для ПК и Android управляется общим файлом [providers.json](config/providers.json).
 
 # Код Всего · Smart DNS
 
@@ -8,17 +8,17 @@
 
 Перед установкой или обновлением через [MSI](docs/MSI.md) закройте работающую копию Smart DNS. MSI-копия обновляется новым MSI; встроенная проверка открывает страницу релиза.
 
-MSI 2.23.2 при удалении восстанавливает DNS, DoH, IPv6 и изменения правил Antigravity, затем очищает настройки программы и кэш. При ошибке оставшиеся резервные копии сохраняются и удаление останавливается. Обновление через MSI очистку не запускает. [Как устроена очистка](docs/MSI.md).
+MSI 2.23.3 при удалении восстанавливает DNS, DoH, IPv6 и изменения правил Antigravity, затем очищает настройки программы и кэш. При ошибке оставшиеся резервные копии сохраняются и удаление останавливается. Обновление через MSI очистку не запускает. [Как устроена очистка](docs/MSI.md).
 
-| Windows · MSI 2.23.2 | Android · APK 1.5.0 |
+| Windows · MSI 2.23.3 | Android · APK 1.5.0 |
 | :---: | :---: |
-| <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.2/KodVsego_SmartDNS.Setup.2.23.2.msi"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Windows — MSI 2.23.2"></a> | <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.0/KodVsego-SmartDNS-Android-1.5.0.apk"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Android — APK 1.5.0"></a> |
+| <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.3/KodVsego_SmartDNS.Setup.2.23.3.msi"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Windows — MSI 2.23.3"></a> | <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.0/KodVsego-SmartDNS-Android-1.5.0.apk"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Android — APK 1.5.0"></a> |
 
 | Платформа | Скачать | Требования |
 | --- | --- | --- |
-| Windows · установщик MSI 2.23.2 | [Скачать MSI](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.2/KodVsego_SmartDNS.Setup.2.23.2.msi) | Windows 10 2004+ / Windows 11, x64, .NET Framework 4.8 |
-| Windows · портативный ZIP 2.23.2 | [Скачать ZIP](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.2/KodVsego_SmartDNS.Portable.2.23.2.zip) | Те же требования; распаковать и запустить |
-| Windows · отдельный EXE 2.23.2 | [Скачать EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.2/KodVsego_SmartDNS.2.23.2.exe) | Windows 10 2004+ / Windows 11, .NET Framework 4.8 |
+| Windows · установщик MSI 2.23.3 | [Скачать MSI](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.3/KodVsego_SmartDNS.Setup.2.23.3.msi) | Windows 10 2004+ / Windows 11, x64, .NET Framework 4.8 |
+| Windows · портативный ZIP 2.23.3 | [Скачать ZIP](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.3/KodVsego_SmartDNS.Portable.2.23.3.zip) | Те же требования; распаковать и запустить |
+| Windows · отдельный EXE 2.23.3 | [Скачать EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.3/KodVsego_SmartDNS.2.23.3.exe) | Windows 10 2004+ / Windows 11, .NET Framework 4.8 |
 | Android · APK 1.5.0, предварительная версия | [Скачать APK](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.0/KodVsego-SmartDNS-Android-1.5.0.apk) | Android 8.0+, без root |
 
 [Канал «Код Всего» — @TotalC0de](https://t.me/TotalC0de) · [Поддержка — @TotalCodeAdmin](https://t.me/TotalCodeAdmin) · [Сообщить об ошибке](https://github.com/Kam300/KodVsego-SmartDNS/issues)
@@ -27,7 +27,7 @@ Smart DNS может помочь с доступом к сервисам, по�
 
 Ссылка канала содержит цифру **0**: https://t.me/TotalC0de. Поддержка — отдельный аккаунт @TotalCodeAdmin.
 
-**Windows 2.23.2:** основной установщик MSI, портативный ZIP, компактные окна тестов и ошибок. Провайдеры Windows/Android описываются общим [каталогом](docs/PROVIDERS.md), где разработчик может добавлять DNS и временно скрывать провайдеров. Обновлены адреса DNS-AI; его проверки на ПК временно пропускают неответивший адрес после сетевого сбоя. Усилены проверки скачанного EXE перед обновлением; MSI-копия направляет на страницу релиза. Сохранены настройки сервиса по умолчанию, ссылки поддержки и переход на новую версию при повторном запуске. Режим [«Авто»](docs/AUTO.md) остаётся **beta (нестабильный)**. Android 1.5.0 сохраняется отдельной предварительной версией; новый APK в этот Windows-релиз не входит.
+**Windows 2.23.3:** MagicDNS для Antigravity и автоподбора, обычный DNS и DoH. GeoHide и GeoHide EU временно отключены. Исправлены перезапуск Antigravity Desktop и чтение сторонних DNS-правил. Доступны установщик MSI, портативный ZIP и отдельный EXE. [Изменения выпуска](docs/releases/2.23.3.md). Режим [«Авто»](docs/AUTO.md) остаётся **beta (нестабильный)**. Android 1.5.0 остаётся отдельной предварительной версией; новый APK в этот Windows-релиз не входит.
 
 Кнопка смены темы обновлена: векторные солнце и полумесяц со звездой, голубая подложка и отклик на наведение/нажатие.
 
@@ -92,16 +92,16 @@ Android-версия использует **локальный DNS-туннел�
 | Провайдер | Обычный DNS IPv4 | DoH |
 | --- | --- | --- |
 | Comss.one | `83.220.169.155`, `212.109.195.93` | `https://dns.comss.one/dns-query` |
-| GeoHide | `159.194.200.33`, `193.233.112.67` | `https://geohide.ru/dns-query` |
-| GeoHide EU | `143.20.64.192`, `45.13.237.213` | Нет настроенного endpoint |
+| GeoHide (отключён) | `159.194.200.33`, `193.233.112.67` | `https://geohide.ru/dns-query` |
+| GeoHide EU (отключён) | `143.20.64.192`, `45.13.237.213` | Нет настроенного endpoint |
 | Xbox DNS | `111.88.96.54`, `111.88.96.55` | Нет настроенного endpoint |
 | Bezmezhau | `143.20.64.55`, `31.58.216.201` | `https://dns.bezmezhau.com/dns-query` |
 | MagicDNS | `109.120.132.43`, `94.249.177.102` | `https://dns.magicdns.ru/dns-query` |
 | DNS-AI | Только DoH; Windows использует `194.87.196.13`, `45.151.102.219` | `https://dns.dns-ai.ru/dns-query` |
 
-Для системного DoH Comss на Windows используется отдельный адрес `195.133.25.16`; Android отправляет DNS непосредственно на HTTPS endpoint. DNS-AI работает только через DoH на обеих платформах. Только в Windows для Antigravity предлагаются GeoHide, GeoHide EU и Bezmezhau; GeoHide EU нельзя использовать в зашифрованном режиме.
+Для системного DoH Comss на Windows используется отдельный адрес `195.133.25.16`; Android отправляет DNS непосредственно на HTTPS endpoint. DNS-AI работает только через DoH на обеих платформах. В Windows 2.23.3 отдельные правила Antigravity доступны для MagicDNS и Bezmezhau. Шифрованное подключение Antigravity выполняется через общий DoH, без дополнительных правил. GeoHide и GeoHide EU скрыты из выбора, но их адреса сохранены для восстановления прежних настроек.
 
-Параметры MagicDNS сверены с [официальной инструкцией](https://magicdns.ru/) 22 октября 2026 года. Сервисы указаны по данным оператора; доступность из каждой сети не подтверждена. Остальные адреса и описания сервисов перенесены из Windows-версии. Таблица не является результатом новой проверки доступности операторов. При выборе стороннего DNS вы доверяете его оператору разрешение доменных имён.
+Параметры MagicDNS и заявленная поддержка Antigravity сверены с [официальной инструкцией](https://magicdns.ru/) 23 октября 2026 года. Сервисы указаны по данным оператора; доступность из каждой сети не подтверждена. Остальные адреса и описания сервисов перенесены из Windows-версии. Таблица не является результатом новой проверки доступности операторов. При выборе стороннего DNS вы доверяете его оператору разрешение доменных имён.
 
 ## Сборка из исходников
 
@@ -111,7 +111,7 @@ Android-версия использует **локальный DNS-туннел�
 build.bat
 ```
 
-Результат из текущих исходников: `KodVsego_SmartDNS.2.23.2.exe`. Используется системный компилятор .NET Framework; зависимости не скачиваются. Готовый релиз собирается через `build-distribution.ps1` с проверенным Microsoft Roslyn; [состав пакетов и проверки](docs/DISTRIBUTION.md).
+Результат из текущих исходников: `KodVsego_SmartDNS.2.23.3.exe`. Используется системный компилятор .NET Framework; зависимости не скачиваются. Готовый релиз собирается через `build-distribution.ps1` с проверенным Microsoft Roslyn; [состав пакетов и проверки](docs/DISTRIBUTION.md).
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run.ps1

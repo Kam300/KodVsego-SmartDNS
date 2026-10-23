@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -25,7 +25,7 @@ namespace HbAi.XboxDns
         internal static string Run(int provider, bool keepAntigravity = false)
         {
             if(provider>=0&&provider<Templates.Length&&!Dns.IsAvailable(provider))return "Провайдер временно недоступен. Выберите другой DNS.";
-            if (provider < 0 || provider >= Templates.Length || Templates[provider] == null) return "Для DoH выберите Comss.one, GeoHide, Bezmezhau, DNS-AI или MagicDNS.";
+            if (provider < 0 || provider >= Templates.Length || Templates[provider] == null) return "Для DoH выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS.";
             try
             {
                 // Inspect persisted local AND organization policies, without depending on

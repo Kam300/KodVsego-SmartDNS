@@ -1,7 +1,7 @@
 // Generated from config/providers.json. Do not edit directly.
 package ru.kodvsego.smartdns;
 final class ProviderAvailability {
-    private static final boolean[] ENABLED = { true,true,true,true,true,true,true };
+    private static final boolean[] ENABLED = { true,false,false,true,true,true,true };
     static boolean isEnabled(int id) { return id>=0 && id<ENABLED.length && ENABLED[id]; }
     static Provider[] create() {return new Provider[]{ new Provider("Comss.one",new String[]{"83.220.169.155","212.109.195.93"},"https://dns.comss.one/dns-query",false,new String[]{"ChatGPT","Claude","Gemini","ElevenLabs"},new String[]{"example.com","chatgpt.com","claude.ai","generativelanguage.googleapis.com","api.elevenlabs.io","cloudcode-pa.googleapis.com","daily-cloudcode-pa.googleapis.com"}),
 new Provider("GeoHide",new String[]{"159.194.200.33","193.233.112.67"},"https://geohide.ru/dns-query",false,new String[]{"ChatGPT","Claude","Gemini","ElevenLabs"},new String[]{"example.com","chatgpt.com","claude.ai","generativelanguage.googleapis.com","api.elevenlabs.io","cloudcode-pa.googleapis.com","daily-cloudcode-pa.googleapis.com"}),
@@ -9,5 +9,5 @@ new Provider("GeoHide EU",new String[]{"143.20.64.192","45.13.237.213"},null,fal
 new Provider("Xbox DNS",new String[]{"111.88.96.54","111.88.96.55"},null,false,new String[]{"Xbox"},new String[]{"example.com","xbox.com","user.auth.xboxlive.com","xsts.auth.xboxlive.com"}),
 new Provider("Bezmezhau",new String[]{"143.20.64.55","31.58.216.201"},"https://dns.bezmezhau.com/dns-query",false,new String[]{"ChatGPT","Gemini","Spotify"},new String[]{"example.com","chatgpt.com","generativelanguage.googleapis.com","open.spotify.com","cloudcode-pa.googleapis.com","daily-cloudcode-pa.googleapis.com"}),
 new Provider("DNS-AI",new String[]{"194.87.196.13","45.151.102.219"},"https://dns.dns-ai.ru/dns-query",true,new String[]{"ChatGPT","Claude","Gemini","ElevenLabs"},new String[]{"example.com","chatgpt.com","claude.ai","gemini.google.com","generativelanguage.googleapis.com","api.elevenlabs.io","cloudcode-pa.googleapis.com","daily-cloudcode-pa.googleapis.com"}),
-new Provider("MagicDNS",new String[]{"109.120.132.43","94.249.177.102"},"https://dns.magicdns.ru/dns-query",false,new String[]{"ChatGPT","Claude","Gemini","ElevenLabs"},new String[]{"example.com","chatgpt.com","claude.ai","gemini.google.com","elevenlabs.io"}) };}
+new Provider("MagicDNS",new String[]{"109.120.132.43","94.249.177.102"},"https://dns.magicdns.ru/dns-query",false,new String[]{"ChatGPT","Claude","Gemini","ElevenLabs","Antigravity"},new String[]{"example.com","chatgpt.com","claude.ai","gemini.google.com","elevenlabs.io","cloudcode-pa.googleapis.com","daily-cloudcode-pa.googleapis.com"}) };}
 }

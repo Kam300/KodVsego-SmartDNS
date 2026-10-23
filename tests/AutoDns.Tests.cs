@@ -10,10 +10,11 @@ static class AutoDnsTests
     {
         internal int calls,encryptedCalls,badAddressAttempts;
         internal bool FailAll,FailDaily,Challenge;
+        internal int SuccessProvider=4;
         public string[] Resolve(int provider,bool encrypted,string host,CancellationToken cancel)
         {
             Interlocked.Increment(ref calls);if(encrypted)Interlocked.Increment(ref encryptedCalls);
-            if(FailAll || provider!=4 || FailDaily&&host.StartsWith("daily-"))throw new IOException("simulated DNS failure");
+            if(FailAll || provider!=SuccessProvider || FailDaily&&host.StartsWith("daily-"))throw new IOException("simulated DNS failure");
             return new[]{"109.120.131.201","109.120.131.200"};
         }
         public void Https(string host,string address,bool api,CancellationToken cancel)
@@ -31,8 +32,9 @@ static class AutoDnsTests
         Check(AutoDns.GoalIndex("ChatGPT")==1&&AutoDns.GoalIndex("gemini")==0&&AutoDns.GoalIndex(null)==-1&&AutoDns.GoalIndex("obsolete service")==-1,"Saved service names reload safely without relying on numeric order");
         Check(!AutoDns.Candidates(0,false).Contains(3)&&AutoDns.Candidates(5,false).SequenceEqual(new[]{3}),"Xbox and AI candidates remain separate");
         Check(!AutoDns.Candidates(6,false).Contains(0)&&!AutoDns.Candidates(2,false).Contains(4),"Unsupported Comss Antigravity and Bezmezhau Claude combinations excluded");
-        Check(AutoDns.Candidates(0,true).SequenceEqual(new[]{0,1,4,5,6})&&!AutoDns.Candidates(5,true).Any(),"Strict encryption never downgrades to unencrypted EU or Xbox");
-        Check(Dns.IsAvailable(1)&&Dns.IsAvailable(2)&&!Dns.IsAvailable(-1)&&!Dns.IsAvailable(7),"GeoHide variants restored with stable historical IDs");
+        Check(AutoDns.Candidates(0,true).SequenceEqual(new[]{0,4,5,6})&&!AutoDns.Candidates(5,true).Any(),"Strict encryption never uses disabled GeoHide or unencrypted Xbox");
+        Check(!Dns.IsAvailable(1)&&!Dns.IsAvailable(2)&&!Dns.IsAvailable(-1)&&!Dns.IsAvailable(7),"Both GeoHide variants are disabled with stable historical IDs");
+        Check(AutoDns.Candidates(6,false).SequenceEqual(new[]{4,5,6})&&AutoDns.Candidates(6,true).SequenceEqual(new[]{4,5,6}),"MagicDNS joins Antigravity selection in plain and encrypted modes");
         var switches=(bool[])typeof(ProviderAvailability).GetField("Enabled",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static).GetValue(null);
         var savedSwitches=(bool[])switches.Clone();
         try {
@@ -45,7 +47,7 @@ static class AutoDnsTests
             Check(new[]{0,2}.All(p=>AntigravityDns.Run(true,false,p).Contains("временно недоступен")),"Same switch blocks Antigravity rules");
         } finally {Array.Copy(savedSwitches,switches,switches.Length);}
         var fake=new Probe();var results=AutoDns.Search(0,false,fake,CancellationToken.None);
-        Check(results.Length==6&&AutoDns.Best(results).Provider==4,"Only a candidate with both DNS and HTTPS succeeds");
+        Check(results.Length==4&&AutoDns.Best(results).Provider==4,"Only an enabled candidate with both DNS and HTTPS succeeds");
         Check(fake.badAddressAttempts==1,"Failed relay IP is tried before alternative resolved address");
         string diagnostic=AutoDns.Diagnostic(0,results);
         Check(diagnostic.Contains("Auto goal=Gemini")&&diagnostic.Contains("109.120.131.201")&&diagnostic.Contains("simulated relay timeout")&&diagnostic.Contains("HTTPS OK")&&diagnostic.Contains("Total=")&&diagnostic.Contains("IOException"),"Developer log keeps failed IP attempts, error type, timings and eventual success");
@@ -55,6 +57,12 @@ static class AutoDnsTests
         var health=AutoDns.Search(0,false,currentOnly,CancellationToken.None,null,4);
         Check(health.Length==1&&health[0].Provider==4&&currentOnly.calls==1,"Background health check only probes current provider");
         Check(AutoDns.Best(AutoDns.Search(6,true,new Probe{FailDaily=true},CancellationToken.None))==null,"Antigravity requires both endpoint domains");
+        foreach(bool encrypted in new[]{false,true}) {
+            var magicProbe=new Probe{SuccessProvider=6};
+            var magic=AutoDns.Search(6,encrypted,magicProbe,CancellationToken.None,null,6).Single();
+            Check(magic.Ok&&magic.Provider==6&&magic.Encrypted==encrypted&&magicProbe.calls==2&&magicProbe.encryptedCalls==(encrypted?2:0),"MagicDNS checks both Antigravity hosts with the requested transport: DoH="+encrypted);
+            Check(!AutoDns.Search(6,encrypted,new Probe{SuccessProvider=6,FailDaily=true},CancellationToken.None,null,6).Single().Ok,"MagicDNS cannot pass with a failed second Antigravity host: DoH="+encrypted);
+        }
         var token=new CancellationTokenSource();token.Cancel();bool cancelled=false;
         try{AutoDns.Search(0,false,new Probe(),token.Token);}catch(OperationCanceledException){cancelled=true;}
         Check(cancelled,"Cancelled selection cannot yield a provider");token.Dispose();

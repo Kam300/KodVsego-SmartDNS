@@ -6,7 +6,8 @@
 
 - `app/build.gradle`: versionName `1.5.1`, versionCode `8`; applicationId `ru.kodvsego.smartdns`, minSdk 26, targetSdk 35.
 - Общий каталог провайдеров, актуальный резервный адрес DNS-AI, сохранение номеров провайдеров и обработка отключённых вариантов.
-- 87 JUnit/Robolectric-тестов прошли без пропусков и ошибок; Android Lint release — 0 замечаний.
+- В актуальных исходниках GeoHide и GeoHide EU отключены; MagicDNS включает Antigravity в список сервисов и проверяет оба API-домена. DoH MagicDNS сохранён. Для выпуска пересоберите APK из актуальных исходников, не используйте прежний архив подготовки.
+- 88 JUnit/Robolectric-тестов прошли без пропусков и ошибок; Android Lint release — 0 замечаний.
 - `testDebugUnitTest lintRelease assembleRelease` завершились успешно. Проверены метаданные и выравнивание release APK.
 - Готовое [описание релиза](release-notes/1.5.1.md).
 

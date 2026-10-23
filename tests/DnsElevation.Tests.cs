@@ -94,8 +94,8 @@ static class ElevationTests
                 good.Replace("enable 0", "enable 7"), good.Replace("enable 0", "enable -1"),
                 good.Replace("enable 0", "restore 3"), good.Replace("enable 0", "restore 1"),
                 good.Replace("enable 0", "reset-known 1"), "--dns-operation enable 0 not-a-guid 1",
-                good.Replace("enable 0", "ag-enable 4"), good.Replace("enable 0", "ag-disable 1"),
-                good.Replace("enable 0", "ag-force 4"), good.Replace("enable 0", "ag-force -1"),
+                good.Replace("enable 0", "ag-enable " + AntigravityDns.ServerSets.Length), good.Replace("enable 0", "ag-disable 1"),
+                good.Replace("enable 0", "ag-force " + AntigravityDns.ServerSets.Length), good.Replace("enable 0", "ag-force -1"),
                 "--dns-operation enable 0 " + Guid.Empty.ToString("N") + " 1",
                 "--dns-operation enable 0 " + Guid.NewGuid().ToString("N") + " 0" })
             {

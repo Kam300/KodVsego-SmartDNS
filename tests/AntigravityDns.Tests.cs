@@ -183,8 +183,18 @@ static class AntigravityTests
             var rule = NrptRegistryReader.Parse(Guid.NewGuid().ToString("B"), key => key == "Name" ? new[] {".example.com"} : null);
             Assert(rule.Servers.Length == 0 && rule.Names[0] == ".example.com", "Policy discarded");
         });
-        Test("Registry parser rejects unknown rule IDs", () => {
-            Fails(() => NrptRegistryReader.Parse("not-a-rule-id", key => new[] {"example.com"}));
+        Test("Named foreign registry rules remain visible and cannot become owned rules", () => {
+            var rule=NrptRegistryReader.Parse("DNS_RESILIENCY_service.example", key => key=="Name" ? (object)new[]{"service.example"} : key=="GenericDNSServers" ? "192.0.2.53" : null);
+            Assert(rule.Id=="DNS_RESILIENCY_service.example"&&rule.Names[0]=="service.example"&&rule.Servers[0]=="192.0.2.53","Foreign named rule discarded");
+            Assert(EncryptedDns.PolicyConflict(new[]{rule})!=null,"Named policy bypasses encryption conflict check");
+            rule.Comment=AntigravityDns.Tag;rule.DisplayName=AntigravityDns.Title;rule.Names=new[]{AntigravityDns.Domains[0]};
+            Assert(!AntigravityDns.Owned(rule)&&!AgCleanup.IsLegacy(rule),"Named foreign rule accepted for removal");
+            system.Rules.Add(rule);Fails(()=>AntigravityDns.Change(system,true));
+            AntigravityDns.Change(system,false);Assert(system.Rules.Contains(rule),"Named foreign rule removed");
+        });
+        Test("Registry parser rejects empty and unsafe rule IDs", () => {
+            foreach(string id in new[]{null,""," ","parent\\child","bad\nkey",new string('x',256)})
+                Fails(() => NrptRegistryReader.Parse(id, key => new[] {"example.com"}));
         });
         Test("Registry fallback remains available when both providers fail", () => {
             var expected = new[] {Foreign(".example.com")};
@@ -274,13 +284,27 @@ static class AntigravityTests
             Assert(AntigravityDns.Status(system).Provider == 0, "Existing provider overwritten");
             using (AntigravityDns.UseProvider(2)) AntigravityDns.Change(system, false);
         });
-        Test("Main selector excludes Comss and Xbox from new Antigravity activations", () => {
-            Assert(AntigravityDns.ProviderForMainSet(0) == -1 && AntigravityDns.ProviderForMainSet(1) == 0 && AntigravityDns.ProviderForMainSet(2) == 2 && AntigravityDns.ProviderForMainSet(4) == 3,
+        Test("Main selector offers MagicDNS and excludes disabled or unsupported Antigravity providers", () => {
+            Assert(AntigravityDns.ProviderForMainSet(0) == -1 && AntigravityDns.ProviderForMainSet(1) == -1 && AntigravityDns.ProviderForMainSet(2) == -1 && AntigravityDns.ProviderForMainSet(4) == 3 && AntigravityDns.ProviderForMainSet(6) == 4,
                 "Main selector mapping wrong");
-            Assert(AntigravityDns.ProviderForMainSet(3) == -1, "Xbox accepted for AI");
+            Assert(AntigravityDns.ProviderForMainSet(3) == -1 && AntigravityDns.ProviderForMainSet(5) == -1, "Xbox or encrypted-only DNS accepted for plain rules");
+            Assert(AntigravityDns.ProviderNames[4] == "MagicDNS" && AntigravityDns.ServerSets[4].SequenceEqual(Dns.V4[6]), "MagicDNS rule addresses differ from the shared catalog");
             bool rejected = false;
-            try { using (AntigravityDns.UseProvider(4)) { } } catch (ArgumentOutOfRangeException) { rejected = true; }
+            try { using (AntigravityDns.UseProvider(AntigravityDns.ServerSets.Length)) { } } catch (ArgumentOutOfRangeException) { rejected = true; }
             Assert(rejected, "Unknown provider accepted");
+        });
+        Test("Normal and forced GeoHide activations are rejected before accessing Windows", () => {
+            foreach(int provider in new[]{0,2}) foreach(bool force in new[]{false,true})
+                Assert(AntigravityDns.Run(true,force,provider).Contains("временно недоступен"), "Disabled provider accepted");
+        });
+        Test("Disabled GeoHide rules remain detectable and removable", () => {
+            foreach(int provider in new[]{0,2}) {
+                foreach(string domain in AntigravityDns.Domains) {
+                    var rule=FakeAgRules.Own(domain);rule.Servers=AntigravityDns.ServerSets[provider].ToArray();system.Rules.Add(rule);
+                }
+                Assert(AntigravityDns.Status(system).Complete && AntigravityDns.Status(system).Provider==provider,"Disabled provider identity lost");
+                AntigravityDns.Change(system,false);Assert(system.Rules.Count==0,"Disabled provider cannot be removed");
+            }
         });
         Test("Normal and forced Comss activations are rejected before accessing Windows", () => {
             foreach(bool force in new[]{false,true}) {
