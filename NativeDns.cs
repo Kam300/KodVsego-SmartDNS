@@ -224,7 +224,6 @@ namespace HbAi.XboxDns
         readonly IDnsSystem system;
         readonly IDnsBackupStore store;
         internal readonly List<string> DeferredAdapters = new List<string>();
-        internal bool RestoreSkipped;
         internal DnsSettingsEngine(IDnsSystem system, IDnsBackupStore store) { this.system = system; this.store = store; }
         internal void Change(bool enable, string[] servers, string dohTemplate = null)
         {
@@ -346,30 +345,7 @@ namespace HbAi.XboxDns
             store.Save(new List<AdapterBackup>());
             system.Flush();
         }
-        internal void RestoreReturned()
-        {
-            DeferredAdapters.Clear(); RestoreSkipped = false;
-            system.EnsureSupported();
-            var records = store.Load(); RegistryDnsBackupStore.Validate(records);
-            Restore(records, true, true);
-            system.Flush();
-        }
-        internal static bool SafeToRestore(IDnsSystem system, AdapterBackup record)
-        {
-            foreach (var original in record.Families) {
-                var current = system.Read(new Guid(record.Guid), original.Family);
-                NativeDnsSystem.ValidateFamily(current);
-                if (current.ProfilePresent) return false;
-                bool same = current.Manual == original.Manual && current.Servers.SequenceEqual(original.Servers) &&
-                    (current.Doh ?? new DohConfig[0]).Length == (original.Doh ?? new DohConfig[0]).Length &&
-                    (original.Doh ?? new DohConfig[0]).All(d => (current.Doh ?? new DohConfig[0]).Any(c => c.Index == d.Index && c.Template == d.Template && c.Flags == d.Flags));
-                bool ours = current.Manual && current.Servers.Length > 0 && current.Servers.All(Dns.KnownServers.Contains) &&
-                    (current.Doh == null || current.Doh.All(d => d.Flags == 2 && EncryptedDns.Templates.Where(t => t != null).Contains(d.Template)));
-                if (!same && !ours) return false;
-            }
-            return true;
-        }
-        void Restore(List<AdapterBackup> records, bool deferUnavailable = false, bool onlyUnchanged = false)
+        void Restore(List<AdapterBackup> records, bool deferUnavailable = false)
         {
             var available = system.Adapters(false);
             var pending = new List<AdapterBackup>();
@@ -384,7 +360,6 @@ namespace HbAi.XboxDns
                         if (!deferUnavailable) throw new IOException("Адаптер недоступен: " + id);
                         pending.Add(record); DeferredAdapters.Add(id.ToString()); continue;
                     }
-                    if (onlyUnchanged && !SafeToRestore(system, record)) { pending.Add(record); RestoreSkipped = true; continue; }
                     if (record.Ipv6Binding.HasValue)
                     {
                         var bindings = system as IDnsBindingSystem;
@@ -405,7 +380,7 @@ namespace HbAi.XboxDns
             store.Save(pending);
             if (errors.Count > 0) throw new IOException(string.Join("; ", errors));
         }
-        internal static string Run(bool enable, string[] servers, bool resetKnown = false, string dohTemplate = null, bool restoreReturned = false)
+        internal static string Run(bool enable, string[] servers, bool resetKnown = false, string dohTemplate = null)
         {
             using (var mutex = new Mutex(false, @"Global\HbAi.SmartDns.Settings"))
             {
@@ -416,11 +391,9 @@ namespace HbAi.XboxDns
                     catch (AbandonedMutexException) { locked = true; }
                     if (!locked) return "Другая операция DNS ещё выполняется.";
                     var engine = new DnsSettingsEngine(new NativeDnsSystem(), new RegistryDnsBackupStore());
-                    if (restoreReturned) engine.RestoreReturned();
-                    else if (resetKnown) engine.ResetKnown(servers);
+                    if (resetKnown) engine.ResetKnown(servers);
                     else engine.Change(enable, servers, dohTemplate);
-                    if (engine.RestoreSkipped) return "[DNS-RESTORE-SKIPPED]Настройки подключения изменены другой программой. Копия сохранена для ручного восстановления.";
-                    if (engine.DeferredAdapters.Count > 0) return "[DNS-DEFERRED]DNS выключен на доступных подключениях. Копии недоступных подключений сохранены.";
+                    if (engine.DeferredAdapters.Count > 0) return "[DNS-DEFERRED]Доступные адаптеры восстановлены. Настройки недоступного адаптера сохранены. После его подключения нажмите выключение DNS ещё раз, чтобы завершить восстановление.";
                     return null;
                 }
                 catch (Exception error) { return error.Message; }

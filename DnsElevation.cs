@@ -29,7 +29,7 @@ namespace HbAi.XboxDns
         internal string PipeName { get { return "KodVsego.SmartDns." + Token.ToString("N"); } }
         internal string Arguments
         {
-            get { return "--dns-operation " + (Enable ? (Set >= 300 ? "secure-keep-ag " : Set >= 200 ? "secure-enable " : Set >= 100 ? (Set % 2 == 1 ? "ag-force " : "ag-enable ") : "enable ") : Set == 5 ? "restore-returned " : Set == 4 ? "uninstall-restore " : Set == 3 ? "ag-cleanup " : Set == 2 ? "ag-disable " : Set == 1 ? "reset-known " : "restore ") +
+            get { return "--dns-operation " + (Enable ? (Set >= 300 ? "secure-keep-ag " : Set >= 200 ? "secure-enable " : Set >= 100 ? (Set % 2 == 1 ? "ag-force " : "ag-enable ") : "enable ") : Set == 4 ? "uninstall-restore " : Set == 3 ? "ag-cleanup " : Set == 2 ? "ag-disable " : Set == 1 ? "reset-known " : "restore ") +
                 (Enable ? (Set >= 300 ? Set - 300 : Set >= 200 ? Set - 200 : Set >= 100 ? (Set - 100) / 2 : Set) : 0).ToString(CultureInfo.InvariantCulture) + " " + Token.ToString("N") + " " + Parent.ToString(CultureInfo.InvariantCulture); }
         }
         internal static bool TryParse(string[] args, out DnsRequest request)
@@ -38,13 +38,13 @@ namespace HbAi.XboxDns
             int set, parent;
             Guid token;
             if (args == null || args.Length != 5 || args[0] != "--dns-operation" ||
-                (args[1] != "enable" && args[1] != "secure-enable" && args[1] != "secure-keep-ag" && args[1] != "restore" && args[1] != "reset-known" && args[1] != "ag-enable" && args[1] != "ag-disable" && args[1] != "ag-force" && args[1] != "ag-cleanup" && args[1] != "uninstall-restore" && args[1] != "restore-returned") ||
+                (args[1] != "enable" && args[1] != "secure-enable" && args[1] != "secure-keep-ag" && args[1] != "restore" && args[1] != "reset-known" && args[1] != "ag-enable" && args[1] != "ag-disable" && args[1] != "ag-force" && args[1] != "ag-cleanup" && args[1] != "uninstall-restore") ||
                 !int.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out set) ||
                 !Guid.TryParseExact(args[3], "N", out token) || token == Guid.Empty ||
                 !int.TryParse(args[4], NumberStyles.None, CultureInfo.InvariantCulture, out parent) || parent <= 0 ||
                 (args[1] == "enable" || args[1] == "secure-enable" || args[1] == "secure-keep-ag" ? set < 0 || set >= Dns.V4.Length : args[1] == "ag-enable" || args[1] == "ag-force" ? set < 0 || set >= AntigravityDns.ServerSets.Length : set != 0)) return false;
             request = new DnsRequest { Enable = args[1] == "enable" || args[1] == "secure-enable" || args[1] == "secure-keep-ag" || args[1] == "ag-enable" || args[1] == "ag-force",
-                Set = args[1] == "restore-returned" ? 5 : args[1] == "uninstall-restore" ? 4 : args[1] == "secure-keep-ag" ? 300 + set : args[1] == "secure-enable" ? 200 + set : args[1] == "ag-force" ? 101 + set * 2 : args[1] == "ag-enable" ? 100 + set * 2 : args[1] == "ag-cleanup" ? 3 : args[1] == "ag-disable" ? 2 : args[1] == "reset-known" ? 1 : set, Token = token, Parent = parent };
+                Set = args[1] == "uninstall-restore" ? 4 : args[1] == "secure-keep-ag" ? 300 + set : args[1] == "secure-enable" ? 200 + set : args[1] == "ag-force" ? 101 + set * 2 : args[1] == "ag-enable" ? 100 + set * 2 : args[1] == "ag-cleanup" ? 3 : args[1] == "ag-disable" ? 2 : args[1] == "reset-known" ? 1 : set, Token = token, Parent = parent };
             return true;
         }
     }
@@ -68,7 +68,7 @@ namespace HbAi.XboxDns
         {
             // Explicit "Run as administrator" remains supported without a second prompt.
             if (IsAdministrator()) return Dns.ExecuteDirect(enable, set);
-            if (enable ? set < 0 || (set >= Dns.V4.Length && (set < 100 || set >= 100 + AntigravityDns.ServerSets.Length * 2) && (set < 200 || set >= 200 + Dns.V4.Length) && (set < 300 || set >= 300 + Dns.V4.Length)) : set < 0 || set > 5) return "Неизвестная операция DNS.";
+            if (enable ? set < 0 || (set >= Dns.V4.Length && (set < 100 || set >= 100 + AntigravityDns.ServerSets.Length * 2) && (set < 200 || set >= 200 + Dns.V4.Length) && (set < 300 || set >= 300 + Dns.V4.Length)) : set < 0 || set > 4) return "Неизвестная операция DNS.";
             var request = new DnsRequest { Enable = enable, Set = set,
                 Token = Guid.NewGuid(), Parent = Process.GetCurrentProcess().Id };
             using (var pipe = CreateResultPipe(request))

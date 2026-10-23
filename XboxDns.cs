@@ -91,7 +91,6 @@ namespace HbAi.XboxDns
             if (enable && set >= 300 && set < 300 + V4.Length) return EncryptedDns.Run(set - 300, true);
             if (enable && set >= 200 && set < 200 + V4.Length) return EncryptedDns.Run(set - 200);
             if (enable && set >= 100 && set < 100 + AntigravityDns.ServerSets.Length * 2) return AntigravityDns.Run(true, set % 2 == 1, (set - 100) / 2);
-            if (!enable && set == 5) return DnsSettingsEngine.Run(false, new string[0], restoreReturned:true);
             if (!enable && set == 3) return AgCleanup.Run();
             if (!enable && set == UninstallCleanup.RestoreOperation) return UninstallCleanup.RestoreNetworkDirect();
             if (!enable && set == 2) return AntigravityDns.Run(false);
@@ -166,7 +165,6 @@ namespace HbAi.XboxDns
         long lastFrame;
         FontFamily fHead, fBold, fMed;
         bool active, busy, hasBackup;
-        readonly NetworkDnsFollow networkFollow = new NetworkDnsFollow();
         bool hideDnsReminder = ReadHideDnsReminder();
         AgStatus agStatus = new AgStatus();
         bool agLoading = true;
@@ -289,22 +287,16 @@ namespace HbAi.XboxDns
 
         void RefreshNetworkStatus()
         {
-            if (checkingNetwork || busy || !Visible) return;
+            if (checkingNetwork || busy || !Visible || WindowState == FormWindowState.Minimized) return;
             checkingNetwork = true;
             int revision = operationRevision;
-            bool following = networkFollow.Enabled;
-            int followProvider = networkFollow.Provider;
-            bool followEncrypted = networkFollow.Encrypted;
             ThreadPool.QueueUserWorkItem(_ => {
                 var status = VpnCheck.Scan();
                 bool connected = NetworkCheck.HasConnection();
                 var extraDns = AntigravityDns.GetStatus();
                 int actual = -1; bool backup = hasBackup, availableBackup = false, strictNow = false;
-                DnsFollowSnapshot followSnapshot = null;
-                try { actual = Dns.ActiveSet(); backup = Dns.HasBackup(); availableBackup = backup && Dns.HasAvailableBackup(); if (actual >= 0 && !following) strictNow = Dns.EncryptedOnly(actual) || Dns.StrictConfigured(); }
+                try { actual = Dns.ActiveSet(); backup = Dns.HasBackup(); availableBackup = backup && Dns.HasAvailableBackup(); if (actual >= 0) strictNow = Dns.EncryptedOnly(actual) || Dns.StrictConfigured(); }
                 catch (Exception) { }
-                try { followSnapshot = DnsFollowSnapshot.Capture(new NativeDnsSystem(), new RegistryDnsBackupStore(), following ? followProvider : actual,
-                    following ? followEncrypted : strictNow, DnsFollowSnapshot.NetworkIdentity()); } catch (Exception) { }
                 if (IsDisposed || Disposing) return;
                 try { BeginInvoke((Action)(() => {
                     checkingNetwork = false;
@@ -317,17 +309,14 @@ namespace HbAi.XboxDns
                     }
                     networkAvailable = connected; hasBackup = backup; dnsConfirmed = actual >= 0;
                     agStatus = extraDns; agLoading = false;
-                    if (actual >= 0 && !networkFollow.Enabled) secureDns = strictNow;
+                    if (actual >= 0) secureDns = strictNow;
                     active = actual >= 0 || availableBackup;
-                    if (actual >= 0 && actual != dnsSet && !networkFollow.Enabled) { if (!firstRead) autoGoal = -1; dnsSet = actual; EnsureProviderVisible(); }
-                    if (firstRead && actual >= 0 && followSnapshot != null && followSnapshot.Managed) networkFollow.Enable(actual, strictNow, extraDns.Checked || extraDns.External);
+                    if (actual >= 0 && actual != dnsSet) { if (!firstRead) autoGoal = -1; dnsSet = actual; EnsureProviderVisible(); }
                     initializing = false;
                     if(firstRead)EnsureProviderVisible();
                     UpdateVpnStatus(status);
                     if (before != VisualState()) Invalidate();
                     if (firstRead) CheckDnsServers();
-                    var plan = networkFollow.Observe(followSnapshot, connected, status.NeedsAttention);
-                    if (plan.Action != DnsFollowAction.None) { FollowNetwork(plan); return; }
                     CheckAutoConnection();
                 })); }
                 catch (InvalidOperationException) { }
@@ -336,35 +325,6 @@ namespace HbAi.XboxDns
 
         internal bool AcceptNetworkSnapshot(int revision)
         { return !busy && revision == operationRevision; }
-
-        void FollowNetwork(DnsFollowPlan plan)
-        {
-            if (busy) return;
-            busy = true; operationRevision++; error = null; Invalidate();
-            if (plan.Action == DnsFollowAction.Apply) DohHttp2.ResetAddressHealth();
-            DiagnosticReport.Record("Смена сети", plan.Action + "; provider=" + plan.Provider + "; DoH=" + plan.Encrypted);
-            ThreadPool.QueueUserWorkItem(_ => {
-                string result = null;
-                try {
-                    if (plan.Action == DnsFollowAction.Restore) result = DnsElevation.Run(false, 5);
-                    else if (plan.Encrypted && !DnsProbe.CheckHttps(EncryptedDns.Templates[plan.Provider], "example.com").Ok)
-                        result = "Выбранный DoH не ответил в новой сети. Настройки не изменены.";
-                    else if (!plan.Encrypted && !DnsProbe.CheckAvailability(plan.Provider).Any(r => r.Host == "example.com" && r.Ok))
-                        result = "Выбранный DNS не ответил в новой сети. Настройки не изменены.";
-                    else result = DnsElevation.Run(true, plan.Encrypted ? (plan.KeepAntigravity ? 300 : 200) + plan.Provider : plan.Provider);
-                }
-                catch (Exception ex) { result = ex.Message; }
-                if (IsDisposed || Disposing) return;
-                try { BeginInvoke((Action)(() => {
-                    busy = false;
-                    bool deferred = result != null && result.StartsWith("[DNS-DEFERRED]", StringComparison.Ordinal);
-                    if (plan.Action == DnsFollowAction.Restore && result == null) networkFollow.Stop();
-                    if (result != null && !deferred) error = plan.Action == DnsFollowAction.Restore ? "Копия сохранена · восстановление вручную" : "Не удалось настроить новую сеть";
-                    DiagnosticReport.Record("Смена сети", result ?? "Настройки применены");
-                    Invalidate(); RefreshNetworkStatus();
-                })); } catch (InvalidOperationException) { }
-            });
-        }
 
         void CheckUpdatesQuietly()
         {
@@ -999,7 +959,7 @@ namespace HbAi.XboxDns
 
             // статус
             string status = ConnectionLabel;
-            string sub = error != null ? error : busy ? "Секунду" : active ? (hasBackup ? (dnsConfirmed ? Dns.Name[dnsSet] + ": " + Dns.Opens[dnsSet] : "Разные DNS или настройки изменены извне") : "Копии прежних настроек нет") : hasBackup ? "Копии недоступных подключений сохранены" : "DNS сервисов не обнаружен";
+            string sub = error != null ? error : busy ? "Секунду" : active ? (hasBackup ? (dnsConfirmed ? Dns.Name[dnsSet] + ": " + Dns.Opens[dnsSet] : "Разные DNS или настройки изменены извне") : "Копии прежних настроек нет") : "DNS сервисов не обнаружен";
             if (error == null && !busy && !active && AntigravityOnlyLabel != null)
                 sub = agStatus.Error != null ? "Не удалось проверить отдельные DNS-правила" :
                     agStatus.Checked && agStatus.Complete ? (agStatus.Provider == 1 ? "Comss: доступ к API не подтверждён" : (agStatus.Provider >= 0 ? AntigravityDns.ProviderNames[agStatus.Provider] + " · " : "") + "общий DNS выключен") :
@@ -1523,7 +1483,7 @@ namespace HbAi.XboxDns
             if(!Dns.IsAvailable(k))return;
             if (busy || (k == dnsSet && autoGoal < 0&&!UseDefaultGoal)) return;
             manualSelection=true;
-            if (active || networkFollow.Enabled) Apply(true, k, encrypted: EncryptedDns.Templates[k] != null && secureDns || Dns.EncryptedOnly(k));
+            if (active) Apply(true, k, encrypted: EncryptedDns.Templates[k] != null && secureDns || Dns.EncryptedOnly(k));
             else { autoGoal = -1; dnsSet = k; if (Dns.EncryptedOnly(k)) secureDns = true; else if (EncryptedDns.Templates[k] == null) secureDns = false; EnsureProviderVisible(); Invalidate(); }
         }
 
@@ -1668,7 +1628,6 @@ namespace HbAi.XboxDns
                     catch (Exception ex) { ShowMessage("Не удалось проверить DNS-правила: " + ex.Message, "Ошибка DNS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
                 }
             }
-            networkFollow.Stop();
             operationRevision++; busy = true; error = null; Invalidate();
             DiagnosticReport.Record("Общий DNS", "enable=" + turnOn + "; provider=" + Dns.Name[requestedSet] + "; DoH=" + useEncrypted);
             int set = selectedSet ?? dnsSet;
@@ -1707,13 +1666,12 @@ namespace HbAi.XboxDns
                     if (now >= 0) dnsSet = now;
                     if (turnOn && err == null && now != set) err = "Выбранные DNS не подтверждены на всех активных адаптерах. Другой адаптер или VPN может использовать прежние DNS. Проверьте подключения Windows.";
                     if (turnOn && err == null) { autoGoal = autoTarget ?? -1; autoNeedsRetry = false; lastAutoCheck = frameClock.ElapsedMilliseconds; }
-                    if (turnOn && err == null) networkFollow.Enable(set, useEncrypted, keepAntigravity);
                     EnsureProviderVisible();
                     Invalidate(); Update();
                     if (err != null && err.StartsWith("[DNS-DEFERRED]", StringComparison.Ordinal))
                     {
-                        error = null; networkFollow.DeferRestore();
-                        DiagnosticReport.Record("Восстановление DNS", err);
+                        error = "Копия недоступного адаптера сохранена";
+                        ShowMessage(err.Substring("[DNS-DEFERRED]".Length), "Восстановление отложено", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     else if (err == NetworkCheck.OfflineMessage)
                     {

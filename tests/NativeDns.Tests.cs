@@ -25,12 +25,11 @@ sealed class MemoryStore : IDnsBackupStore
 sealed class FakeSystem : IDnsSystem, IDnsBindingSystem
 {
     public bool CaptureDoh, Ipv6Enabled = true;
-    readonly Dictionary<Guid,bool> otherBindings = new Dictionary<Guid,bool>();
     public int BindingWrites;
     public bool FailBinding;
     public Dictionary<string, DohConfig[]> Encryption = new Dictionary<string, DohConfig[]>();
-    public bool ReadIpv6Binding(Guid id) { return id == Id ? Ipv6Enabled : !otherBindings.ContainsKey(id) || otherBindings[id]; }
-    public void SetIpv6Binding(Guid id, bool enabled) { BindingWrites++; if (FailBinding) throw new IOException("Binding write failed"); if(id==Id)Ipv6Enabled=enabled;else otherBindings[id]=enabled; }
+    public bool ReadIpv6Binding(Guid id) { return Ipv6Enabled; }
+    public void SetIpv6Binding(Guid id, bool enabled) { BindingWrites++; if (FailBinding) throw new IOException("Binding write failed"); Ipv6Enabled = enabled; }
     public readonly Guid Id = new Guid("00000000-0000-0000-0000-000000000001");
     public List<DnsAdapter> All = new List<DnsAdapter>();
     public Dictionary<string, string[]> Values = new Dictionary<string, string[]>();

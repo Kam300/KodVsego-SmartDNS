@@ -3,7 +3,7 @@
 [assembly: AssemblyProduct("Код Всего · Smart DNS")]
 [assembly: AssemblyDescription("DNS switcher with persistent per-adapter backup, recovery and light/dark themes.")]
 [assembly: AssemblyCompany("Код Всего")]
-[assembly: AssemblyVersion("2.23.4.0")]
+[assembly: AssemblyVersion("2.23.5.0")]
 // Match the ordered MSI version; keep the user-facing version below unchanged.
-[assembly: AssemblyFileVersion("2.23.4999.0")]
-[assembly: AssemblyInformationalVersion("2.23.4")]
+[assembly: AssemblyFileVersion("2.23.5999.0")]
+[assembly: AssemblyInformationalVersion("2.23.5")]
