@@ -10,6 +10,8 @@ using System.Security.Authentication;
 using System.Text;
 using System.Linq;
 using System.Threading;
+using System.Collections.Generic;
+using System.Net.NetworkInformation;
 
 namespace HbAi.XboxDns
 {
@@ -18,6 +20,15 @@ namespace HbAi.XboxDns
     static class DohHttp2
     {
         internal const int RequestTimeoutMilliseconds=8000;
+        static readonly DohAddressHealth AddressHealth=new DohAddressHealth();
+        static int pinningUnavailable;
+        static DohHttp2()
+        {
+            NetworkChange.NetworkAddressChanged+=(sender,args)=>ResetAddressHealth();
+            NetworkChange.NetworkAvailabilityChanged+=(sender,args)=>ResetAddressHealth();
+        }
+        internal static void ResetAddressHealth() { AddressHealth.Reset(); }
+        internal sealed class AddressPinningUnavailableException : NotSupportedException { }
         internal static bool CanRetry(Exception error)
         {
             if(error is TimeoutException||error is SocketException)return true;
@@ -31,6 +42,16 @@ namespace HbAi.XboxDns
         }
         internal static byte[] QueryReliable(string endpoint,byte[] dns,Action<string> trace=null)
         {
+            if(endpoint==EncryptedDns.Templates[5]&&Interlocked.CompareExchange(ref pinningUnavailable,0,0)==0) {
+                try {return QueryHealthyAddresses(endpoint,dns,EncryptedDns.ServersFor(5),AddressHealth,
+                    (url,address,packet)=>Query(url,packet,RequestTimeoutMilliseconds,address),trace);}
+                catch(AddressPinningUnavailableException) {
+                    // Windows before 10 21H1 cannot override resolution per request.
+                    // Retain the original WinHTTP/TLS/HTTP2 path on those systems.
+                    Interlocked.Exchange(ref pinningUnavailable,1);
+                    if(trace!=null)trace("DoH: per-address resolution unsupported; using normal WinHTTP hostname resolution with certificate validation");
+                }
+            }
             int attempt=0;
             return QueryReliable(endpoint,dns,(url,packet)=> {
                 attempt++;
@@ -38,6 +59,33 @@ namespace HbAi.XboxDns
                 if(attempt==2&&url==EncryptedDns.Templates[1])return QueryAlternateAddresses(url,packet,trace);
                 return Query(url,packet,RequestTimeoutMilliseconds);
             },trace);
+        }
+        internal static byte[] QueryHealthyAddresses(string endpoint,byte[] dns,string[] addresses,DohAddressHealth health,
+            Func<string,string,byte[],byte[]> send,Action<string> trace)
+        {
+            long generation;var ready=health.Ready(endpoint,addresses,out generation);Exception failure=null;
+            if(ready.Length==0) {
+                if(trace!=null)trace("DoH endpoint="+new Uri(endpoint).Host+"; all addresses in temporary cooldown; skipped="+string.Join(", ",addresses));
+                throw new IOException("Адреса DoH-сервера временно пропущены после сетевых ошибок. Повторите проверку позже или нажмите «Тест DNS».");
+            }
+            if(trace!=null&&ready.Length<addresses.Length)trace("DoH: temporarily skipped addresses="+string.Join(", ",addresses.Except(ready)));
+            foreach(string address in ready) {
+                var clock=Stopwatch.StartNew();
+                if(trace!=null)trace("HTTPS endpoint="+new Uri(endpoint).Host+"; target IP="+address+"; SNI/certificate host="+new Uri(endpoint).Host+"; HTTP/2 enabled");
+                try {
+                    byte[] response=send(endpoint,address,dns);DnsProbe.Validate(dns,response);
+                    health.Success(endpoint,address,generation);
+                    if(trace!=null)trace("DoH address="+address+"; elapsed="+clock.ElapsedMilliseconds+" ms; TLS/DNS validated");
+                    return response;
+                }catch(Exception error) {
+                    if(trace!=null)trace("DoH address="+address+"; elapsed="+clock.ElapsedMilliseconds+" ms\n"+error);
+                    // Certificate, HTTP and invalid DNS errors are never hidden by
+                    // switching addresses or by falling back to unencrypted DNS.
+                    if(!CanRetry(error))throw;
+                    health.Failure(endpoint,address,generation);failure=error;
+                }
+            }
+            throw new IOException("Ни один из адресов DoH-сервера не ответил по HTTPS.",failure);
         }
         internal static byte[] QueryReliable(string endpoint,byte[] dns,Func<string,byte[],byte[]> send,Action<string> trace)
         {
@@ -102,6 +150,10 @@ namespace HbAi.XboxDns
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return:MarshalAs(UnmanagedType.Bool)]
         static extern bool WinHttpSetOption(IntPtr handle,uint option,ref uint value,uint length);
+        [DllImport("winhttp.dll", EntryPoint="WinHttpSetOption", CharSet=CharSet.Unicode, ExactSpelling=true, SetLastError=true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [return:MarshalAs(UnmanagedType.Bool)]
+        static extern bool WinHttpSetOptionString(IntPtr handle,uint option,string value,uint length);
         [DllImport("winhttp.dll", ExactSpelling=true, SetLastError=true)]
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return:MarshalAs(UnmanagedType.Bool)]
@@ -128,12 +180,15 @@ namespace HbAi.XboxDns
         static extern bool WinHttpCloseHandle(IntPtr handle);
         static void Check(bool success,string operation)
         {if(!success){int code=Marshal.GetLastWin32Error();throw new Win32Exception(code,"WinHTTP: "+operation+"; code="+code);}}
-        internal static byte[] Query(string endpoint,byte[] dns,int timeoutMilliseconds=5000)
+        internal static byte[] Query(string endpoint,byte[] dns,int timeoutMilliseconds=5000,string address=null)
         {
             if(timeoutMilliseconds<1||timeoutMilliseconds>15000)throw new ArgumentOutOfRangeException("timeoutMilliseconds");
             Uri uri;
             if(!Uri.TryCreate(endpoint,UriKind.Absolute,out uri)||uri.Scheme!="https"||uri.Port!=443||uri.UserInfo!=""||uri.Query!=""||uri.Fragment!="")
                 throw new IOException("Некорректный HTTPS endpoint DoH.");
+            IPAddress target;
+            if(address!=null&&(!IPAddress.TryParse(address,out target)||target.AddressFamily!=AddressFamily.InterNetwork||!AutoDnsProbe.PublicAddress(address)))
+                throw new IOException("Некорректный IPv4 адрес DoH-сервера.");
             string encoded=Convert.ToBase64String(dns).TrimEnd('=').Replace('+','-').Replace('/','_');
             IntPtr session=IntPtr.Zero,connect=IntPtr.Zero,request=IntPtr.Zero;
             try
@@ -146,6 +201,11 @@ namespace HbAi.XboxDns
                 connect=WinHttpConnect(session,uri.Host,443,0);Check(connect!=IntPtr.Zero,"connect");
                 request=WinHttpOpenRequest(connect,"GET",uri.AbsolutePath+"?dns="+encoded,null,null,IntPtr.Zero,0x800000);
                 Check(request!=IntPtr.Zero,"request");
+                if(address!=null&&!WinHttpSetOptionString(request,165,address,(uint)((address.Length+1)*2))) {
+                    int code=Marshal.GetLastWin32Error();
+                    if(code==12009)throw new AddressPinningUnavailableException();
+                    throw new Win32Exception(code,"WinHTTP: resolution hostname; code="+code);
+                }
                 uint noRedirect=0;Check(WinHttpSetOption(request,88,ref noRedirect,4),"disable redirects");
                 uint noAutoLogon=2;Check(WinHttpSetOption(request,77,ref noAutoLogon,4),"disable automatic credentials");
                 const string headers="Accept: application/dns-message\r\n";
@@ -167,5 +227,40 @@ namespace HbAi.XboxDns
             }
             finally {if(request!=IntPtr.Zero)WinHttpCloseHandle(request);if(connect!=IntPtr.Zero)WinHttpCloseHandle(connect);if(session!=IntPtr.Zero)WinHttpCloseHandle(session);}
         }
+    }
+
+    // Process-local resolver health. A monotonic clock avoids clock changes;
+    // generations prevent old requests poisoning a cache reset after reconnect.
+    sealed class DohAddressHealth
+    {
+        sealed class State { internal int Failures;internal long RetryAt; }
+        readonly object gate=new object();
+        readonly Dictionary<string,State> states=new Dictionary<string,State>(StringComparer.Ordinal);
+        readonly Func<long> now;long generation;
+        internal DohAddressHealth() {var clock=Stopwatch.StartNew();now=()=>clock.ElapsedMilliseconds;}
+        internal DohAddressHealth(Func<long> clock) {now=clock;}
+        static string Key(string endpoint,string address) {return endpoint+"|"+address;}
+        internal string[] Ready(string endpoint,string[] addresses,out long version)
+        {
+            lock(gate) {version=generation;long time=now();return addresses.Where(address=> {
+                State state;return !states.TryGetValue(Key(endpoint,address),out state)||state.RetryAt<=time;
+            }).ToArray();}
+        }
+        internal void Success(string endpoint,string address,long version)
+        {lock(gate)if(version==generation)states.Remove(Key(endpoint,address));}
+        internal void Failure(string endpoint,string address,long version)
+        {
+            lock(gate) {
+                if(version!=generation)return;
+                string key=Key(endpoint,address);State state;
+                if(!states.TryGetValue(key,out state)) {
+                    if(states.Count>=128) {states.Clear();generation++;return;}
+                    states[key]=state=new State();
+                }
+                state.Failures=Math.Min(6,state.Failures+1);
+                state.RetryAt=now()+Math.Min(900000,30000L<<(state.Failures-1));
+            }
+        }
+        internal void Reset() {lock(gate){states.Clear();generation++;}}
     }
 }

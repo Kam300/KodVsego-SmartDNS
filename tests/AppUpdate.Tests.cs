@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -57,6 +57,37 @@ static class AppUpdateTests
         refused=false;try{AppUpdate.ValidatePackage(package,new UpdateRelease {Hash=newHash,Size=8,Version="2.23.0"});}catch(InvalidDataException){refused=true;}Check(refused,"Download validation rejects size and digest mismatch");
         var request=new UpdateRequest {Parent=42,ParentStarted=12,Target=old,OriginalHash=oldHash,PackageHash=newHash};
         Check(!AppUpdate.ValidRequest(request,package),"Installer cannot run outside its private staging location");
+        string staged=Path.Combine(AppUpdate.CacheRoot,Guid.NewGuid().ToString("N"),"update.exe");
+        request.Target=Path.Combine(folder,"KodVsego_SmartDNS.2.23.0.exe");
+        Check(AppUpdate.ValidRequest(request,staged),"Portable update target allowed in authenticated request");
+        request.Target=Path.Combine(folder,"SmartDNS.exe");
+        Check(AppUpdate.ValidRequest(request,staged),"Installed executable name allowed without broadening to arbitrary executables");
+        Check(!AppUpdate.IsMsiManaged(old),"Portable application has no MSI marker");
+        AppUpdate.EnsureSelfUpdateAllowed(old);
+        string marker=Path.Combine(folder,AppUpdate.MsiMarkerName);File.WriteAllText(marker,"{\"installation\":\"msi\"}");
+        Check(AppUpdate.IsMsiManaged(old),"MSI marker detects Windows Installer ownership");
+        Check(!AppUpdate.ValidRequest(request,staged),"Updater helper refuses an MSI-owned target");
+        refused=false;try{AppUpdate.EnsureSelfUpdateAllowed(old);}catch(IOException){refused=true;}
+        Check(refused,"MSI installation cannot start raw EXE replacement");
+        launched=null;refused=false;
+        try{AppUpdate.ReplaceAndLaunch(package,old,oldHash,newHash,path=>launched=path);}catch(IOException){refused=true;}
+        Check(refused&&launched==null&&File.ReadAllText(old)=="old again","MSI ownership is checked before replacement or launch");
+        File.Delete(marker);
+        Check(AppUpdate.ValidRequest(request,staged),"Portable and Inno updates remain available without the MSI marker");
+        Check(AppUpdate.MsiReleasePage("2.24.0")=="https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/v2.24.0","MSI update opens the exact stable release page");
+        foreach(string invalid in new[]{"2.24.0-test.1","https://evil.test/","2.24.0/other",null}){
+            refused=false;try{AppUpdate.MsiReleasePage(invalid);}catch(InvalidDataException){refused=true;}
+            Check(refused,"MSI release link rejects malformed or non-stable versions");
+        }
+        request.Target=Path.Combine(folder,"other.exe");Check(!AppUpdate.ValidRequest(request,staged),"Foreign executable name remains forbidden");
+        Check(!AppUpdate.IsStagedPackage(Path.Combine(folder,"update.exe"))&&!AppUpdate.IsStagedPackage(staged.Replace("update.exe","other.exe")),"Helper must be update.exe in a private GUID staging directory");
+        refused=false;try{using(AppUpdate.OpenValidatedPackage(package,new UpdateRelease{Hash=newHash,Size=8,Version="2.23.0"},CancellationToken.None)){} }catch(InvalidDataException){refused=true;}
+        Check(refused&&!File.Exists(Path.Combine(folder,"request.json")),"Invalid staging path rejected before helper request or execution");
+        using(var cancelledToken=new CancellationTokenSource()) {
+            cancelledToken.Cancel();refused=false;
+            try{using(AppUpdate.OpenValidatedPackage(staged,null,cancelledToken.Token)){} }catch(OperationCanceledException){refused=true;}
+            Check(refused,"Cancellation checked before any staged-file access");
+        }
         // Delete only this known test directory, never the real application or update cache.
         foreach(string file in Directory.GetFiles(folder))File.Delete(file);Directory.Delete(folder);
         Console.WriteLine("All "+passed+" updater checks passed; dummy files only, no real app replaced or launched.");

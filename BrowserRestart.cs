@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -220,7 +220,7 @@ namespace HbAi.XboxDns
                         bool keep = false;
                         try
                         {
-                            if (!process.HasExited && process.SessionId == session && BrowserCatalog.Matches(browser, process.MainModule.FileName))
+                            if (!process.HasExited && process.SessionId == session && BrowserCatalog.Matches(browser, ProcessSecurity.ImagePath(process.Id)))
                             {
                                 var instance = new Instance(process, browser.Name == "Яндекс Браузер");
                                 // Crash handlers/renderers can outlive the browser root after a normal exit.
@@ -333,7 +333,7 @@ namespace HbAi.XboxDns
                 using (process)
                 {
                     if (process.HasExited || process.SessionId != session || process.MainWindowHandle == IntPtr.Zero) continue;
-                    string path = process.MainModule.FileName;
+                    string path = ProcessSecurity.ImagePath(process.Id);
                     if (choice != null && !string.Equals(choice.Exe, path, StringComparison.OrdinalIgnoreCase))
                         throw new IOException("Открыты разные версии Antigravity. Перезапустите их вручную.");
                     choice = new BrowserChoice {Name="Antigravity", Exe=path};

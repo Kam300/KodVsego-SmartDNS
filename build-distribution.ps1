@@ -1,54 +1,78 @@
-﻿param([string]$Compiler = $env:INNO_SETUP_COMPILER, [switch]$SkipAppBuild)
+﻿param([string]$Wix,[string]$AppCompiler,[string]$SourceExe,[switch]$SkipAppBuild,[string]$OutputDirectory)
 $ErrorActionPreference='Stop'
 $root=$PSScriptRoot
-if (!$Compiler) {
-    $command=Get-Command ISCC.exe -ErrorAction SilentlyContinue
-    if ($command) { $Compiler=$command.Source }
-    else {
-        $candidates=@("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe")
-        $Compiler=$candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-    }
+$version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value
+if ($version -notmatch '^\d+\.\d+\.\d+(?:-test\.\d+)?$') { throw 'Invalid distribution version.' }
+if (!$OutputDirectory) { $OutputDirectory=Join-Path $root ('dist\'+$version+'\release') }
+$OutputDirectory=[IO.Path]::GetFullPath($OutputDirectory)
+if (Test-Path -LiteralPath $OutputDirectory) {
+    if (!(Test-Path -LiteralPath $OutputDirectory -PathType Container)) { throw 'Output directory is a file.' }
+    $existing=@(Get-ChildItem -LiteralPath $OutputDirectory -Force | Where-Object { $_.Name -like 'KodVsego_SmartDNS.*' -or $_.Name -in @('SHA256SUMS.txt','release-files.json') })
+    if ($existing.Count) { throw 'Release output already contains artifacts. Choose another OutputDirectory or a new version; existing files are preserved.' }
 }
-if (!$Compiler -or !(Test-Path -LiteralPath $Compiler)) { throw 'Install Inno Setup 6.7+ and pass -Compiler with the full ISCC.exe path, or set INNO_SETUP_COMPILER.' }
-$source=[IO.File]::ReadAllText((Join-Path $root 'AssemblyInfo.cs'))
-$version=[regex]::Match($source,'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value
-if ($version -notmatch '^\d+\.\d+\.\d+(?:-[A-Za-z0-9.]+)?$') { throw 'Invalid app version' }
-if (!$SkipAppBuild) {
-    Push-Location $root
-    try { & cmd.exe /c build.bat; if ($LASTEXITCODE -ne 0) { throw 'Application build failed' } }
-    finally { Pop-Location }
+if (!$Wix) { $Wix=Join-Path $env:LOCALAPPDATA 'KodVsego\BuildTools\wix-5.0.2\wix.exe' }
+$Wix=(Resolve-Path -LiteralPath $Wix).Path
+$work=Join-Path (Split-Path $OutputDirectory -Parent) ('packaging-'+[Guid]::NewGuid().ToString('N'))
+$appDirectory=Join-Path $work 'application'
+New-Item -ItemType Directory -Path $appDirectory -Force | Out-Null
+$name='KodVsego_SmartDNS.'+$version+'.exe'
+$exe=Join-Path $appDirectory $name
+if ($SourceExe -or $SkipAppBuild) {
+    if (!$SourceExe) { $SourceExe=Join-Path $root $name }
+    $SourceExe=(Resolve-Path -LiteralPath $SourceExe).Path
+    [IO.File]::Copy($SourceExe,$exe,$false)
+} else {
+    & (Join-Path $root 'tools\Build-VerifiedWindows.ps1') -Compiler $AppCompiler -OutputDirectory $appDirectory
 }
-$name="KodVsego_SmartDNS.$version.exe"
-$exe=Join-Path $root $name
-if (!(Test-Path -LiteralPath $exe) -or [Diagnostics.FileVersionInfo]::GetVersionInfo($exe).ProductVersion -ne $version) { throw 'Missing EXE or wrong embedded version' }
-$out=Join-Path $root "dist\$version"
-$portable=Join-Path $out 'portable'
-New-Item -ItemType Directory -Path $portable -Force | Out-Null
-Copy-Item -LiteralPath $exe -Destination (Join-Path $portable $name) -Force
-Copy-Item -LiteralPath (Join-Path $root 'LICENSE'),(Join-Path $root 'LICENSE.ru.md') -Destination $portable -Force
-New-Item -ItemType Directory -Path (Join-Path $portable 'res'),(Join-Path $portable 'docs\licenses') -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $root 'res\OFL-Unbounded.txt'),(Join-Path $root 'res\OFL-Manrope.txt') -Destination (Join-Path $portable 'res') -Force
-Copy-Item -LiteralPath (Join-Path $root 'docs\licenses\HB-AI-LICENSE.ru.md') -Destination (Join-Path $portable 'docs\licenses') -Force
+$metadata=[Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
+if ($metadata.ProductVersion -ne $version -or $metadata.ProductName -notlike '*Smart DNS*') { throw 'Missing application or mismatched product/version.' }
+& (Join-Path $root 'tools\Test-WindowsArtifact.ps1') -File $exe -OutputPath (Join-Path $appDirectory 'artifact-policy.json')
+$exeHash=(Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant()
+
+# Build all packages in a separate workspace before copying the release allowlist.
+$portable=Join-Path $work 'portable'
+New-Item -ItemType Directory -Path $portable | Out-Null
+Copy-Item -LiteralPath $exe -Destination (Join-Path $portable $name)
+foreach($relative in @('LICENSE','LICENSE.ru.md','res\OFL-Unbounded.txt','res\OFL-Manrope.txt','docs\licenses\HB-AI-LICENSE.ru.md')) {
+    $destination=Join-Path $portable $relative
+    New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $root $relative) -Destination $destination
+}
 $note=@"
 Код Всего · Smart DNS $version — без установки
 
-Запустите $name. Для изменения DNS подтвердите запрос прав администратора.
-Установка и ярлыки не требуются. Настройки и резервные копии сохраняются в Windows, а не рядом с EXE; они общие с установленной версией.
-Перед удалением файла выключите DNS в программе, если нужно восстановить прежние настройки сети.
+Распакуйте архив и запустите $name.
+Для изменения DNS подтвердите отдельный запрос прав администратора.
+Настройки и резервные копии сохраняются в Windows и общие с установленной версией.
+Перед удалением выключите DNS в программе, если нужно восстановить прежние настройки сети.
 
 Исходный код: https://github.com/Kam300/KodVsego-SmartDNS
+Канал: https://t.me/TotalC0de
 Поддержка: https://t.me/TotalCodeAdmin
 "@
 [IO.File]::WriteAllText((Join-Path $portable 'Прочитайте.txt'),$note,[Text.UTF8Encoding]::new($true))
-& $Compiler "/DSourceExe=$exe" "/DOutputPath=$out" (Join-Path $root 'installer\SmartDNS.iss')
-if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
-$setup=Join-Path $out "KodVsego_SmartDNS.Setup.$version.exe"
-if (!(Test-Path -LiteralPath $setup)) { throw 'Installer output missing' }
-$zip=Join-Path $out "KodVsego_SmartDNS.Portable.$version.zip"
-Compress-Archive -Path (Join-Path $portable '*') -DestinationPath $zip -Force
-# Keep this exact standalone filename: the existing updater selects it in GitHub releases.
-Copy-Item -LiteralPath $exe -Destination (Join-Path $out $name) -Force
-$assets=@($name,[IO.Path]::GetFileName($setup),[IO.Path]::GetFileName($zip))
-$sums=foreach($asset in $assets) { (Get-FileHash -LiteralPath (Join-Path $out $asset) -Algorithm SHA256).Hash.ToLowerInvariant()+'  '+$asset }
-[IO.File]::WriteAllLines((Join-Path $out 'SHA256SUMS.txt'),$sums,[Text.UTF8Encoding]::new($false))
-Write-Output "Packages ready: $out"
+$zipName='KodVsego_SmartDNS.Portable.'+$version+'.zip'
+$zip=Join-Path $work $zipName
+Compress-Archive -Path (Join-Path $portable '*') -DestinationPath $zip
+$msiDirectory=Join-Path $work 'msi'
+& (Join-Path $root 'build-msi.ps1') -Wix $Wix -SourceExe $exe -OutputDirectory $msiDirectory
+$msiName='KodVsego_SmartDNS.Setup.'+$version+'.msi'
+$msi=Join-Path $msiDirectory $msiName
+$msiBuild=[IO.File]::ReadAllText((Join-Path $msiDirectory 'msi-build.json'))|ConvertFrom-Json
+if ($msiBuild.SourceSHA256 -ne $exeHash -or (Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant() -ne $exeHash -or (Get-FileHash -LiteralPath $msi).Hash.ToLowerInvariant() -ne $msiBuild.SHA256) { throw 'Application or MSI changed during packaging.' }
+$assets=@(
+    [pscustomobject]@{Name=$msiName;Role='msi-installer';Path=$msi},
+    [pscustomobject]@{Name=$zipName;Role='portable-archive';Path=$zip},
+    [pscustomobject]@{Name=$name;Role='update-executable';Path=$exe}
+)
+New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+$records=@(foreach($asset in $assets) {
+    $destination=Join-Path $OutputDirectory $asset.Name
+    [IO.File]::Copy($asset.Path,$destination,$false)
+    [ordered]@{Name=$asset.Name;Role=$asset.Role;Bytes=(Get-Item -LiteralPath $destination).Length;SHA256=(Get-FileHash -LiteralPath $destination).Hash.ToLowerInvariant()}
+})
+$manifest=[ordered]@{SchemaVersion=1;Version=$version;PrimaryInstaller=$msiName;Assets=$records}
+[IO.File]::WriteAllText((Join-Path $OutputDirectory 'release-files.json'),($manifest|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllLines((Join-Path $OutputDirectory 'SHA256SUMS.txt'),[string[]]@($records|ForEach-Object {$_.SHA256+'  '+$_.Name}),[Text.UTF8Encoding]::new($false))
+Write-Output ('Release packages ready: '+$OutputDirectory)
+Write-Output ('Build evidence: '+$work)

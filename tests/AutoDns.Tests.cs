@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -13,7 +13,7 @@ static class AutoDnsTests
         public string[] Resolve(int provider,bool encrypted,string host,CancellationToken cancel)
         {
             Interlocked.Increment(ref calls);if(encrypted)Interlocked.Increment(ref encryptedCalls);
-            if(FailAll || provider!=1 || FailDaily&&host.StartsWith("daily-"))throw new IOException("simulated DNS failure");
+            if(FailAll || provider!=4 || FailDaily&&host.StartsWith("daily-"))throw new IOException("simulated DNS failure");
             return new[]{"109.120.131.201","109.120.131.200"};
         }
         public void Https(string host,string address,bool api,CancellationToken cancel)
@@ -32,16 +32,28 @@ static class AutoDnsTests
         Check(!AutoDns.Candidates(0,false).Contains(3)&&AutoDns.Candidates(5,false).SequenceEqual(new[]{3}),"Xbox and AI candidates remain separate");
         Check(!AutoDns.Candidates(6,false).Contains(0)&&!AutoDns.Candidates(2,false).Contains(4),"Unsupported Comss Antigravity and Bezmezhau Claude combinations excluded");
         Check(AutoDns.Candidates(0,true).SequenceEqual(new[]{0,1,4,5,6})&&!AutoDns.Candidates(5,true).Any(),"Strict encryption never downgrades to unencrypted EU or Xbox");
+        Check(Dns.IsAvailable(1)&&Dns.IsAvailable(2)&&!Dns.IsAvailable(-1)&&!Dns.IsAvailable(7),"GeoHide variants restored with stable historical IDs");
+        var switches=(bool[])typeof(ProviderAvailability).GetField("Enabled",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static).GetValue(null);
+        var savedSwitches=(bool[])switches.Clone();
+        try {
+            switches[1]=false;switches[2]=false;
+            Check(!Dns.AvailableProviders.Contains(1)&&!Dns.AvailableProviders.Contains(2),"A disabled provider disappears from choices");
+            Check(Enumerable.Range(0,AutoDns.Goals.Length).All(g=>AutoDns.Candidates(g,false).All(Dns.IsAvailable)),"The same switch excludes disabled providers from auto selection");
+            Check(Dns.MatchProvider(Dns.V4[1])==1&&Dns.MatchProvider(Dns.V4[2])==2,"Disabled provider still recognized for recovery");
+            Check(new[]{1,2}.All(p=>Dns.ExecuteDirect(true,p).Contains("временно недоступен")),"Stale normal commands cannot enable disabled provider");
+            Check(new[]{1,2}.All(p=>EncryptedDns.Run(p).Contains("временно недоступен")),"Same switch blocks encrypted DNS activation");
+            Check(new[]{0,2}.All(p=>AntigravityDns.Run(true,false,p).Contains("временно недоступен")),"Same switch blocks Antigravity rules");
+        } finally {Array.Copy(savedSwitches,switches,switches.Length);}
         var fake=new Probe();var results=AutoDns.Search(0,false,fake,CancellationToken.None);
-        Check(results.Length==6&&AutoDns.Best(results).Provider==1,"Only a candidate with both DNS and HTTPS succeeds");
+        Check(results.Length==6&&AutoDns.Best(results).Provider==4,"Only a candidate with both DNS and HTTPS succeeds");
         Check(fake.badAddressAttempts==1,"Failed relay IP is tried before alternative resolved address");
         string diagnostic=AutoDns.Diagnostic(0,results);
         Check(diagnostic.Contains("Auto goal=Gemini")&&diagnostic.Contains("109.120.131.201")&&diagnostic.Contains("simulated relay timeout")&&diagnostic.Contains("HTTPS OK")&&diagnostic.Contains("Total=")&&diagnostic.Contains("IOException"),"Developer log keeps failed IP attempts, error type, timings and eventual success");
         Check(results.Single(r=>r.Provider==5).Encrypted&&fake.encryptedCalls==1,"DNS-AI always uses encryption even in mixed search");
         Check(AutoDns.Best(AutoDns.Search(0,false,new Probe{FailAll=true},CancellationToken.None))==null,"All failed candidates produce no selection");
         var currentOnly=new Probe();
-        var health=AutoDns.Search(0,false,currentOnly,CancellationToken.None,null,1);
-        Check(health.Length==1&&health[0].Provider==1&&currentOnly.calls==1,"Background health check only probes current provider");
+        var health=AutoDns.Search(0,false,currentOnly,CancellationToken.None,null,4);
+        Check(health.Length==1&&health[0].Provider==4&&currentOnly.calls==1,"Background health check only probes current provider");
         Check(AutoDns.Best(AutoDns.Search(6,true,new Probe{FailDaily=true},CancellationToken.None))==null,"Antigravity requires both endpoint domains");
         var token=new CancellationTokenSource();token.Cancel();bool cancelled=false;
         try{AutoDns.Search(0,false,new Probe(),token.Token);}catch(OperationCanceledException){cancelled=true;}

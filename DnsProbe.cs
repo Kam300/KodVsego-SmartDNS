@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -122,11 +122,7 @@ namespace HbAi.XboxDns
         internal static string[] HostsForProvider(int provider)
         {
             if (provider < 0 || provider >= Dns.Name.Length) throw new ArgumentOutOfRangeException("provider");
-            if (provider == 3) return new[] { "example.com", "xbox.com", "user.auth.xboxlive.com", "xsts.auth.xboxlive.com" };
-            if (provider == 6) return new[] { "example.com", "chatgpt.com", "claude.ai", "gemini.google.com", "elevenlabs.io" };
-            if (provider == 4) return new[] { "example.com", "chatgpt.com", "generativelanguage.googleapis.com", "open.spotify.com", "cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com" };
-            if (provider == 5) return new[] { "example.com", "chatgpt.com", "claude.ai", "gemini.google.com", "generativelanguage.googleapis.com", "api.elevenlabs.io", "cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com" };
-            return new[] { "example.com", "chatgpt.com", "claude.ai", "generativelanguage.googleapis.com", "api.elevenlabs.io", "cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com" };
+            return ProviderCatalog.All[provider].testHosts;
         }
         internal static string Report(int provider, DnsProbeResult[] results)
         {

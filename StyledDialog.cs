@@ -30,11 +30,12 @@ namespace HbAi.XboxDns
         int supportGrowth;
         Func<string, string, string> makeReport;
         string diagnosticDetails;
-        internal string DiagnosticMessage {get {return DiagnosticReport.Scrub(messageText.Text+(string.IsNullOrEmpty(diagnosticDetails)?"":"\n\nТехнические сведения:\n"+diagnosticDetails));}}
+        internal string DiagnosticMessage {get {return DiagnosticReport.Scrub((dnsTestLayout?testFullText??messageText.Text:messageText.Text)+(string.IsNullOrEmpty(diagnosticDetails)?"":"\n\nТехнические сведения:\n"+diagnosticDetails));}}
         internal void SetDiagnosticDetails(string details,bool visible)
         {diagnosticDetails=details;SetSupportVisible(visible&&!string.IsNullOrEmpty(details));}
         bool autoLayout, autoReady, autoRunning, autoDetailsExpanded, arranging;
-        bool settingsLayout;
+        bool settingsLayout, dnsTestLayout, testDetailsExpanded;
+        string testFullText, testSummary; LinkLabel testDetailsToggle;
         DialogServicePicker settingsGoalChoice;
         DialogModeOption settingsManualMode,settingsAutoMode;
         Label settingsModeHint,settingsBackupHeading,settingsBackupTitle,settingsBackupStatus;
@@ -91,7 +92,7 @@ namespace HbAi.XboxDns
             int textHeight = bodyLabel.GetPreferredSize(new Size(bodyWidth, 0)).Height + px(12);
             messageText = bodyLabel;
             int contentHeight = Math.Min(textHeight, Math.Max(px(90), area.Height - px(210) - 32));
-            ClientSize = new Size(width, px(190) + contentHeight);
+            ClientSize = new Size(width, px(196) + contentHeight);
 
             var heading = new Label { Text = title, Font = titleFont, ForeColor = ink,
                 Bounds = new Rectangle(pad, px(24), width - pad * 2 - px(36), px(32)), UseMnemonic = false, UseCompatibleTextRendering = true };
@@ -163,6 +164,15 @@ namespace HbAi.XboxDns
             AccessibleName = title;
             Shown += (s, e) => { var target = AcceptButton as Control; if (target != null) target.Focus(); };
             FormClosing += (s, e) => { if (browserBusy) e.Cancel = true; };
+            if(warning&&!confirm&&!allowDismiss) {
+                // The title already identifies the error; keep its icon beside the explanation.
+                statusCaption.Visible=false;statusMarker.Top=px(78);
+                messageBody.Top=px(76);messageBody.Left=px(72);messageBody.Width=width-px(100);
+                messageText.MaximumSize=new Size(messageBody.Width-px(20),0);
+                int preferred=messageText.GetPreferredSize(new Size(messageText.MaximumSize.Width,0)).Height+px(8);
+                ClientSize=new Size(width,Math.Min(maxDialogHeight,messageBody.Top+preferred+bodyGap+actionHeight+footerGap));
+                UpdateDialogLayout();
+            }
         }
 
         internal void AddBrowserControls(BrowserChoice[] choices, Action<BrowserChoice> restart)
@@ -212,6 +222,7 @@ namespace HbAi.XboxDns
 
         internal void AddDnsTestControls(string[] providers, int selected, Action<int> run)
         {
+            dnsTestLayout=true;
             statusCaption.Text = "Выберите DNS для теста";
             float scale = actionHeight / 42f;
             Func<int, int> px = n => (int)Math.Round(n * scale);
@@ -226,12 +237,18 @@ namespace HbAi.XboxDns
             browserHint = new Label { Text = "Выбор здесь только для теста.\nСистемные настройки не меняются.", Font = bodyFont,
                 ForeColor = ForeColor, Left = px(28), Width = ClientSize.Width - px(56), Height = px(40), UseMnemonic = false };
             Controls.Add(browserChoice); Controls.Add(restartBrowser); Controls.Add(browserHint);
-            ClientSize = new Size(ClientSize.Width, Math.Min(maxDialogHeight, Math.Max(ClientSize.Height + browserRowHeight, px(480))));
+            testDetailsToggle=new LinkLabel {Text="Подробности",Font=bodyFont,LinkColor=statusAccent,ActiveLinkColor=statusAccent,VisitedLinkColor=statusAccent,Left=px(28),Width=px(220),Height=px(24),Visible=false};
+            testDetailsToggle.LinkClicked+=(s,e)=>{testDetailsExpanded=!testDetailsExpanded;messageText.Text=testDetailsExpanded?testFullText:testSummary;UpdateDialogLayout();};
+            Controls.Add(testDetailsToggle);
             UpdateDialogLayout();
         }
-        internal void ShowDnsTestStatus(string text, string caption, bool busy, bool warning)
+        internal void ShowDnsTestStatus(string text, string caption, bool busy, bool warning, string summary=null)
         {
-            messageText.Text = text; messageBody.AutoScrollPosition = Point.Empty;
+            testFullText=text;testSummary=summary;testDetailsExpanded=false;
+            if(busy)diagnosticDetails=null;
+            bool details=!busy&&summary!=null;
+            testDetailsToggle.Visible=details;
+            messageText.Text=details?summary:text; messageBody.AutoScrollPosition = Point.Empty;
             statusCaption.Text = caption;
             statusCaption.ForeColor = warning ? statusWarning : statusAccent;
             statusMarker.Kind = warning ? DialogStatusKind.Warning : busy ? DialogStatusKind.Search : DialogStatusKind.Success;
@@ -239,7 +256,7 @@ namespace HbAi.XboxDns
             browserChoice.Enabled = !busy; restartBrowser.Enabled = !busy;
             restartBrowser.Text = busy ? "Проверяем…" : "Проверить";
             SetSupportVisible(warning && !busy && DiagnosticReport.ShouldOffer(Text, text));
-            Invalidate(); Update();
+            UpdateDialogLayout(); Invalidate(); Update();
         }
 
         internal void AddAutoDnsControls(string[] goals, int selected, Action<int> run, Action selectionChanged = null)
@@ -341,7 +358,7 @@ namespace HbAi.XboxDns
             statusMarker.Kind = warning ? DialogStatusKind.Error : browserBusy ? DialogStatusKind.Search : DialogStatusKind.Success;
             statusMarker.ForeColor = warning ? statusWarning : statusAccent;
             SetSupportVisible(warning && DiagnosticReport.ShouldOffer(Text, text));
-            Invalidate(); Update();
+            UpdateDialogLayout(); Invalidate(); Update();
         }
         internal void AddUpdateControls(Action action)
         {
@@ -563,6 +580,15 @@ namespace HbAi.XboxDns
             else if(autoLayout)LayoutAutoDns();
             else if (primaryAction != null && messageBody != null)
             {
+                float unit=actionHeight/42f;
+                if(dnsTestLayout) {
+                    int preferred=messageText.GetPreferredSize(new Size(messageText.MaximumSize.Width,0)).Height+(int)Math.Round(8*unit);
+                    int detailHeight=testDetailsToggle.Visible?(int)Math.Round(30*unit):0;
+                    int extras=footerGap+actionHeight+bodyGap+browserRowHeight+detailHeight+(supportShown&&supportPanel!=null?supportPanel.Height+bodyGap:0);
+                    int height=Math.Min(maxDialogHeight,messageBody.Top+Math.Min(preferred,(int)Math.Round(190*unit))+extras);
+                    if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
+                    testDetailsToggle.Text=testDetailsExpanded?"Скрыть подробности":"Подробности";
+                }
                 primaryAction.Top = Math.Max(0, ClientSize.Height - footerGap - actionHeight);
                 if (cancelAction != null) cancelAction.Top = primaryAction.Top;
                 int bodyBottom = primaryAction.Top - bodyGap;
@@ -579,6 +605,7 @@ namespace HbAi.XboxDns
                     browserHint.Top = contentBottom - browserRowHeight;
                     bodyBottom = browserHint.Top - bodyGap;
                 }
+                if(dnsTestLayout&&testDetailsToggle.Visible){testDetailsToggle.Top=bodyBottom-(int)Math.Round(24*unit);bodyBottom=testDetailsToggle.Top-(int)Math.Round(6*unit);}
                 messageBody.Height = Math.Max(0, bodyBottom - messageBody.Top);
             }
             if (IsHandleCreated && ClientSize.Width > 0 && ClientSize.Height > 0 && radius > 0)

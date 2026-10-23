@@ -133,6 +133,20 @@ static class NativeDnsTests
             Assert(system.Encryption[system.Id+"/IPv4"].Length==2 && system.Encryption[system.Id+"/IPv4"].All(d=>d.Flags==2 && d.Template==EncryptedDns.Templates[5]),"Unencrypted DNS-AI configured");
             engine.Change(false,new string[0]);Original();Assert(system.Ipv6Enabled,"IPv6 not restored");
         });
+        Test("Moving from retired DNS-AI addresses preserves the original backup", () => {
+            system.CaptureDoh=true;
+            engine.Change(true,new[]{"194.87.196.13","186.246.49.127"},EncryptedDns.Templates[5]);
+            string backup=store.Json;
+            new DnsSettingsEngine(system,store).Change(true,EncryptedDns.ServersFor(5),EncryptedDns.Templates[5]);
+            Assert(store.Json==backup,"Migration replaced the pre-SmartDNS backup");
+            Assert(system.Values[system.Id+"/IPv4"].SequenceEqual(new[]{"194.87.196.13","45.151.102.219"}),"Retired address still applied");
+            new DnsSettingsEngine(system,store).Change(false,new string[0]);Original();Assert(system.Ipv6Enabled,"Migration lost IPv6 backup");
+        });
+        Test("Retired DNS-AI addresses can be reset without an old app backup", () => {
+            system.Values[system.Id+"/IPv4"]=new[]{"194.87.196.13","186.246.49.127"};
+            engine.ResetKnown(Dns.KnownServers);
+            Assert(system.Values[system.Id+"/IPv4"].Length==0,"Retired resolver was not included in known-address recovery");
+        });
         Test("Existing DoH and IPv6 state survive a new engine instance", () => {
             system.CaptureDoh = true;
             system.Encryption[system.Id + "/IPv4"] = EncryptedDns.Strict(2, "https://original.example/dns-query");

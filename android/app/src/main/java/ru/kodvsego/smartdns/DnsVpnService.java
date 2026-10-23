@@ -58,6 +58,7 @@ public final class DnsVpnService extends VpnService {
         // Repeated taps or widget updates never enqueue duplicate connections.
         if(active||connecting)return START_NOT_STICKY;
         try {
+            if(!Provider.isAvailable(intent.getIntExtra("provider",0)))throw new IllegalArgumentException("Провайдер временно недоступен. Выберите другой DNS.");
             DnsConfig config=new DnsConfig(intent.getIntExtra("provider",0),intent.getBooleanExtra("encrypted",false));
             long token=sessions.begin();connecting=true;status="Подключаем "+Provider.at(config.provider).name+"…";
             if(Build.VERSION.SDK_INT>=34)startForeground(1,notification(),ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED);

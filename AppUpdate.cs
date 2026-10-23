@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -38,6 +38,16 @@ namespace HbAi.XboxDns
     }
     static class AppUpdate
     {
+        internal const string MsiMarkerName="SmartDNS.Msi.json";
+        internal static bool IsMsiManaged(string executable)
+        {return File.Exists(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(executable)),MsiMarkerName));}
+        internal static void EnsureSelfUpdateAllowed(string executable)
+        {if(IsMsiManaged(executable))throw new IOException("Эта копия установлена через MSI. Обновите её установщиком MSI со страницы релизов.");}
+        internal static string MsiReleasePage(string version)
+        {
+            if(!Regex.IsMatch(version??"",@"^\d+\.\d+\.\d+$"))throw new InvalidDataException("Некорректный номер версии MSI.");
+            return "https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/v"+version;
+        }
         internal const string LatestApi="https://api.github.com/repos/Kam300/KodVsego-SmartDNS/releases/latest";
         internal const long MaxPackage=64*1024*1024;
         internal static string CacheRoot {get {return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"KodVsego","SmartDNS","Updates");}}
@@ -253,25 +263,57 @@ namespace HbAi.XboxDns
             }
             cancel.ThrowIfCancellationRequested();ValidatePackage(package,release);return package;
         }
-        internal static UpdateTicket StartInstall(string package,CancellationToken cancel)
+        internal static bool IsStagedPackage(string file)
         {
+            if(string.IsNullOrEmpty(file))return false;
+            try {
+                string full=Path.GetFullPath(file),directory=Path.GetDirectoryName(full);Guid token;
+                return full.Equals(file,StringComparison.OrdinalIgnoreCase)&&Path.GetFileName(full)=="update.exe"&&
+                    Guid.TryParseExact(Path.GetFileName(directory),"N",out token)&&
+                    string.Equals(Path.GetDirectoryName(directory),CacheRoot,StringComparison.OrdinalIgnoreCase);
+            }catch(ArgumentException){return false;}catch(NotSupportedException){return false;}catch(PathTooLongException){return false;}
+        }
+        internal static FileStream OpenValidatedPackage(string package,UpdateRelease release,CancellationToken cancel)
+        {
+            cancel.ThrowIfCancellationRequested();
+            if(!IsStagedPackage(package)||release==null||release.Size<=0||release.Size>MaxPackage)
+                throw new InvalidDataException("Некорректный пакет обновления. Текущая программа не изменена.");
+            // Keep the verified executable read-only until its helper confirms startup.
+            // This is a repeat check against the release digest, not a new digest of arbitrary bytes.
+            var locked=new FileStream(package,FileMode.Open,FileAccess.Read,FileShare.Read);
+            try {
+                if((File.GetAttributes(package)&FileAttributes.ReparsePoint)!=0||
+                    (File.GetAttributes(Path.GetDirectoryName(package))&FileAttributes.ReparsePoint)!=0)
+                    throw new InvalidDataException("Пакет обновления перенаправлен. Запуск отменён.");
+                ValidatePackage(package,release);cancel.ThrowIfCancellationRequested();return locked;
+            }catch{locked.Dispose();throw;}
+        }
+        internal static UpdateTicket StartInstall(string package,UpdateRelease release,CancellationToken cancel)
+        {
+            cancel.ThrowIfCancellationRequested();
+            EnsureSelfUpdateAllowed(Application.ExecutablePath);
             if(DnsElevation.IsAdministrator())throw new IOException("Для обновления запустите Smart DNS обычным способом, без прав администратора.");
-            string directory=Path.GetDirectoryName(package),target=Application.ExecutablePath;
-            using(var parent=Process.GetCurrentProcess()) {
-                var request=new UpdateRequest {Parent=parent.Id,ParentStarted=parent.StartTime.ToUniversalTime().Ticks,Target=target,OriginalHash=HashFile(target),PackageHash=HashFile(package)};
-                File.WriteAllText(Path.Combine(directory,"request.json"),new JavaScriptSerializer().Serialize(request),new UTF8Encoding(false));
-            }
-            using(var helper=Process.Start(new ProcessStartInfo(package,"--install-update") {UseShellExecute=false,WorkingDirectory=Environment.GetFolderPath(Environment.SpecialFolder.System)})) {
-                try {
-                    for(int i=0;i<100;i++) {
-                        cancel.ThrowIfCancellationRequested();
-                        if(File.Exists(Path.Combine(directory,"ready")))return new UpdateTicket {Directory=directory};
-                        if(helper.HasExited)throw new IOException("Не удалось подготовить установку обновления.");
-                        Thread.Sleep(100);
-                    }
-                    throw new IOException("Установщик обновления не ответил.");
+            if(release==null)throw new InvalidDataException("Не найдены сведения о проверенном обновлении.");
+            var expected=new UpdateRelease {Version=release.Version,Hash=release.Hash,Size=release.Size};
+            using(var locked=OpenValidatedPackage(package,expected,cancel)) {
+                string directory=Path.GetDirectoryName(package),target=Application.ExecutablePath;
+                using(var parent=Process.GetCurrentProcess()) {
+                    var request=new UpdateRequest {Parent=parent.Id,ParentStarted=parent.StartTime.ToUniversalTime().Ticks,Target=target,OriginalHash=HashFile(target),PackageHash=expected.Hash.ToLowerInvariant()};
+                    File.WriteAllText(Path.Combine(directory,"request.json"),new JavaScriptSerializer().Serialize(request),new UTF8Encoding(false));
                 }
-                catch {File.WriteAllText(Path.Combine(directory,"cancel"),"cancel");throw;}
+                using(var helper=Process.Start(new ProcessStartInfo(package,"--install-update") {UseShellExecute=false,WorkingDirectory=Environment.GetFolderPath(Environment.SpecialFolder.System)})) {
+                    try {
+                        if(helper==null)throw new IOException("Не удалось запустить установку обновления.");
+                        for(int i=0;i<100;i++) {
+                            cancel.ThrowIfCancellationRequested();
+                            if(File.Exists(Path.Combine(directory,"ready")))return new UpdateTicket {Directory=directory};
+                            if(helper.HasExited)throw new IOException("Не удалось подготовить установку обновления.");
+                            Thread.Sleep(100);
+                        }
+                        throw new IOException("Установщик обновления не ответил.");
+                    }
+                    catch {File.WriteAllText(Path.Combine(directory,"cancel"),"cancel");throw;}
+                }
             }
         }
         internal static bool ValidRequest(UpdateRequest request,string helper)
@@ -279,14 +321,14 @@ namespace HbAi.XboxDns
             if(request==null||request.Parent<=0||request.ParentStarted<=0||!Regex.IsMatch(request.OriginalHash??"","^[a-f0-9]{64}$")||!Regex.IsMatch(request.PackageHash??"","^[a-f0-9]{64}$"))return false;
             string target;
             try{target=Path.GetFullPath(request.Target);}catch{return false;}
-            string directory=Path.GetDirectoryName(helper);Guid token;
-            return target==request.Target&&Path.GetFileName(helper)=="update.exe"&&
-                Guid.TryParseExact(Path.GetFileName(directory),"N",out token)&&Path.GetDirectoryName(directory).Equals(CacheRoot,StringComparison.OrdinalIgnoreCase)&&
-                Regex.IsMatch(Path.GetFileName(target),@"^KodVsego_SmartDNS\.[A-Za-z0-9.-]+\.exe$")&&
+            string fileName=Path.GetFileName(target);
+            return target==request.Target&&IsStagedPackage(helper)&&!IsMsiManaged(target)&&
+                (fileName.Equals("SmartDNS.exe",StringComparison.OrdinalIgnoreCase)||Regex.IsMatch(fileName,@"^KodVsego_SmartDNS\.[A-Za-z0-9.-]+\.exe$"))&&
                 !target.Equals(helper,StringComparison.OrdinalIgnoreCase);
         }
         internal static void ReplaceAndLaunch(string package,string target,string originalHash,string packageHash,Action<string> launch)
         {
+            EnsureSelfUpdateAllowed(target);
             if(HashFile(package)!=packageHash||HashFile(target)!=originalHash)throw new IOException("Файл программы изменился. Повторите обновление.");
             string staged=target+".update-"+Guid.NewGuid().ToString("N"),backup=target+".previous-"+Guid.NewGuid().ToString("N");
             File.Copy(package,staged,false);
@@ -305,7 +347,7 @@ namespace HbAi.XboxDns
                 if(!ValidRequest(request,helper)||HashFile(helper)!=request.PackageHash)return 4;
                 if((File.GetAttributes(request.Target)&FileAttributes.ReparsePoint)!=0||FileVersionInfo.GetVersionInfo(request.Target).ProductName!="Код Всего · Smart DNS")return 4;
                 using(var parent=Process.GetProcessById(request.Parent)) {
-                    if(parent.StartTime.ToUniversalTime().Ticks!=request.ParentStarted||!parent.MainModule.FileName.Equals(request.Target,StringComparison.OrdinalIgnoreCase)||HashFile(request.Target)!=request.OriginalHash)return 4;
+                    if(parent.StartTime.ToUniversalTime().Ticks!=request.ParentStarted||!ProcessSecurity.ImagePath(parent.Id).Equals(request.Target,StringComparison.OrdinalIgnoreCase)||HashFile(request.Target)!=request.OriginalHash)return 4;
                     using(var ready=new FileStream(Path.Combine(directory,"ready"),FileMode.CreateNew,FileAccess.Write)){ready.WriteByte(1);ready.Flush(true);}
                     bool committed=false;
                     for(int i=0;i<120;i++) {

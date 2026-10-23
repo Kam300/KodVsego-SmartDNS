@@ -1,4 +1,6 @@
-﻿> В Windows 2.23.0 добавлен MagicDNS (обычный DNS и DoH); у GeoHide EU и Xbox показано «DoH недоступен». Актуальный отдельный EXE — в [релизе v2.23.0](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/v2.23.0). Установщик 2.22.1 остаётся отдельной предыдущей версией.
+> GeoHide и GeoHide EU включены. Доступность провайдеров для ПК и Android управляется общим файлом [providers.json](../config/providers.json).
+
+> В Windows 2.23.0 добавлен MagicDNS (обычный DNS и DoH); у GeoHide EU и Xbox показано «DoH недоступен». Актуальный отдельный EXE — в [релизе v2.23.0](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/v2.23.0). Установщик 2.22.1 остаётся отдельной предыдущей версией.
 
 # Код Всего · Smart DNS для Windows
 

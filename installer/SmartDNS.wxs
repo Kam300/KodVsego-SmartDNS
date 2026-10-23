@@ -1,0 +1,148 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="$(var.ProductName)" Manufacturer="Код Всего" Version="$(var.MsiVersion)"
+           ProductCode="$(var.ProductCode)" UpgradeCode="$(var.UpgradeCode)" Scope="perUser"
+           Language="1049" Codepage="1251" InstallerVersion="500" Compressed="yes">
+    <SummaryInformation Description="Установка Smart DNS $(var.AppVersion)" Manufacturer="Код Всего" />
+    <MajorUpgrade DowngradeErrorMessage="Уже установлена более новая MSI-версия Smart DNS."
+                  Schedule="afterInstallExecute" AllowSameVersionUpgrades="no" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Icon Id="AppIcon" SourceFile="$(var.ProjectRoot)\res\app.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/Kam300/KodVsego-SmartDNS/issues" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/Kam300/KodVsego-SmartDNS" />
+    <Property Id="ARPCOMMENTS" Value="Версия программы $(var.AppVersion). Обновляйте эту копию через MSI. Удаление не меняет DNS и не удаляет резервные копии настроек." />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="INSTALLFOLDER">
+      <RegistrySearch Id="PreviousInstallFolder" Root="HKCU" Key="$(var.RegistryBase)"
+                      Name="InstallLocation" Type="directory" Bitness="always64" />
+    </Property>
+    <Property Id="WINDOWSBUILD">
+      <RegistrySearch Id="WindowsBuild" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+                      Name="CurrentBuildNumber" Type="raw" Bitness="always64" />
+    </Property>
+    <Launch Condition="Installed OR WINDOWSBUILD &gt;= 19041" Message="Требуется Windows 10 версии 2004 или новее, либо Windows 11 (.NET Framework 4.8)." />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsDir" Name="Programs">
+        <Directory Id="PublisherDir" Name="KodVsego">
+          <Directory Id="INSTALLFOLDER" Name="$(var.InstallFolderName)">
+            <Component Id="Application" Guid="$(var.ApplicationGuid)">
+              <File Id="SmartDNSExe" Source="$(var.SourceExe)" Name="SmartDNS.exe" />
+              <RegistryValue Root="HKCU" Key="$(var.RegistryBase)" Name="Executable" Value="[#SmartDNSExe]" Type="string" KeyPath="yes" />
+            </Component>
+            <Component Id="MsiMarker" Guid="$(var.MsiMarkerGuid)">
+              <File Id="MsiMarkerFile" Source="$(var.MarkerFile)" Name="SmartDNS.Msi.json" />
+              <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+              <RemoveFolder Id="RemoveResourceFolder" Directory="ResourceDir" On="uninstall" />
+              <RemoveFolder Id="RemoveLicensesFolder" Directory="LicensesDir" On="uninstall" />
+              <RemoveFolder Id="RemoveDocsFolder" Directory="DocsDir" On="uninstall" />
+              <RemoveFolder Id="RemovePublisherFolder" Directory="PublisherDir" On="uninstall" />
+              <RemoveFolder Id="RemoveProgramsFolder" Directory="ProgramsDir" On="uninstall" />
+              <RegistryValue Root="HKCU" Key="$(var.RegistryBase)" Name="MsiMarker" Value="1" Type="integer" KeyPath="yes" />
+              <RegistryValue Root="HKCU" Key="$(var.RegistryBase)" Name="InstallLocation" Value="[INSTALLFOLDER]" Type="string" />
+            </Component>
+            <Component Id="LicenseMIT" Guid="$(var.LicenseMITGuid)">
+              <File Source="$(var.ProjectRoot)\LICENSE" />
+              <RegistryValue Root="HKCU" Key="$(var.RegistryBase)" Name="LicenseMIT" Value="1" Type="integer" KeyPath="yes" />
+            </Component>
+            <Component Id="LicenseRussian" Guid="$(var.LicenseRussianGuid)">
+              <File Source="$(var.ProjectRoot)\LICENSE.ru.md" />
+              <RegistryValue Root="HKCU" Key="$(var.RegistryBase)" Name="LicenseRussian" Value="1" Type="integer" KeyPath="yes" />
+            </Component>
+            <Component Id="Readme" Guid="$(var.ReadmeGuid)">
+              <File Source="$(var.ReadmeFile)" Name="Прочитайте.txt" />
+              <RegistryValue Root="HKCU" Key="$(var.RegistryBase)" Name="Readme" Value="1" Type="integer" KeyPath="yes" />
+            </Component>
+            <Directory Id="ResourceDir" Name="res">
+              <Component Id="FontLicenses" Guid="$(var.FontLicensesGuid)">
+                <File Source="$(var.ProjectRoot)\res\OFL-Unbounded.txt" />
+                <File Source="$(var.ProjectRoot)\res\OFL-Manrope.txt" />
+                <RegistryValue Root="HKCU" Key="$(var.RegistryBase)" Name="FontLicenses" Value="1" Type="integer" KeyPath="yes" />
+              </Component>
+            </Directory>
+            <Directory Id="DocsDir" Name="docs">
+              <Directory Id="LicensesDir" Name="licenses">
+                <Component Id="UpstreamLicense" Guid="$(var.UpstreamLicenseGuid)">
+                  <File Source="$(var.ProjectRoot)\docs\licenses\HB-AI-LICENSE.ru.md" />
+                  <RegistryValue Root="HKCU" Key="$(var.RegistryBase)" Name="UpstreamLicense" Value="1" Type="integer" KeyPath="yes" />
+                </Component>
+              </Directory>
+            </Directory>
+          </Directory>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="*">
+        <Shortcut Id="ApplicationShortcut" Name="$(var.ShortcutName)" Description="Smart DNS $(var.AppVersion)"
+                  Target="[#SmartDNSExe]" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+        <RegistryValue Root="HKCU" Key="$(var.RegistryBase)" Name="StartMenuShortcut" Value="1" Type="integer" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+    <Feature Id="MainFeature" Title="Smart DNS" Level="1">
+      <ComponentRef Id="Application" /><ComponentRef Id="MsiMarker" /><ComponentRef Id="LicenseMIT" />
+      <ComponentRef Id="LicenseRussian" /><ComponentRef Id="Readme" /><ComponentRef Id="FontLicenses" />
+      <ComponentRef Id="UpstreamLicense" /><ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <UI>
+      <TextStyle Id="NormalFont" FaceName="Segoe UI" Size="9" />
+      <TextStyle Id="TitleFont" FaceName="Segoe UI" Size="13" Bold="yes" />
+      <Property Id="DefaultUIFont" Value="NormalFont" />
+      <Property Id="MAINTENANCE" Value="repair" />
+      <Dialog Id="WelcomeDlg" Width="390" Height="310" Title="$(var.ProductName) — установка">
+        <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Установка Smart DNS" />
+        <Control Id="Intro" Type="Text" X="18" Y="48" Width="354" Height="32" Text="Версия $(var.AppVersion). Для текущего пользователя. Перед установкой закройте Smart DNS." />
+        <Control Id="License" Type="ScrollableText" X="18" Y="85" Width="354" Height="145">
+          <Text SourceFile="$(var.LicenseRtf)" />
+        </Control>
+        <Control Id="Accept" Type="CheckBox" X="18" Y="239" Width="354" Height="20" Property="ACCEPTLICENSE" CheckBoxValue="1" Text="Принимаю условия использования" />
+        <Control Id="Cancel" Type="PushButton" X="209" Y="275" Width="75" Height="22" Cancel="yes" Text="Отмена">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+        <Control Id="Install" Type="PushButton" X="294" Y="275" Width="78" Height="22" Default="yes" Text="Установить" EnableCondition="ACCEPTLICENSE = 1" DisableCondition="NOT ACCEPTLICENSE">
+          <Publish Event="EndDialog" Value="Return" Condition="ACCEPTLICENSE = 1" />
+        </Control>
+      </Dialog>
+      <Dialog Id="MaintenanceDlg" Width="390" Height="230" Title="$(var.ProductName)">
+        <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Изменение установки" />
+        <Control Id="Explanation" Type="Text" X="18" Y="50" Width="354" Height="36" Text="Закройте Smart DNS перед продолжением. Удаление программы не меняет DNS и сохраняет настройки." />
+        <Control Id="Choice" Type="RadioButtonGroup" X="18" Y="96" Width="354" Height="60" Property="MAINTENANCE">
+          <RadioButtonGroup Property="MAINTENANCE">
+            <RadioButton Value="repair" X="0" Y="0" Width="340" Height="20" Text="Восстановить файлы программы" />
+            <RadioButton Value="remove" X="0" Y="28" Width="340" Height="20" Text="Удалить программу" />
+          </RadioButtonGroup>
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="209" Y="192" Width="75" Height="22" Cancel="yes" Text="Отмена"><Publish Event="EndDialog" Value="Exit" /></Control>
+        <Control Id="Continue" Type="PushButton" X="294" Y="192" Width="78" Height="22" Default="yes" Text="Продолжить">
+          <Publish Property="REINSTALL" Value="ALL" Condition="MAINTENANCE = &quot;repair&quot;" Order="1" />
+          <Publish Property="REINSTALLMODE" Value="amus" Condition="MAINTENANCE = &quot;repair&quot;" Order="2" />
+          <Publish Property="REMOVE" Value="ALL" Condition="MAINTENANCE = &quot;remove&quot;" Order="3" />
+          <Publish Event="EndDialog" Value="Return" Order="4" />
+        </Control>
+      </Dialog>
+      <Dialog Id="ProgressDlg" Width="390" Height="165" Title="Smart DNS — установка" Modeless="yes">
+        <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Выполняется установка" />
+        <Control Id="Note" Type="Text" X="18" Y="50" Width="354" Height="34" Text="Windows устанавливает файлы программы. Настройки DNS не меняются." />
+        <Control Id="Progress" Type="ProgressBar" X="18" Y="95" Width="354" Height="18" ProgressBlocks="yes"><Subscribe Event="SetProgress" Attribute="Progress" /></Control>
+        <Control Id="Cancel" Type="PushButton" X="294" Y="130" Width="78" Height="22" Cancel="yes" Text="Отмена"><Publish Event="SpawnDialog" Value="CancelDlg" /></Control>
+      </Dialog>
+      <Dialog Id="CancelDlg" Width="300" Height="120" Title="Отмена установки">
+        <Control Id="Prompt" Type="Text" X="18" Y="18" Width="264" Height="42" Text="Прервать установку Smart DNS?" />
+        <Control Id="Yes" Type="PushButton" X="116" Y="80" Width="78" Height="22" Text="Да"><Publish Event="EndDialog" Value="Exit" /></Control>
+        <Control Id="No" Type="PushButton" X="204" Y="80" Width="78" Height="22" Default="yes" Cancel="yes" Text="Нет"><Publish Event="EndDialog" Value="Return" /></Control>
+      </Dialog>
+      <Dialog Id="ExitDlg" Width="390" Height="205" Title="Smart DNS">
+        <Control Id="Heading" Type="Text" X="18" Y="15" Width="354" Height="28" Text="{\TitleFont}Готово" />
+        <Control Id="Note" Type="Text" X="18" Y="55" Width="354" Height="85" Text="Операция завершена. Для запуска используйте ярлык в меню «Пуск». Перед удалением программы выключите DNS в ней, если хотите восстановить прежние сетевые настройки." />
+        <Control Id="Finish" Type="PushButton" X="294" Y="165" Width="78" Height="22" Default="yes" Cancel="yes" Text="Закрыть"><Publish Event="EndDialog" Value="Return" /></Control>
+      </Dialog>
+      <InstallUISequence>
+        <Show Dialog="WelcomeDlg" Before="ExecuteAction" Condition="NOT Installed AND NOT WIX_DOWNGRADE_DETECTED" />
+        <Show Dialog="MaintenanceDlg" Before="ExecuteAction" Condition="Installed AND NOT REMOVE~=&quot;ALL&quot; AND NOT REINSTALL" />
+        <Show Dialog="ProgressDlg" Before="ExecuteAction" />
+        <Show Dialog="ExitDlg" OnExit="success" />
+      </InstallUISequence>
+    </UI>
+  </Package>
+</Wix>

@@ -96,4 +96,16 @@ public class AndroidLifecycleTest {
         assertFalse(scroll.isVerticalScrollBarEnabled());assertFalse(scroll.isHorizontalScrollBarEnabled());
         scroll.scrollTo(0,600);assertEquals(28,scroll.getPaddingTop());assertEquals(1,scroll.getChildAt(0).getAlpha(),.001);
     }
+    @Test public void restoredProvidersVisibleAndSavedChoicePreserved() {
+        android.content.Context context=RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("smartdns",0).edit().putInt("provider",1).commit();
+        MainActivity app=screen();
+        assertEquals(1,context.getSharedPreferences("smartdns",0).getInt("provider",-1));
+        app.findViewById(R.id.dns_provider).performClick();
+        android.app.Dialog dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        assertNotNull(dialog.findViewById(R.id.provider_sheet).findViewWithTag("provider-1"));
+        assertNotNull(dialog.findViewById(R.id.provider_sheet).findViewWithTag("provider-2"));
+        assertNotNull(dialog.findViewById(R.id.provider_sheet).findViewWithTag("provider-6"));
+        dialog.dismiss();
+    }
 }

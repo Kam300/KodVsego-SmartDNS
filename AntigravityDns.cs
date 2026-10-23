@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -269,6 +269,7 @@ namespace HbAi.XboxDns
         }
         internal static string Run(bool enable, bool force = false, int provider = 0)
         {
+            if(enable&&provider>=0&&provider<ProviderNames.Length&&!Dns.IsAvailable(new[]{1,0,2,4}[provider]))return "Провайдер временно недоступен. Выберите другой DNS для Antigravity.";
             if (enable && provider == 1) return "Comss пока отключён для доп. DNS Antigravity: работа обоих API-доменов не подтверждена. Выберите другой DNS. Общий DNS Comss остаётся доступен.";
             using (UseProvider(provider))
             using (var mutex = new Mutex(false, @"Global\KodVsego.SmartDns.Antigravity"))

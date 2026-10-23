@@ -83,7 +83,7 @@ namespace HbAi.XboxDns
             foreach(var process in Process.GetProcesses())using(process) {
                 try {
                     if(process.Id==self||process.SessionId!=session||process.MainWindowHandle==IntPtr.Zero)continue;
-                    var info=FileVersionInfo.GetVersionInfo(process.MainModule.FileName);
+                    var info=FileVersionInfo.GetVersionInfo(ProcessSecurity.ImagePath(process.Id));
                     if(info.ProductName!="Код Всего · Smart DNS")continue;
                     var found=new RunningInstance{ProcessId=process.Id,Window=process.MainWindowHandle,Version=info.ProductVersion};
                     if(best==null)best=found;

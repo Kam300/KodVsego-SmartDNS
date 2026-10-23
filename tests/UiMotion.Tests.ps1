@@ -1,6 +1,11 @@
 ﻿# Exercises the real WinForms timer. No DNS-changing controls are invoked.
 # Showing the form may run its read-only startup DNS/VPN checks.
-param([string]$AssemblyPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'KodVsego_SmartDNS.2.23.1.exe'))
+param([string]$AssemblyPath)
+if(!$AssemblyPath){
+    $root=Split-Path $PSScriptRoot -Parent
+    $version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value
+    $AssemblyPath=Join-Path $root ('KodVsego_SmartDNS.'+$version+'.exe')
+}
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $assembly = [Reflection.Assembly]::LoadFile($AssemblyPath)

@@ -1,5 +1,8 @@
 *.exe
+*.exe.previous-*
 *.pdb
+*.msi
+*.wixpdb
 preview.png
 dist/
 *.log

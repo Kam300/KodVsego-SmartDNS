@@ -19,26 +19,16 @@ namespace HbAi.XboxDns
 {
     static class Dns
     {
-        // Сервисы Smart DNS. Проверено 12.10.2026 из России: Comss.one и GeoHide (Европа) отдают прокси для ChatGPT,
-        // Claude, Gemini и ElevenLabs, российский узел GeoHide — для Gemini и ElevenLabs. xbox-dns.ru с 10.10.2026
-        // нейросети не пропускает (0.0.0.0). Astracat (135.106.217.200) 12.10.2026 не отвечал, из списка убран.
-        public static readonly string[] Name = { "Comss.one", "GeoHide", "GeoHide EU", "Xbox DNS", "Bezmezhau", "DNS-AI", "MagicDNS" };
-        public static readonly string[][] V4 = {
-            new[] { "83.220.169.155", "212.109.195.93" },
-            new[] { "159.194.200.33", "193.233.112.67" },
-            new[] { "143.20.64.192", "45.13.237.213" },
-            new[] { "111.88.96.54", "111.88.96.55" },
-            new[] { "143.20.64.55", "31.58.216.201" },
-            new[] { "194.87.196.13", "186.246.49.127" }, new[] { "109.120.132.43", "94.249.177.102" } };
-        public static readonly string[][] V6 = {
-            new string[0], new string[0], new string[0],
-            new[] { "2a00:ab00:1233:26::50", "2a00:ab00:1233:26::51" }, new string[0], new string[0], new string[0] };
-        public static readonly string[] Opens = {
-            "ChatGPT, Claude, Gemini, ElevenLabs", "ChatGPT, Claude, Gemini, ElevenLabs",
-            "ChatGPT, Claude, Gemini, ElevenLabs", "только Xbox Live, нейросети — нет", "ChatGPT, Gemini, Spotify", "AI-сервисы · только DoH", "ChatGPT, Claude, Gemini, ElevenLabs" };
-        public static readonly string[] Site = { "comss.ru", "geohide.ru", "geohide.ru", "xbox-dns.ru", "bezmezhau.com", "dns-ai.ru", "magicdns.ru" };
-        public static readonly string[] Url = { "https://www.comss.ru/", "https://geohide.ru/", "https://geohide.ru/", "https://xbox-dns.ru/", "https://bezmezhau.com/", "https://dns-ai.ru/#setup", "https://magicdns.ru/" };
-        internal static bool EncryptedOnly(int provider) { return provider == 5; }
+        public static readonly string[] Name = ProviderCatalog.All.Select(p=>p.name).ToArray();
+        public static readonly string[][] V4 = ProviderCatalog.All.Select(p=>p.ipv4).ToArray();
+        public static readonly string[][] V6 = ProviderCatalog.All.Select(p=>p.ipv6).ToArray();
+        public static readonly string[] Opens = ProviderCatalog.All.Select(p=>p.description).ToArray();
+        public static readonly string[] Site = ProviderCatalog.All.Select(p=>p.site).ToArray();
+        public static readonly string[] Url = ProviderCatalog.All.Select(p=>p.url).ToArray();
+        // Keep historical IDs for restore; availability is shared with Android in config/providers.json.
+        internal static bool IsAvailable(int provider) { return provider>=0 && provider<Name.Length && ProviderAvailability.IsEnabled(provider); }
+        internal static int[] AvailableProviders { get { return Enumerable.Range(0,Name.Length).Where(IsAvailable).ToArray(); } }
+        internal static bool EncryptedOnly(int provider) { return provider>=0&&provider<ProviderCatalog.All.Length&&ProviderCatalog.All[provider].encryptedOnly; }
         // Старые адреса xbox-dns.ru из версии 1.0: если стоят они, показываем Xbox DNS
         static readonly string[] XboxOld = { "111.88.96.50", "111.88.96.51" };
 
@@ -72,8 +62,12 @@ namespace HbAi.XboxDns
             if (plain >= 0) return plain;
             for (int k = 0; k < V4.Length; k++)
                 if (EncryptedDns.Templates[k] != null && addresses.SequenceEqual(EncryptedDns.ServersFor(k))) return k;
+            for (int k = 0; k < V4.Length; k++)
+                if (ProviderCatalog.All[k].legacyIpv4.Any(old => addresses.SequenceEqual(old))) return k;
             return -1;
         }
+        internal static string[] KnownServers { get { return V4.SelectMany(s=>s).Concat(V6.SelectMany(s=>s)).Concat(XboxOld)
+            .Concat(ProviderCatalog.All.SelectMany(p=>p.windowsDohServers)).Concat(ProviderCatalog.All.SelectMany(p=>p.legacyIpv4).SelectMany(s=>s)).Distinct().ToArray(); } }
 
         public static string Enable(int set)
         {
@@ -90,6 +84,7 @@ namespace HbAi.XboxDns
 
         internal static string ExecuteDirect(bool enable, int set)
         {
+            if(enable&&set>=0&&set<V4.Length&&!IsAvailable(set))return "Провайдер временно недоступен. Выберите другой DNS.";
             if (enable && !NetworkCheck.HasConnection()) return NetworkCheck.OfflineMessage;
             if (enable && VpnCheck.Scan().NeedsAttention) return "Отключите VPN и повторите подключение. DNS не изменён.";
             if (enable && set < V4.Length && EncryptedOnly(set)) return EncryptedDns.Run(set);
@@ -101,7 +96,7 @@ namespace HbAi.XboxDns
             if (enable && (set < 0 || set >= V4.Length)) return "Неизвестный DNS-провайдер.";
             if (!enable && set != 0 && set != 1) return "Неизвестная операция DNS.";
             if (!enable && set == 1)
-                return DnsSettingsEngine.Run(false, V4.SelectMany(s => s).Concat(V6.SelectMany(s => s)).Concat(XboxOld).Concat(EncryptedDns.ServersFor(0)).ToArray(), true);
+                return DnsSettingsEngine.Run(false, KnownServers, true);
             return DnsSettingsEngine.Run(enable, enable ? V4[set].Concat(V6[set]).ToArray() : new string[0]);
         }
 
@@ -177,7 +172,7 @@ namespace HbAi.XboxDns
         Rectangle rAgOption = new Rectangle(28, 754, 384, 58);
         Rectangle rSecureOption = new Rectangle(28, 678, 384, 58);
         bool secureDns;
-        int dnsSet;
+        int dnsSet = Dns.AvailableProviders[0];
         int autoGoal = -1;
         int defaultGoal=-1;
         bool manualSelection;
@@ -191,11 +186,12 @@ namespace HbAi.XboxDns
         Rectangle rToggle, rClose, rSite, rGroup, rBrand;
         Rectangle rTheme = new Rectangle(332, 24, 36, 34);
         Rectangle rSettings = new Rectangle(288, 24, 36, 34);
-        Rectangle rVersion;
+        Rectangle rVersion,rUpdateIndicator;
         UpdateRelease availableUpdate;
         bool checkUpdateAtStartup = true;
         readonly ToolTip themeTip = new ToolTip();
         readonly Rectangle[] rSeg = new Rectangle[Dns.Name.Length + 1];
+        int[] VisibleSegments { get { return Dns.AvailableProviders.Concat(new[]{Dns.Name.Length}).ToArray(); } }
         int ProviderItemWidth = 108;
         Rectangle providerViewport = new Rectangle(58, 500, 324, 56);
         Rectangle providerPrevious = new Rectangle(28, 500, 30, 56);
@@ -372,14 +368,20 @@ namespace HbAi.XboxDns
         void ShowUpdates()
         {
             if(busy)return;
-            bool working=false;UpdateRelease release=availableUpdate;
+            bool working=false;bool msi=AppUpdate.IsMsiManaged(Application.ExecutablePath);UpdateRelease release=availableUpdate;
             using(var cancellation=new CancellationTokenSource())
             using(var dialog=CreateDialog("Проверка новых версий через GitHub.\n\nТекущая версия: "+VersionLabel,"Обновление программы",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1,uiScale)) {
                 var token=cancellation.Token;
                 dialog.FormClosed+=(s,e)=>cancellation.Cancel();
                 Action action=null;
                 action=()=> {
-                    if(working)return;working=true;
+                    if(working)return;
+                    if(msi&&release!=null) {
+                        try{Process.Start(new ProcessStartInfo(AppUpdate.MsiReleasePage(release.Version)){UseShellExecute=true});}
+                        catch(Exception error){dialog.ShowUpdateStatus(error.Message,"Не удалось открыть GitHub","Открыть релиз",true);}
+                        return;
+                    }
+                    working=true;
                     bool download=release!=null;
                     dialog.ShowUpdateStatus(download?"Скачиваем обновление.\nНастройки DNS и тема сохранятся.":"Проверяем новые версии на GitHub…",download?"Загрузка":"Проверка обновлений",download?"Скачиваем…":"Проверяем…",false);
                     ThreadPool.QueueUserWorkItem(_=> {
@@ -393,7 +395,7 @@ namespace HbAi.XboxDns
                                     if(IsDisposed||dialog.IsDisposed||token.IsCancellationRequested)return;
                                     try{BeginInvoke((Action)(()=>{if(!dialog.IsDisposed&&!token.IsCancellationRequested)dialog.ShowUpdateStatus("Скачиваем версию "+release.Version+".\nПосле проверки программа перезапустится.","Загрузка "+percent+"%","Скачиваем…",false);}));}catch(InvalidOperationException){}
                                 });
-                                ticket=AppUpdate.StartInstall(package,token);
+                                ticket=AppUpdate.StartInstall(package,release,token);
                             }
                             else release=AppUpdate.Check(VersionLabel,token);
                         }
@@ -410,13 +412,15 @@ namespace HbAi.XboxDns
                                 return;
                             }
                             availableUpdate=release;Invalidate();
-                            dialog.ShowUpdateStatus(release==null?"Новых стабильных версий нет.\nСейчас установлена "+VersionLabel:"Доступна версия "+release.Version+".\nСкачивание: "+Math.Ceiling(release.Size/1024d)+" КБ.\nПосле установки программа перезапустится.",
+                            if(msi&&release!=null){dialog.ShowUpdateStatus("Установлена: "+VersionLabel+".\nНовая версия: "+release.Version+".\nДля этой копии нужен установщик MSI со страницы релиза.","Доступно обновление MSI","Открыть релиз",true);return;}
+                            dialog.ShowUpdateStatus(release==null?"Новых стабильных версий нет.\nСейчас установлена "+VersionLabel:"Установлена: "+VersionLabel+".\nНовая версия: "+release.Version+".\nСкачивание: "+Math.Ceiling(release.Size/1024d)+" КБ.\nПосле установки программа перезапустится.",
                                 release==null?"Обновлений нет":"Доступно обновление",release==null?"Проверить ещё раз":"Обновить",true);
                         }));}catch(InvalidOperationException){if(ticket!=null)ticket.Cancel();}
                     });
                 };
                 dialog.AddUpdateControls(()=>action());
-                if(release!=null)dialog.ShowUpdateStatus("Доступна версия "+release.Version+".\nПосле установки программа перезапустится.","Доступно обновление","Обновить",true);
+                if(msi&&release!=null)dialog.ShowUpdateStatus("Установлена: "+VersionLabel+".\nНовая версия: "+release.Version+".\nДля этой копии нужен установщик MSI со страницы релиза.","Доступно обновление MSI","Открыть релиз",true);
+                else if(release!=null)dialog.ShowUpdateStatus("Установлена: "+VersionLabel+".\nНовая версия: "+release.Version+".\nПосле установки программа перезапустится.","Доступно обновление","Обновить",true);
                 else action();
                 dialog.ShowDialog(this);
             }
@@ -772,9 +776,10 @@ namespace HbAi.XboxDns
                 rToggle=new Rectangle((width-200)/2,196+(height-CanvasHeight)/2,200,200);
                 rSecureOption=new Rectangle(28,LowerY(678),width-56,58);rAgOption=new Rectangle(28,LowerY(754),width-56,58);rAgCleanup=new Rectangle(width-160,LowerY(775),114,26);
                 providerViewport=new Rectangle(58,LowerY(500),width-116,56);providerPrevious=new Rectangle(28,LowerY(500),30,56);providerNext=new Rectangle(width-58,LowerY(500),30,56);
-                int visible=Math.Min(rSeg.Length,Math.Max(3,providerViewport.Width/108));ProviderItemWidth=providerViewport.Width/visible;
-                for(int k=0;k<rSeg.Length;k++)rSeg[k]=new Rectangle(58+k*ProviderItemWidth,LowerY(500),ProviderItemWidth,56);
-                providerScroll=Math.Max(0,Math.Min(rSeg.Length*ProviderItemWidth-providerViewport.Width,first*ProviderItemWidth));
+                int visible=Math.Min(VisibleSegments.Length,Math.Max(3,providerViewport.Width/108));ProviderItemWidth=providerViewport.Width/visible;
+                for(int k=0;k<rSeg.Length;k++)rSeg[k]=Rectangle.Empty;
+                var segments=VisibleSegments;for(int slot=0;slot<segments.Length;slot++)rSeg[segments[slot]]=new Rectangle(58+slot*ProviderItemWidth,LowerY(500),ProviderItemWidth,56);
+                providerScroll=Math.Max(0,Math.Min(VisibleSegments.Length*ProviderItemWidth-providerViewport.Width,first*ProviderItemWidth));
                 selectionLeft=rSeg[SelectedSegment].X;EnsureProviderVisible();scrollMix=providerScroll;
             }
             var previous=Region;
@@ -969,10 +974,12 @@ namespace HbAi.XboxDns
             { g.FillPath(b, path); g.DrawPath(pen, path); }
             var providerState = g.Save();
             g.SetClip(providerViewport);
+            if(!rSeg[SelectedSegment].IsEmpty)
             using (var path = RoundPath(new RectangleF(selectionLeft - scrollMix + 5, LowerY(505), ProviderItemWidth-10, 46), 12))
             using (var b = new SolidBrush(Selection)) g.FillPath(b, path);
             for (int k = 0; k < rSeg.Length; k++)
             {
+                if(rSeg[k].IsEmpty)continue;
                 var sr = new RectangleF(rSeg[k].X - scrollMix + 5, rSeg[k].Y + 5, rSeg[k].Width - 10, rSeg[k].Height - 10);
                 bool on = Math.Abs(rSeg[k].X - selectionLeft) < ProviderItemWidth/2f;
                 string label = k == Dns.Name.Length ? "Авто · beta" : k == 3 ? "Xbox" : k == 2 ? "GeoHide EU" : Dns.Name[k];
@@ -983,7 +990,7 @@ namespace HbAi.XboxDns
             }
             g.Restore(providerState);
             DrawProviderArrow(g,providerPrevious,-1,providerScroll>0);
-            DrawProviderArrow(g,providerNext,1,providerScroll<rSeg.Length*ProviderItemWidth-providerViewport.Width);
+            DrawProviderArrow(g,providerNext,1,providerScroll<VisibleSegments.Length*ProviderItemWidth-providerViewport.Width);
 
             // карточка с адресами
             var card = new RectangleF(28, LowerY(574), W - 56, 86);
@@ -1084,11 +1091,23 @@ namespace HbAi.XboxDns
                 g.DrawString(t, f, b, rGroup.X, rGroup.Y);
             }
             using (var f = UiFont(fMed, 8.5f))
-            using (var b = new SolidBrush(availableUpdate==null?Muted:Accent))
+            using (var b = new SolidBrush(Muted))
             using (var format = new StringFormat {Alignment=StringAlignment.Center, LineAlignment=StringAlignment.Center, FormatFlags=StringFormatFlags.NoWrap})
             {
-                rVersion=new Rectangle(rBrand.Right+4,LowerY(830),Math.Max(0,rGroup.Left-rBrand.Right-8),25);
-                g.DrawString(availableUpdate==null?VersionLabel:"↑ "+availableUpdate.Version,f,b,rVersion,format);
+                int left=rBrand.Right+4,width=Math.Max(0,rGroup.Left-rBrand.Right-8);
+                rVersion=new Rectangle(left,LowerY(830),width,25);
+                var versionBounds=rVersion;
+                rUpdateIndicator=Rectangle.Empty;
+                if(availableUpdate!=null&&width>=24) {
+                    int groupWidth=Math.Min(width,(int)Math.Ceiling(g.MeasureString(VersionLabel,f).Width)+16);
+                    int groupLeft=left+(width-groupWidth)/2;
+                    versionBounds=new Rectangle(groupLeft,rVersion.Top,groupWidth-16,rVersion.Height);
+                    rUpdateIndicator=new Rectangle(versionBounds.Right+5,rVersion.Top+(rVersion.Height-8)/2,8,8);
+                    using(var halo=new SolidBrush(Color.FromArgb(35,Accent)))
+                        g.FillEllipse(halo,rUpdateIndicator.X-3,rUpdateIndicator.Y-3,14,14);
+                    using(var fill=new SolidBrush(Accent))g.FillEllipse(fill,rUpdateIndicator);
+                }
+                g.DrawString(VersionLabel,f,b,versionBounds,format);
             }
         }
 
@@ -1209,7 +1228,7 @@ namespace HbAi.XboxDns
             bool hand = rSettings.Contains(e.Location) || rVersion.Contains(e.Location) || (rSecureOption.Contains(e.Location) && EncryptedDns.Templates[dnsSet] != null) || rAgOption.Contains(e.Location) || rTheme.Contains(e.Location) || rClose.Contains(e.Location) || rGroup.Contains(e.Location) || rSite.Contains(e.Location) || rBrand.Contains(e.Location) || ProviderBar.Contains(e.Location) || DnsTestButton.Contains(e.Location)
                         || dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0;
             Cursor = hand && !busy ? Cursors.Hand : Cursors.Default;
-            string tip = rSettings.Contains(e.Location)?"Настройки":providerPrevious.Contains(e.Location)?"Предыдущие 3 варианта":providerNext.Contains(e.Location)?"Следующие 3 варианта":rVersion.Contains(e.Location)?"Проверить обновления":rTheme.Contains(e.Location) ? (darkTheme ? "Светлая тема" : "Тёмная тема") : null;
+            string tip = rSettings.Contains(e.Location)?"Настройки":providerPrevious.Contains(e.Location)?"Предыдущие 3 варианта":providerNext.Contains(e.Location)?"Следующие 3 варианта":rVersion.Contains(e.Location)?(availableUpdate==null?"Проверить обновления":"Доступна новая версия "+availableUpdate.Version):rTheme.Contains(e.Location) ? (darkTheme ? "Светлая тема" : "Тёмная тема") : null;
             if (themeTip.GetToolTip(this) != tip) themeTip.SetToolTip(this, tip);
             if (e.Button == MouseButtons.Left && !hand)
                 Location = new Point(Location.X + (int)Math.Round((e.X - dragFrom.X) * uiScale),
@@ -1284,11 +1303,12 @@ namespace HbAi.XboxDns
         {ScrollProviders(Math.Sign(direction)*(providerViewport.Width/ProviderItemWidth)*ProviderItemWidth);}
         void ScrollProviders(int delta)
         {
-            providerScroll = Math.Max(0, Math.Min(rSeg.Length * ProviderItemWidth - providerViewport.Width, providerScroll + delta));
+            providerScroll = Math.Max(0, Math.Min(VisibleSegments.Length * ProviderItemWidth - providerViewport.Width, providerScroll + delta));
             Invalidate();
         }
         void EnsureProviderVisible()
         {
+            if(rSeg[SelectedSegment].IsEmpty)return;
             if (rSeg[SelectedSegment].Left - providerScroll < providerViewport.Left)
                 ScrollProviders(rSeg[SelectedSegment].Left - providerScroll - providerViewport.Left);
             else if (rSeg[SelectedSegment].Right - providerScroll > providerViewport.Right)
@@ -1323,7 +1343,7 @@ namespace HbAi.XboxDns
                     {
                         probeResults[provider] = results;
                         int count = results.Count(r => r.Host == "example.com" && r.Ok);
-                        probeLabels[provider] = Dns.EncryptedOnly(provider) ? (count > 0 ? "DoH отвечает через HTTPS" : "DoH не ответил") : "Ответы DNS: " + count + "/2";
+                        probeLabels[provider] = Dns.EncryptedOnly(provider) ? (count > 0 ? "DoH отвечает через HTTPS" : "DoH не ответил") : "Ответы DNS: " + count + "/"+Dns.V4[provider].Length;
                     }
                     probing = false; Invalidate();
                 })); } catch (InvalidOperationException) { }
@@ -1334,7 +1354,8 @@ namespace HbAi.XboxDns
             using (var dialog = CreateDialog("Выберите DNS и нажмите «Проверить».\n\nПроверим основной и резервный серверы, время ответа и домены сервисов. Результаты появятся здесь.",
                 "Тест DNS", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1))
             {
-                dialog.AddDnsTestControls(Dns.Name, dnsSet, provider => RunDnsTest(dialog, provider));
+                var choices=Dns.AvailableProviders;int selected=Array.IndexOf(choices,dnsSet);
+                dialog.AddDnsTestControls(choices.Select(p=>Dns.Name[p]).ToArray(),Math.Max(0,selected), index => RunDnsTest(dialog, choices[index]));
                 dialog.ShowDialog(this);
             }
         }
@@ -1351,6 +1372,7 @@ namespace HbAi.XboxDns
                 dialog.FormClosed += (s, e) => cancellation.Cancel();
                 dialog.AddAutoDnsControls(AutoDns.Goals.Select(g => g.Name).ToArray(), startImmediately&&UseDefaultGoal?defaultGoal:autoGoal >= 0 ? autoGoal : defaultGoal>=0?defaultGoal:0, goal => {
                     if (running) return;
+                    DohHttp2.ResetAddressHealth();
                     chosen = null; chosenGoal = -1;
                     dialog.SetPrimaryText("Отмена");
                     running = true;
@@ -1419,7 +1441,8 @@ namespace HbAi.XboxDns
                 dialog.ShowDnsTestStatus("Отключите VPN и нажмите «Проверить» ещё раз. VPN может перехватывать запросы к любому серверу.\n\n" + vpn.Details,
                     "Сначала отключите VPN", false, true); return;
             }
-            dialog.ShowDnsTestStatus("Проверяем оба сервера " + Dns.Name[provider] + " и домены сервисов…", "Проверяем " + Dns.Name[provider], true, false);
+            dialog.ShowDnsTestStatus("Проверяем серверы " + Dns.Name[provider] + " и домены сервисов…", "Проверяем " + Dns.Name[provider], true, false);
+            DohHttp2.ResetAddressHealth();
             ThreadPool.QueueUserWorkItem(_ => {
                 DnsProbeResult[] results = null; string failure = null;
                 try {
@@ -1433,9 +1456,9 @@ namespace HbAi.XboxDns
                     if (VpnCheck.Scan().NeedsAttention) { dialog.ShowDnsTestStatus("Во время теста обнаружен VPN. Отключите его и повторите проверку.", "Результат недостоверен", false, true); return; }
                     probeResults[provider] = results;
                     int count = results.Count(r => r.Host == "example.com" && r.Ok);
-                    probeLabels[provider] = encrypted ? "DoH: " + results.Count(r => r.Ok) + "/" + results.Length + " ответов" : "Ответы DNS: " + count + "/2";
+                    probeLabels[provider] = encrypted ? "DoH: " + results.Count(r => r.Ok) + "/" + results.Length + " ответов" : "Ответы DNS: " + count + "/"+Dns.V4[provider].Length;
                     string report = encrypted ? "HTTPS: " + EncryptedDns.Templates[provider] + "\n\n" + string.Join("\n", results.Select(r => r.Host + " — " + (r.Ok ? r.Milliseconds + " мс" : r.Error))) + "\n\nЭто проверка сервера через HTTPS, не DNS браузера. Системные настройки не изменялись." : DnsProbe.Report(provider, results);
-                    dialog.ShowDnsTestStatus(report, (encrypted ? "HTTPS-ответы: " : "Прямые ответы: ") + results.Count(r => r.Ok) + "/" + results.Length, false, results.Any(r => !r.Ok));
+                    dialog.ShowDnsTestStatus(report, (encrypted ? "HTTPS-ответы: " : "Прямые ответы: ") + results.Count(r => r.Ok) + "/" + results.Length, false, results.Any(r => !r.Ok), (results.Any(r=>!r.Ok)?"Часть запросов завершилась с ошибкой.":"Серверы ответили на все запросы.")+"\nНастройки DNS не изменялись. Ответ DNS не подтверждает доступ к сервису.");
                     dialog.SetDiagnosticDetails(string.Join("\n\n",results.Select(r=>r.Server+"; host="+r.Host+"; elapsed="+r.Milliseconds+" ms; error="+r.Error+"\n"+r.Detail)),results.Any(r=>!r.Ok));
                     Invalidate();
                 })); } catch (InvalidOperationException) { }
@@ -1443,6 +1466,7 @@ namespace HbAi.XboxDns
         }
         void PickSet(int k)
         {
+            if(!Dns.IsAvailable(k))return;
             if (busy || (k == dnsSet && autoGoal < 0&&!UseDefaultGoal)) return;
             manualSelection=true;
             if (active) Apply(true, k, encrypted: EncryptedDns.Templates[k] != null && secureDns || Dns.EncryptedOnly(k));
@@ -1505,7 +1529,7 @@ namespace HbAi.XboxDns
             int provider = AntigravityDns.ProviderForMainSet(dnsSet);
             if (enable && agStatus.Error == null && provider < 0)
             {
-                ShowMessage(Dns.EncryptedOnly(dnsSet) ? "DNS-AI используется через общий DoH. Включите его большой кнопкой. Отдельные DNS-правила Antigravity для него не создаются." : dnsSet == 0 ? "Comss для доп. DNS Antigravity пока отключён. Выберите другой DNS выше. Общий DNS Comss остаётся доступен." : "Для Antigravity выберите выше GeoHide, GeoHide EU или Bezmezhau. Xbox DNS предназначен для Xbox.",
+                ShowMessage(Dns.EncryptedOnly(dnsSet) ? "DNS-AI используется через общий DoH. Включите его большой кнопкой. Отдельные DNS-правила Antigravity для него не создаются." : dnsSet == 0 ? "Comss для доп. DNS Antigravity пока отключён. Выберите другой DNS выше. Общий DNS Comss остаётся доступен." : "Для Antigravity выберите выше Bezmezhau. Xbox DNS предназначен для Xbox.",
                     "Выберите DNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -1558,6 +1582,7 @@ namespace HbAi.XboxDns
         void Apply(bool turnOn, int? selectedSet = null, bool resetKnown = false, bool? encrypted = null, int? autoTarget = null)
         {
             int requestedSet = selectedSet ?? dnsSet;
+            if(turnOn&&!Dns.IsAvailable(requestedSet)){ShowMessage("Этот провайдер временно скрыт. Выберите другой DNS.","Провайдер недоступен",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
             bool useEncrypted = (encrypted ?? secureDns) || Dns.EncryptedOnly(requestedSet);
             if (turnOn && useEncrypted && EncryptedDns.Templates[requestedSet] == null) { ShowMessage("Для DoH выберите Comss.one, GeoHide, Bezmezhau, DNS-AI или MagicDNS либо снимите галочку шифрования.", "DoH недоступен", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
             bool keepAntigravity = false;

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -24,6 +24,7 @@ namespace HbAi.XboxDns
     {
         internal static string Run(int provider, bool keepAntigravity = false)
         {
+            if(provider>=0&&provider<Templates.Length&&!Dns.IsAvailable(provider))return "Провайдер временно недоступен. Выберите другой DNS.";
             if (provider < 0 || provider >= Templates.Length || Templates[provider] == null) return "Для DoH выберите Comss.one, GeoHide, Bezmezhau, DNS-AI или MagicDNS.";
             try
             {
@@ -53,7 +54,7 @@ namespace HbAi.XboxDns
             return "Обнаружены отдельные DNS-правила: " + domains + ".\n\nОтключите DNS-настройку прежнего анлокера и повторите попытку. Для полного шифрования эти правила должны быть отключены.";
         }
         // Only provider/IP combinations with a verified HTTPS endpoint are offered.
-        internal static readonly string[] Templates = { "https://dns.comss.one/dns-query", "https://geohide.ru/dns-query", null, null, "https://dns.bezmezhau.com/dns-query", "https://dns.dns-ai.ru/dns-query", "https://dns.magicdns.ru/dns-query" };
+        internal static readonly string[] Templates = ProviderCatalog.All.Select(p=>p.doh).ToArray();
         internal static bool ExplicitlyConfigured(FamilyBackup settings, int provider)
         {
             return settings.DohCaptured && settings.Servers.Length > 0 && settings.Doh != null && settings.Doh.Length == settings.Servers.Length &&
@@ -61,7 +62,7 @@ namespace HbAi.XboxDns
                 settings.Doh.Select(d => d.Index).Distinct().Count() == settings.Servers.Length;
         }
         internal static string[] ServersFor(int provider)
-        { return provider == 0 ? new[] { "195.133.25.16" } : Dns.V4[provider]; }
+        { return ProviderCatalog.All[provider].windowsDohServers; }
         internal static DohConfig[] Strict(int count, string template)
         { return Enumerable.Range(0, count).Select(i => new DohConfig { Index = (uint)i, Template = template, Flags = 2 }).ToArray(); }
 

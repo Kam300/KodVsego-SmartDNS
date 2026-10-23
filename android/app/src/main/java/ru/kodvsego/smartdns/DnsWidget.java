@@ -23,7 +23,7 @@ public class DnsWidget extends AppWidgetProvider {
         RemoteViews views=new RemoteViews(context.getPackageName(),layout);
         boolean running=DnsVpnService.active||DnsVpnService.connecting;
         int selected=context.getSharedPreferences("smartdns",Context.MODE_PRIVATE).getInt("provider",0);
-        if(selected<0||selected>=Provider.ALL.length)selected=0;
+        selected=Provider.preferredIndex(selected);
         DnsConfig current=DnsVpnService.current;
         String provider=Provider.at(current==null?selected:current.provider).name;
         views.setTextViewText(R.id.widget_status,running?(DnsVpnService.connecting?"Подключаем…":"DNS включён"):"DNS выключен");

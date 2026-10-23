@@ -45,7 +45,8 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);prefs=getSharedPreferences("smartdns",MODE_PRIVATE);updater=UpdateController.get(this);
         installAfterPermission=saved!=null&&saved.getBoolean("installAfterPermission",false);
-        selected=prefs.getInt("provider",0);if(selected<0||selected>=Provider.ALL.length)selected=0;
+        int savedProvider=prefs.getInt("provider",0);selected=Provider.preferredIndex(savedProvider);
+        if(selected!=savedProvider)prefs.edit().putInt("provider",selected).apply();
         prefs.edit().remove("ag").remove("agProvider").apply();
         heading=font("Unbounded-ExtraBold.ttf",Typeface.DEFAULT_BOLD);body=font("Manrope-Medium.ttf",Typeface.DEFAULT);bold=font("Manrope-Bold.ttf",Typeface.DEFAULT_BOLD);
         dark=prefs.getBoolean("dark",true);render();
@@ -137,6 +138,7 @@ public final class MainActivity extends Activity {
         ScrollView list=new ScrollView(this);list.setVerticalScrollBarEnabled(false);list.setHorizontalScrollBarEnabled(false);
         LinearLayout rows=new LinearLayout(this);rows.setOrientation(LinearLayout.VERTICAL);list.addView(rows);panel.addView(list,new LinearLayout.LayoutParams(-1,0,1));
         for(int i=0;i<Provider.ALL.length;i++){
+            if(!Provider.isAvailable(i))continue;
             final int position=i;Provider provider=Provider.at(i);boolean checked=i==selected;
             LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(16),dp(12),dp(16),dp(12));row.setMinimumHeight(dp(84));row.setTag("provider-"+i);
             GradientDrawable tile=shape(checked?(dark?0xFF153643:0xFFDCF2F8):(dark?0xFF1B1E29:0xFFF9FAFD),18);tile.setStroke(dp(1),checked?accent:(dark?0xFF303441:0xFFE1E5EC));
@@ -184,7 +186,7 @@ public final class MainActivity extends Activity {
         if(!rendering&&ValueAnimator.areAnimatorsEnabled()){serviceRow.animate().cancel();serviceRow.setAlpha(.35f);serviceRow.setTranslationY(dp(5));serviceRow.animate().alpha(1).translationY(0).setDuration(180).start();}
     }
     private void save(){prefs.edit().putInt("provider",selected).putBoolean("encrypted",encrypted.isChecked()).apply();DnsWidget.updateAll(this);}
-    private DnsConfig config(){return new DnsConfig(selected,encrypted.isChecked());}
+    private DnsConfig config(){if(!Provider.isAvailable(selected))throw new IllegalArgumentException("Провайдер временно недоступен. Выберите другой DNS.");return new DnsConfig(selected,encrypted.isChecked());}
     private void updateState() {
         if(state==null)return;boolean locked=DnsVpnService.active||DnsVpnService.connecting;
         String snapshot=DnsVpnService.status+":"+locked+":"+DnsVpnService.active+":"+DnsVpnService.connecting+":"+selected+":"+testing;

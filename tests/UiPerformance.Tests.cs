@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Linq;
+using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Reflection;
@@ -52,6 +53,17 @@ static class UiPerformanceTests
                 form.DrawToBitmap(preview,form.ClientRectangle);
                 preview.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(),"SmartDNS-resize-ui.png"));
             }
+            Set(form,"availableUpdate",new UpdateRelease{Version="9.9.9"});
+            using(var preview=new Bitmap(form.ClientSize.Width,form.ClientSize.Height)) {
+                form.DrawToBitmap(preview,form.ClientRectangle);
+                preview.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(),"SmartDNS-update-indicator.png"));
+            }
+            var indicator=(Rectangle)Get(form,"rUpdateIndicator");var versionHit=(Rectangle)Get(form,"rVersion");
+            Check(!indicator.IsEmpty&&versionHit.Contains(indicator)&&!indicator.IntersectsWith((Rectangle)Get(form,"rGroup"))&&!indicator.IntersectsWith((Rectangle)Get(form,"rBrand")),"Update dot is clickable with version and does not overlap footer links");
+            Check(indicator.Width==8&&indicator.Height==8,"Available update uses a compact dot instead of a text badge");
+            Set(form,"availableUpdate",null);
+            using(var preview=new Bitmap(form.ClientSize.Width,form.ClientSize.Height))form.DrawToBitmap(preview,form.ClientRectangle);
+            Check(((Rectangle)Get(form,"rUpdateIndicator")).IsEmpty,"Update indicator disappears when no update is available");
             var footer=(Rectangle)Get(form,"rBrand");
             Check(footer.Left==28&&layoutHeight-footer.Bottom==20,"Footer remains anchored to the bottom without the removed Telegram banner");
             var agCard=(Rectangle)Get(form,"rAgOption");var cleanup=(Rectangle)Get(form,"rAgCleanup");
@@ -91,9 +103,11 @@ static class UiPerformanceTests
             form.ScrollProviderPage(1);
             Check((int)Get(form,"providerScroll")==324&&(int)Get(form,"dnsSet")==selected,"Arrow pages three providers without changing selected DNS");
             form.ScrollProviderPage(1);
-            Check((int)Get(form,"providerScroll")==((Dns.Name.Length+1-3)*108),"Last page clamps to the final Auto entry");
+            Check((int)Get(form,"providerScroll")==((Dns.AvailableProviders.Length+1-3)*108),"Last page clamps to the final Auto entry");
             form.ScrollProviderPage(-1);form.ScrollProviderPage(-1);
             Check((int)Get(form,"providerScroll")==0,"Backward paging stops at first provider");
+            var segments=(Rectangle[])Get(form,"rSeg");
+            Check(!segments[1].IsEmpty&&!segments[2].IsEmpty&&segments[1].Left==segments[0].Right&&segments[2].Left==segments[1].Right,"Restored GeoHide tiles have consecutive hit areas");
             var viewport=(Rectangle)Get(form,"providerViewport");
             Check(!viewport.IntersectsWith((Rectangle)Get(form,"providerPrevious"))&&!viewport.IntersectsWith((Rectangle)Get(form,"providerNext"))&&viewport.Width==3*108,"Three full provider tiles fit between separate arrow hit areas");
             Set(form, "busy", true);
@@ -146,6 +160,30 @@ static class UiPerformanceTests
                 dialog.StartAutoDnsSearch();
                 Check(started==1&&goal==1,"One-click auto start immediately checks the preselected service without another button press");
                 dialog.Close();
+            }
+            using(var dialog=form.CreateDialog("Запрос прав администратора отменён. DNS не изменён.","Ошибка DNS",MessageBoxButtons.OK,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button1)) {
+                var body=(Panel)typeof(StyledDialog).GetField("messageBody",flags).GetValue(dialog);
+                var label=(Label)typeof(StyledDialog).GetField("messageText",flags).GetValue(dialog);
+                Check(body.Height>=label.GetPreferredSize(new Size(label.MaximumSize.Width,0)).Height&&dialog.Height<300,"Short errors fit in a compact dialog");
+            }
+            using(var dialog=form.CreateDialog("Выберите DNS.","Тест DNS",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1)) {
+                dialog.AddDnsTestControls(new[]{"Example DNS"},0,index=>{});
+                dialog.StartPosition=FormStartPosition.Manual;dialog.Location=new Point(-10000,-10000);dialog.ShowInTaskbar=false;dialog.Show();Application.DoEvents();
+                dialog.ShowDnsTestStatus("Проверяем сервер…","Проверка",true,false);
+                int runningHeight=dialog.Height;
+                Check(runningHeight<400,"DNS test progress has no fixed 480-pixel empty area");
+                string full=string.Join("\n",Enumerable.Repeat("example.com — 100 мс",60));
+                dialog.ShowDnsTestStatus(full,"Ответы: 60/60",false,false,"Сервер ответил. Настройки DNS не изменялись.");
+                int compact=dialog.Height;
+                var details=(LinkLabel)typeof(StyledDialog).GetField("testDetailsToggle",flags).GetValue(dialog);
+                Check(details.Visible&&dialog.DiagnosticMessage.Contains(full)&&compact<400,"Detailed test data stays in the log while summary stays compact");
+                typeof(LinkLabel).GetMethod("OnLinkClicked",flags).Invoke(details,new object[]{new LinkLabelLinkClickedEventArgs(new LinkLabel.Link())});
+                Check(dialog.Height>compact&&dialog.Height<=Screen.PrimaryScreen.WorkingArea.Height,"Expanded test details scroll within the screen");
+                using(var image=new Bitmap(dialog.Width,dialog.Height)){dialog.DrawToBitmap(image,dialog.ClientRectangle);image.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(),"SmartDNS-compact-test.png"));}
+                typeof(LinkLabel).GetMethod("OnLinkClicked",flags).Invoke(details,new object[]{new LinkLabelLinkClickedEventArgs(new LinkLabel.Link())});
+                Check(dialog.Height==compact,"Collapsing test results restores the compact height");
+                dialog.ShowDnsTestStatus("Повторная проверка…","Проверка",true,false);
+                Check(!details.Visible&&dialog.Height==runningHeight,"Repeating a test clears the previous details and height");
             }
             using(var dialog=form.CreateDialog("Update test","Обновление",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1)) {
                 dialog.AddUpdateControls(()=>{});

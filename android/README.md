@@ -1,3 +1,5 @@
+> GeoHide и GeoHide EU включены. Доступность провайдеров для ПК и Android управляется общим файлом [providers.json](../config/providers.json).
+
 # Smart DNS для Android
 
 Нативное приложение на Java для Android 8.0+ (API 26), compile/target SDK 35. Версия 1.5.0 — **предварительная**, без подтверждённого прогона на устройстве. Не требует root. Исходники Windows находятся в корне репозитория.

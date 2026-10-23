@@ -1,0 +1,58 @@
+name: Independent Windows artifact checks
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Test artifact composition policy with harmless fixtures
+        shell: powershell
+        run: ./tests/ArtifactInspection.Tests.ps1
+      - name: Test limited process queries and DLL search
+        shell: powershell
+        run: |
+          $compiler=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+          $test=Join-Path $env:RUNNER_TEMP 'ProcessSecurityTests.exe'
+          & $compiler /noconfig /nologo /target:exe /r:System.dll ("/out:"+$test) ProcessSecurity.cs tests/ProcessSecurity.Tests.cs
+          if($LASTEXITCODE -ne 0){throw 'Security test compilation failed'}
+          & $test
+          if($LASTEXITCODE -ne 0){throw 'Process security checks failed'}
+      - name: Build twice in separate directories and compare all bytes
+        shell: powershell
+        run: ./tests/ReproducibleBuild.Tests.ps1
+      - name: Build artifact with explicit compiler inputs
+        shell: powershell
+        run: ./tools/Build-VerifiedWindows.ps1 -OutputDirectory ./dist/verified
+      - name: Inspect compiled artifact without executing it
+        shell: powershell
+        run: |
+          $files=@(Get-ChildItem ./dist/verified -Filter 'KodVsego_SmartDNS.*.exe')
+          if($files.Count -ne 1){throw 'Expected one verified artifact'}
+          $exe=$files[0]
+          ./tools/Test-WindowsArtifact.ps1 -File $exe.FullName -OutputPath ./dist/verified/artifact-policy.json
+      - name: Test Windows logic and API client with fake responses
+        shell: powershell
+        run: |
+          $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs=& $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -property installationPath
+          if($LASTEXITCODE -ne 0 -or !$vs){throw 'Visual Studio compiler not found'}
+          ./tests/run.ps1 -Compiler (Join-Path $vs 'MSBuild/Current/Bin/Roslyn/csc.exe')
+      - name: Test actual UI motion against the verified artifact
+        shell: powershell
+        run: |
+          $files=@(Get-ChildItem ./dist/verified -Filter 'KodVsego_SmartDNS.*.exe')
+          if($files.Count -ne 1){throw 'Expected one verified artifact'}
+          $exe=$files[0]
+          ./tests/UiMotion.Tests.ps1 -AssemblyPath $exe.FullName
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Windows-verified-artifact-and-evidence
+          path: dist/verified/
+          if-no-files-found: error
+          retention-days: 14
