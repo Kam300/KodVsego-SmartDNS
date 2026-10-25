@@ -25,6 +25,19 @@
 > [!IMPORTANT]
 > Smart DNS может помочь с доступом к сервисам, поддерживаемым выбранным оператором. **Успешный DNS-ответ не гарантирует открытие сайта, доступ к аккаунту, обход региональной ошибки или работу Gemini.** Набор сервисов зависит от провайдера и может меняться. IP-адрес подключения к сайту приложение не скрывает.
 
+## Проверка VirusTotal
+
+Проверено 2026-10-25. Ссылки ведут на полный отчёт VirusTotal; в знаменателе — движки, которые поддерживают этот тип файла.
+
+| Платформа | Файл | Срабатывания / движков | Кто сработал | SHA-256 |
+| --- | --- | :---: | --- | --- |
+| Windows · MSI 2.23.6 | `KodVsego_SmartDNS.Setup.2.23.6.msi` | [0 / 61](https://www.virustotal.com/gui/file/22f0718fd171befa462c33f519b5e4d5da3ed9e2307edef0765c8b1298e9e727/detection) | — | `22f0718fd171befa462c33f519b5e4d5da3ed9e2307edef0765c8b1298e9e727` |
+| Windows · ZIP 2.23.6 | `KodVsego_SmartDNS.Portable.2.23.6.zip` | [2 / 67](https://www.virustotal.com/gui/file/b73f18d635e344caecc0e32bc90403c18f64aae519e7f08bfdfbe9d179c0d0b1/detection) | Malwarebytes, MaxSecure | `b73f18d635e344caecc0e32bc90403c18f64aae519e7f08bfdfbe9d179c0d0b1` |
+| Windows · EXE 2.23.6 | `KodVsego_SmartDNS.2.23.6.exe` | [3 / 70](https://www.virustotal.com/gui/file/7fb6a16941ab3b16fccf97b7168b9496551c921fd4d0674a53e36a97edd720e4/detection) | APEX, Malwarebytes, MaxSecure | `7fb6a16941ab3b16fccf97b7168b9496551c921fd4d0674a53e36a97edd720e4` |
+| Android · APK 1.5.1 | `KodVsego-SmartDNS-Android-1.5.1.apk` | [0 / 66](https://www.virustotal.com/gui/file/9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6/detection) | — | `9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6` |
+
+Срабатывания на ZIP и EXE — эвристики и машинное обучение (`MachineLearning/Anomalous`, `susgen`, `APEX`), а не сигнатуры известного вредоносного ПО. Такие детекты типичны для неподписанных программ, которые меняют сетевые настройки Windows с правами администратора. Файлы MSI и APK чистые. Если сомневаетесь, используйте MSI и сверьте SHA-256 с `SHA256SUMS.txt`.
+
 ## Что нового в Windows 2.23.6
 
 - Три способа подключения: через Windows, через приложение (локальный DNS) и экспериментальный профиль Gemini / NotebookLM; шифрование DoH или DoT.
