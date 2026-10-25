@@ -1,4 +1,4 @@
-﻿# Код Всего · Smart DNS
+# Код Всего · Smart DNS
 
 Переключатель Smart DNS для **компьютеров Windows и телефонов Android**. Выбор провайдера, обычный или зашифрованный DNS (DoH/DoT), тест доступности и значки сервисов: ChatGPT, Claude, Gemini, ElevenLabs и Spotify.
 
@@ -31,9 +31,9 @@
 
 | Платформа | Файл | Срабатывания / движков | Кто сработал | SHA-256 |
 | --- | --- | :---: | --- | --- |
-| Windows · MSI 2.23.6 | `KodVsego_SmartDNS.Setup.2.23.6.msi` | [0 / 61](https://www.virustotal.com/gui/file/82d8a1f9639c70ed8d37a5edb6e6b937c1d7f9fa925f5a5b8ac564b044119fd3/detection) | — | `82d8a1f9639c70ed8d37a5edb6e6b937c1d7f9fa925f5a5b8ac564b044119fd3` |
-| Windows · ZIP 2.23.6 | `KodVsego_SmartDNS.Portable.2.23.6.zip` | [0 / 67](https://www.virustotal.com/gui/file/d85ce3d8d52ace67323d116109dff201032279705c2c7880a7cb965e15e8a2b4/detection) | — | `d85ce3d8d52ace67323d116109dff201032279705c2c7880a7cb965e15e8a2b4` |
-| Windows · EXE 2.23.6 | `KodVsego_SmartDNS.2.23.6.exe` | [1 / 70](https://www.virustotal.com/gui/file/c54ce380dbe20fe6b5dc5c814f39abb79004fc4dbedcb7ef709121e1c1a7ea77/detection) | APEX | `c54ce380dbe20fe6b5dc5c814f39abb79004fc4dbedcb7ef709121e1c1a7ea77` |
+| Windows · MSI 2.23.6 | `KodVsego_SmartDNS.Setup.2.23.6.msi` | [0 / 61](https://www.virustotal.com/gui/file/edddb84d08c5c322bdd245384d0282686a13bee1bf3b89824bafd420834f1d12/detection) | — | `edddb84d08c5c322bdd245384d0282686a13bee1bf3b89824bafd420834f1d12` |
+| Windows · ZIP 2.23.6 | `KodVsego_SmartDNS.Portable.2.23.6.zip` | [0 / 67](https://www.virustotal.com/gui/file/5beeefc6c612efc4baa03ae08627959980999cfd8be3c195f57096c678083163/detection) | — | `5beeefc6c612efc4baa03ae08627959980999cfd8be3c195f57096c678083163` |
+| Windows · EXE 2.23.6 | `KodVsego_SmartDNS.2.23.6.exe` | [1 / 70](https://www.virustotal.com/gui/file/2fc33a2562af008014078b039ee5f606a56e073986448c9f191767864e2b0265/detection) | APEX | `2fc33a2562af008014078b039ee5f606a56e073986448c9f191767864e2b0265` |
 | Android · APK 1.5.1 | `KodVsego-SmartDNS-Android-1.5.1.apk` | [0 / 66](https://www.virustotal.com/gui/file/9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6/detection) | — | `9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6` |
 
 Установщик **MSI**, портативный архив **ZIP** и **Android APK** проходят проверку полностью чисто (**0 срабатываний**). Единственное срабатывание на отдельном файле EXE (`APEX`) — ML-эвристика на неподписанном `.exe`, который изменяет сетевые настройки Windows. Если сомневаетесь, используйте MSI или портативный ZIP и сверьте SHA-256 с `SHA256SUMS.txt`.

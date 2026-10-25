@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -632,6 +633,38 @@ namespace HbAi.XboxDns
             primaryAction.Width = Math.Min(available, TextRenderer.MeasureText(text, buttonFont).Width + (int)Math.Round(32 * scale));
             primaryAction.Left = right - primaryAction.Width;
             if (cancelAction != null) cancelAction.Left = primaryAction.Left - gap - cancelAction.Width;
+        }
+
+        internal void AddBodyLinks(params KeyValuePair<string, Action>[] links)
+        {
+            if (links == null || links.Length == 0 || messageBody == null || messageText == null) return;
+            float scale = actionHeight / 42f;
+            Func<int, int> px = n => (int)Math.Round(n * scale);
+            int bodyWidth = messageText.MaximumSize.Width > 0 ? messageText.MaximumSize.Width : messageBody.Width - px(20);
+            int top = Math.Max(messageText.Height, messageText.GetPreferredSize(new Size(bodyWidth, 0)).Height) + px(10);
+            foreach (var item in links)
+            {
+                var action = item.Value;
+                var link = new LinkLabel
+                {
+                    Text = item.Key,
+                    Font = bodyFont,
+                    LinkColor = statusAccent,
+                    ActiveLinkColor = statusAccent,
+                    VisitedLinkColor = statusAccent,
+                    UseMnemonic = false,
+                    AutoSize = true,
+                    MaximumSize = new Size(bodyWidth, 0),
+                    Location = new Point(0, top),
+                    AccessibleName = item.Key
+                };
+                if (action != null) link.LinkClicked += (s, e) => action();
+                messageBody.Controls.Add(link);
+                top += Math.Max(link.Height, link.GetPreferredSize(new Size(bodyWidth, 0)).Height) + px(6);
+            }
+            int contentHeight = Math.Min(top + px(12), Math.Max(px(90), maxDialogHeight - px(210)));
+            ClientSize = new Size(ClientSize.Width, Math.Min(maxDialogHeight, px(196) + contentHeight));
+        UpdateDialogLayout();
         }
 
         void EnableDragging(Control control)

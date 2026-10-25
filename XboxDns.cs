@@ -506,15 +506,22 @@ namespace HbAi.XboxDns
         }
         internal const string MissingWintunTitle="Нужен файл wintun.dll (способ 3)";
         internal const string MissingWintunInlineError="Нет wintun.dll рядом с EXE · выберите способ 2 или скачайте ZIP / MSI";
-        internal const string MissingWintunMessage="Экспериментальный режим «3 · Gemini / NotebookLM · beta» создаёт виртуальный сетевой адаптер и требует библиотеку wintun.dll рядом с программой.\n\nВ одиночный файл EXE эта библиотека не встроена, чтобы избежать ложных срабатываний антивирусов.\n\nКак решить прямо сейчас:\n• Нажмите «Способ 2» ниже — включится режим «2 · Через приложение · beta». Он тоже шифрует DNS (DoH / DoT) для всего ПК и работает из одного файла EXE без драйверов.\n\nКак включить экспериментальный способ 3:\n• Скачайте установщик MSI или архив Portable ZIP со страницы релиза на GitHub (в них wintun.dll уже в комплекте), либо\n• Положите официальный файл wintun.dll (Wintun 0.14.1 x64) в одну папку с этим EXE.";
+        internal const string MissingWintunMessage="Экспериментальный режим «3 · Gemini / NotebookLM · beta» создаёт виртуальный адаптер и требует файл wintun.dll рядом с программой. В одиночный EXE он не встроен, чтобы избежать ложных срабатываний антивирусов.\n\nКак решить прямо сейчас:\n• Нажмите «Способ 2» ниже — включится режим «2 · Через приложение · beta» (DoH / DoT для всего ПК из одного EXE без драйверов).\n\nКак включить способ 3:\n• Скачайте установщик MSI или архив Portable ZIP с GitHub (в них wintun.dll уже в комплекте), либо положите официальный wintun.dll (Wintun 0.14.1 x64) в папку с этим EXE:";
+        internal StyledDialog CreateMissingWintunDialog()
+        {
+            var dialog=CreateDialog(MissingWintunMessage,MissingWintunTitle,MessageBoxButtons.YesNo,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1);
+            dialog.SetPrimaryText("Способ 2");
+            dialog.AddBodyLinks(
+                new KeyValuePair<string,Action>("Скачать MSI или Portable ZIP на GitHub ↗",()=>Open(AppUpdate.MsiReleasePage(VersionLabel.TrimStart('v')))),
+                new KeyValuePair<string,Action>("Официальный сайт Wintun (wintun.net) ↗",()=>Open("https://www.wintun.net/")),
+                new KeyValuePair<string,Action>("Открыть папку с этим EXE ↗",()=>Open(AppDomain.CurrentDomain.BaseDirectory)));
+            return dialog;
+        }
         void ShowMissingWintunHelp()
         {
             error=MissingWintunInlineError;Invalidate();
-            using(var dialog=CreateDialog(MissingWintunMessage,MissingWintunTitle,MessageBoxButtons.YesNo,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1))
-            {
-                dialog.SetPrimaryText("Способ 2");
+            using(var dialog=CreateMissingWintunDialog())
                 if(dialog.ShowDialog(this)==DialogResult.Yes)SelectLocalMode(true,true);
-            }
         }
         internal void SelectGoogleMode(bool enabled,bool persist=false)
         {

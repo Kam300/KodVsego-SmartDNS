@@ -248,6 +248,11 @@ static class TunnelTests
             typeof(MainForm).GetMethod("Toggle",fields).Invoke(main,null);fake.Fail();Application.DoEvents();
             Check(!(bool)typeof(MainForm).GetField("busy",fields).GetValue(main)&&((string)typeof(MainForm).GetField("error",fields).GetValue(main)).Contains("отменён"),"UAC cancellation remains inline and leaves the main screen usable");
             using(var settings=main.CreateSettingsDialog())Check(settings.Controls.OfType<LinkLabel>().Any(l=>l.Text.Contains("Скачать журнал"))&&!settings.Controls.OfType<LinkLabel>().Any(l=>l.Text=="DNS-туннель · beta"),"Settings expose the full journal download instead of a second tunnel window");
+            using(var missing=main.CreateMissingWintunDialog()){
+                var body=missing.Controls.OfType<Panel>().First();
+                var links=body.Controls.OfType<LinkLabel>().Select(l=>l.Text).ToArray();
+                Check(links.Length==3&&links.Any(t=>t.Contains("GitHub"))&&links.Any(t=>t.Contains("wintun.net"))&&links.Any(t=>t.Contains("папку")),"Missing wintun dialog exposes clickable links for GitHub release, wintun.net, and the EXE folder");
+            }
         }
         Console.WriteLine("All "+passed+" tunnel checks passed; fake packets and snapshots, no driver loading or network configuration writes.");
     }
