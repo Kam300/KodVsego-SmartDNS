@@ -18,6 +18,40 @@ static class AppUpdateTests
     }
     static void Main()
     {
+        int requests=0;bool offline=false;
+        Func<CancellationToken,string> fetch=token=>{requests++;return Json();};
+        try{AppUpdate.Check("2.22.0",CancellationToken.None,()=>false,fetch);}catch(UpdateOfflineException){offline=true;}
+        Check(offline&&requests==0,"Offline update check stops before DNS, HTTP or metadata access");
+        Check(AppUpdate.Check("2.22.0",CancellationToken.None,()=>true,fetch)!=null&&requests==1,"Manual retry after reconnect performs a fresh successful check");
+        using(var cancellation=new CancellationTokenSource()) {
+            cancellation.Cancel();bool cancelled=false;
+            try{AppUpdate.Check("2.22.0",cancellation.Token,()=>false,fetch);}catch(OperationCanceledException){cancelled=true;}
+            Check(cancelled&&requests==1,"Cancellation wins over offline detection and never starts a request");
+        }
+        var connect=new System.ComponentModel.Win32Exception(12029,"WinHTTP: send; code=12029; token=private-update-fixture");
+        Check(UpdateProblem.Describe(connect,false,false).Caption=="Нет сетевого подключения","Disconnected connection error is not described as a GitHub outage");
+        Check(UpdateProblem.Describe(connect,false,true).Caption=="Нет соединения с GitHub","WinHTTP cannot-connect error is explained without guessing a cause");
+        foreach(var failure in new[]{
+            new {Error=(Exception)new IOException("wrapped",new System.ComponentModel.Win32Exception(12007)),Caption="Не удалось найти сервер"},
+            new {Error=(Exception)new System.Net.Sockets.SocketException(11001),Caption="Не удалось найти сервер"},
+            new {Error=(Exception)new System.ComponentModel.Win32Exception(12002),Caption="Сервер не ответил вовремя"},
+            new {Error=(Exception)new System.Net.Sockets.SocketException(10060),Caption="Сервер не ответил вовремя"},
+            new {Error=(Exception)new TimeoutException(),Caption="Сервер не ответил вовремя"},
+            new {Error=(Exception)new System.ComponentModel.Win32Exception(12175),Caption="Не удалось проверить HTTPS"},
+            new {Error=(Exception)new IOException("wrapped",new System.Security.Authentication.AuthenticationException()),Caption="Не удалось проверить HTTPS"},
+            new {Error=(Exception)new System.Net.WebException("network",System.Net.WebExceptionStatus.NameResolutionFailure),Caption="Не удалось найти сервер"},
+            new {Error=(Exception)new System.Net.WebException("network",System.Net.WebExceptionStatus.TrustFailure),Caption="Не удалось проверить HTTPS"},
+            new {Error=(Exception)new UpdateHttpException(403),Caption="GitHub отклонил запрос"},
+            new {Error=(Exception)new UpdateHttpException(404),Caption="Релиз не найден"},
+            new {Error=(Exception)new UpdateHttpException(429),Caption="Слишком много запросов"},
+            new {Error=(Exception)new UpdateHttpException(503),Caption="Ошибка сервера обновлений"},
+            new {Error=(Exception)new UnauthorizedAccessException("private path"),Caption="Нет доступа к файлам"},
+            new {Error=(Exception)new UpdateElevationException(),Caption="Нужен обычный запуск"}
+        }) Check(UpdateProblem.Describe(failure.Error,true,true).Caption==failure.Caption,"Specific update failure: "+failure.Caption+" / "+failure.Error.GetType().Name);
+        var integrity=UpdateProblem.Describe(new InvalidDataException("private validation detail"),true,false);
+        Check(integrity.Caption=="Файл не прошёл проверку"&&integrity.Action=="Повторить загрузку","Integrity failure survives a later disconnection and never offers installation");
+        var unknown=UpdateProblem.Describe(new Exception("sensitive raw exception"),false,true);
+        Check(!unknown.Message.Contains("sensitive")&&unknown.Message.Contains("журнал"),"Unknown exception is explained safely with technical details kept in the journal");
         Check(AppUpdate.IsNewer("2.23.0","v2.22.0-test.5"),"New stable version upgrades a test build");
         Check(Response("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc")=="abc","Direct HTTPS reads exact content length");
         Check(Response("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n2;extension=yes\r\nde\r\n0\r\nTrailer: value\r\n\r\n")=="abcde","Direct HTTPS decodes chunked body and bounded trailers");

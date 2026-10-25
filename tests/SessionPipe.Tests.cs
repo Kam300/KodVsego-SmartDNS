@@ -23,7 +23,15 @@ static class SessionPipeTests
                     using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),1024,true){AutoFlush=true})
                     using(var reader=new StreamReader(pipe,Encoding.UTF8,false,1024,true)){
                         writer.WriteLine("STATS ready");if(!ready.WaitOne(5000))return 9;
-                        if(mode=="stop"){
+                        if(mode=="switch"){
+                            writer.WriteLine("CONNECTED fake local DNS");
+                            var change=reader.ReadLineAsync();if(!change.Wait(5000)||change.Result!="SWITCH 7 https")return 8;
+                            writer.WriteLine("SWITCHED 7 https");
+                            change=reader.ReadLineAsync();if(!change.Wait(5000)||change.Result!="SWITCH 6 tls")return 8;
+                            writer.WriteLine("SWITCH_FAILED Simulated failed provider");
+                            change=reader.ReadLineAsync();if(!change.Wait(5000)||change.Result!="STOP")return 8;
+                            writer.WriteLine("STOPPED");
+                        }else if(mode=="stop"){
                             writer.WriteLine("CONNECTED fake local DNS");
                             var command=reader.ReadLineAsync();if(!command.Wait(5000)||command.Result!="STOP")return 8;
                             writer.WriteLine("STOPPED");
@@ -58,6 +66,13 @@ static class SessionPipeTests
                 };
                 session.Start(6,false);
                 if(mode=="stop"){Check(connected.Wait(5000),"Authenticated fake worker can report connected");session.Stop();}
+                if(mode=="switch"){
+                    Check(connected.Wait(5000),"Existing authenticated pipe is ready for live switching");session.SwitchProvider(7,false);
+                    Check(SpinWait.SpinUntil(()=>!session.Switching&&session.CurrentProvider==7,5000)&&session.Running&&session.Connected&&!session.CurrentTls,"Worker acknowledgement changes the active provider without a second process or disconnection");
+                    session.SwitchProvider(6,true);
+                    Check(SpinWait.SpinUntil(()=>!session.Switching&&session.LastError!=null,5000)&&session.CurrentProvider==7&&!session.CurrentTls&&session.Connected,"A failed live candidate preserves the previous provider over the real private pipe");
+                    Check(launches==1,"Live provider switching never launches another privileged worker");session.Stop();
+                }
                 if(mode=="delayed-error"){
                     Check(cleanup.Wait(5000)&&session.Running&&!session.Connected&&session.Stopping,"Lost connection clears connected state while worker cleanup is outstanding");
                     session.Start(9,false);Check(launches==1,"A second worker cannot start during pipe-failure cleanup");exit.Set();
@@ -93,7 +108,7 @@ static class SessionPipeTests
         Check(outcome.Complete(42,false,false).Contains("Потеряна связь"),"Unexpected pipe failure has a readable summary instead of localized exception text");
         Check(new TunnelSessionOutcome().Complete(0,false,false)!=null,"Exit zero without a terminal message does not claim recovery");
         Check(new TunnelSessionOutcome().Complete(1,false,true)==null,"Explicit cancellation before activation is accepted when recovery is clear");
-        foreach(string mode in new[]{"error","stopped","stop","abrupt","eof-zero","pending","delayed-error"})Integration(mode);
+        foreach(string mode in new[]{"error","stopped","stop","switch","abrupt","eof-zero","pending","delayed-error"})Integration(mode);
         Console.WriteLine("All "+passed+" worker-pipe checks passed; fake child processes and private pipes only, no elevation, DNS writes or driver loading.");return 0;
     }
 }

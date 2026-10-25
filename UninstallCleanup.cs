@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -20,7 +20,7 @@ namespace HbAi.XboxDns
     {
         internal const int RestoreOperation=4;
         internal const string UserKey=@"SOFTWARE\KodVsego\SmartDns";
-        internal static readonly string[] PreferenceValues={"Theme","DefaultService","HideDnsReminder","GeminiApiKeyProtected","AutoResolverCheck","GoogleTunnelMode","GoogleTunnelProvider","GoogleTunnelProtocol","LocalResolverMode","LocalResolverProvider","LocalResolverProtocol","LocalAntigravityEnabled","LocalAntigravityProvider"};
+        internal static readonly string[] PreferenceValues={ProviderPreferences.Value,"Theme","DefaultService",RestartPrompts.BrowserValue,RestartPrompts.AntigravityValue,"GeminiApiKeyProtected","AutoResolverCheck","GoogleTunnelMode","GoogleTunnelProvider","GoogleTunnelProtocol","LocalResolverMode","LocalResolverProvider","LocalResolverProtocol","LocalAntigravityEnabled","LocalAntigravityProvider"};
 
         internal static string Run(IUninstallCleanup cleanup,bool interactive)
         {

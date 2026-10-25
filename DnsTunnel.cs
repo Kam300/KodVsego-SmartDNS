@@ -28,12 +28,30 @@ namespace HbAi.XboxDns
         event Action Changed;
         void Start(int provider,bool tls);void Stop();
     }
-    sealed class TunnelSession : ITunnelSession,ILocalDnsConfiguration
+    sealed class TunnelSession : ITunnelSession,ILocalDnsConfiguration,ILocalDnsSwitchSession
     {
         readonly Func<ProcessStartInfo,Process> launch;
         readonly bool local;
         readonly Func<bool> recoveryPending;
         int localAntigravity=-1;
+        volatile bool switching,currentTls;volatile int currentProvider=-1;int pendingProvider=-1;bool pendingTls;
+        public bool Switching{get{return switching;}}public int CurrentProvider{get{return currentProvider;}}public bool CurrentTls{get{return currentTls;}}
+        public void SwitchProvider(int provider,bool tls)
+        {
+            var request=LocalDnsSwitchCommand.Parse("SWITCH "+provider+" "+(tls?"tls":"https"));
+            lock(gate){if(!local||!connected||stopping||switching||writer==null)throw new IOException("Смена DNS сейчас недоступна.");
+                pendingProvider=request.Provider;pendingTls=request.Tls;switching=true;failure=null;
+                try{writer.WriteLine(request.Wire);}catch{switching=false;throw;}}
+            Notify();
+        }
+        internal void AcceptSwitchStatus(string line)
+        {
+            lock(gate){if(!local||!switching||stopping)return;
+                if(line=="SWITCHED "+pendingProvider+" "+(pendingTls?"tls":"https")){currentProvider=pendingProvider;currentTls=pendingTls;switching=false;failure=null;}
+                else if(line.StartsWith("SWITCH_FAILED ",StringComparison.Ordinal)){switching=false;failure=line.Substring(14);}
+                else throw new IOException("Неожиданный ответ смены DNS.");}
+            Notify();
+        }
         internal TunnelSession(Func<ProcessStartInfo,Process> launch=null,bool local=false,Func<bool> recoveryPending=null){this.launch=launch??Process.Start;this.local=local;this.recoveryPending=recoveryPending??(()=>DnsTunnel.Pending);}
         readonly object gate=new object();NamedPipeServerStream pipe;StreamWriter writer;
         volatile bool running,connected,stopping;volatile string failure,statistics="";
@@ -47,7 +65,7 @@ namespace HbAi.XboxDns
         {
             if(running)return;
             if(local?!EncryptedProvider(provider):!GoogleProvider(provider))throw new IOException("Выберите DNS с поддержкой шифрования.");
-            running=true;connected=false;stopping=false;failure=null;statistics="";Notify();
+            currentProvider=provider;currentTls=tls;switching=false;running=true;connected=false;stopping=false;failure=null;statistics="";Notify();
             NamedPipeServerStream channel=null;Process child=null;IAsyncResult pending;
             try {
                 Guid token=Guid.NewGuid();channel=DnsTunnel.Server(token);pending=channel.BeginWaitForConnection(null,null);pipe=channel;
@@ -69,6 +87,7 @@ namespace HbAi.XboxDns
                         string line;while((line=input.ReadLine())!=null){stage="validate-status";if(line.Length>8192)throw new IOException("Слишком длинный ответ обработчика.");
                             if(line.StartsWith("STATS ",StringComparison.Ordinal)){statistics=line.Substring(6);Notify();stage="read-status";continue;}
                             Log(line);
+                            if(line.StartsWith("SWITCHED ",StringComparison.Ordinal)||line.StartsWith("SWITCH_FAILED ",StringComparison.Ordinal)){AcceptSwitchStatus(line);stage="read-status";continue;}
                             outcome.Accept(line);
                             if(line.StartsWith("CONNECTED ",StringComparison.Ordinal)){connected=true;Notify();}
                             stage="read-status";
@@ -77,7 +96,7 @@ namespace HbAi.XboxDns
                     }
                 }catch(Exception problem){Log("CONTROL stage="+stage+"; HRESULT=0x"+problem.HResult.ToString("X8")+"; "+TunnelDiagnostics.Error(problem));outcome.Fault(problem,stopping,stage=="close-status-stream",stage=="read-status");}
                 finally {
-                    bool requestedStop=stopping;connected=false;stopping=true;Notify();
+                    bool requestedStop=stopping;connected=false;switching=false;stopping=true;Notify();
                     lock(gate){writer=null;pipe=null;}
                     int exitCode=-1;bool pendingRestore=true;
                     try{connection.Dispose();process.WaitForExit();exitCode=process.ExitCode;

@@ -11,6 +11,17 @@ using System.Management;
 
 namespace HbAi.XboxDns
 {
+    static class RestartPrompts
+    {
+        internal const string BrowserValue="HideDnsReminder", AntigravityValue="HideAntigravityRestartDialog";
+        internal static bool Hidden(RegistryKey key,string name)
+        {return key!=null&&object.Equals(key.GetValue(name),1);}
+        internal static void Save(RegistryKey key,bool browser,bool antigravity)
+        {
+            key.SetValue(BrowserValue,browser?0:1,RegistryValueKind.DWord);
+            key.SetValue(AntigravityValue,antigravity?0:1,RegistryValueKind.DWord);
+        }
+    }
     sealed class BrowserChoice
     {
         internal string Name, Exe;
@@ -342,8 +353,8 @@ namespace HbAi.XboxDns
             start.EnvironmentVariables.Remove("ELECTRON_RUN_AS_NODE");
             start.EnvironmentVariables.Remove("ELECTRON_NO_ASAR");
         }
-        internal static bool Ready(bool enable, bool readOnly, string error, AgStatus status, int provider)
-        { return enable && !readOnly && error == null && status.Error == null && status.Checked && status.Complete && status.Provider == provider; }
+        internal static bool Ready(bool enable, bool readOnly, string error, AgStatus status, int provider,bool restartAllowed=true)
+        { return restartAllowed && enable && !readOnly && error == null && status.Error == null && status.Checked && status.Complete && status.Provider == provider; }
         internal static BrowserLaunch[] Capture(string[] commands, Func<string, bool> exists)
         {
             return commands.Select(command => {

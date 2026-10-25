@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using Microsoft.Win32;
 using HbAi.XboxDns;
 
 sealed class FakeBrowserProcess : IBrowserProcess
@@ -56,6 +57,24 @@ static class BrowserTests
     static void Main(string[] args)
     {
         if (args.Length > 0 && args[0] == "--fixture-wait") { System.Threading.Thread.Sleep(15000); return; }
+        Test("Restart prompt preferences persist independently and respect the old browser dismissal", () => {
+            string path=@"Software\KodVsego\SmartDnsTest-Restart-"+Guid.NewGuid().ToString("N");
+            try {
+                using(var key=Registry.CurrentUser.CreateSubKey(path)) {
+                    Assert(!RestartPrompts.Hidden(key,RestartPrompts.BrowserValue)&&!RestartPrompts.Hidden(key,RestartPrompts.AntigravityValue),"New settings should offer both restart dialogs by default");
+                    key.SetValue(RestartPrompts.BrowserValue,1,RegistryValueKind.DWord);
+                    Assert(RestartPrompts.Hidden(key,RestartPrompts.BrowserValue)&&!RestartPrompts.Hidden(key,RestartPrompts.AntigravityValue),"Legacy never-show-again should only hide the browser prompt");
+                    key.SetValue("UnrelatedPreference","keep");
+                    RestartPrompts.Save(key,true,false);
+                }
+                using(var key=Registry.CurrentUser.OpenSubKey(path)) {
+                    Assert(!RestartPrompts.Hidden(key,RestartPrompts.BrowserValue)&&RestartPrompts.Hidden(key,RestartPrompts.AntigravityValue),"Reopening preferences should restore each independent saved choice");
+                    Assert((string)key.GetValue("UnrelatedPreference")=="keep","Restart preferences must preserve other settings");
+                }
+                using(var key=Registry.CurrentUser.OpenSubKey(path,true))RestartPrompts.Save(key,false,true);
+                using(var key=Registry.CurrentUser.OpenSubKey(path))Assert(RestartPrompts.Hidden(key,RestartPrompts.BrowserValue)&&!RestartPrompts.Hidden(key,RestartPrompts.AntigravityValue),"Either prompt can be restored without enabling the other");
+            }finally{Registry.CurrentUser.DeleteSubKeyTree(path,false);}
+        });
         Test("Normal exit precedes relaunch", () => {
             BrowserRestart.Run(Choice, system);
             Assert(system.Processes[0].CloseCalls == 1 && system.Waits == 1 && system.Opens == 1 && system.Processes[0].Disposed, "Incorrect restart order");
@@ -157,6 +176,7 @@ static class BrowserTests
         Test("Automatic restart requires confirmed activation of the requested provider", () => {
             var status=new AgStatus{Checked=true,Complete=true,Provider=0};
             Assert(AntigravityRestart.Ready(true,false,null,status,0),"Valid activation rejected");
+            Assert(!AntigravityRestart.Ready(true,false,null,status,0,false),"Disabled restart prompt must not silently restart Antigravity");
             Assert(!AntigravityRestart.Ready(false,false,null,status,0) && !AntigravityRestart.Ready(true,true,null,status,0) && !AntigravityRestart.Ready(true,false,"UAC cancelled",status,0) && !AntigravityRestart.Ready(true,false,null,status,1),"Failed or unrelated action restarted app");
             status.Complete=false;Assert(!AntigravityRestart.Ready(true,false,null,status,0),"Partial activation restarted app");
             status.Complete=true;status.Error="Read failed";Assert(!AntigravityRestart.Ready(true,false,null,status,0),"Unverified activation restarted app");

@@ -70,12 +70,21 @@ static class UiPerformanceTests
             Check(agCard.Height==58&&footer.Top-agCard.Bottom==16&&cleanup.Bottom<=agCard.Bottom,"Compact Antigravity card is followed directly by the footer");
             form.ClientSize=originalSize;
             Set(form,"defaultGoal",1);
+            Set(form,"hideDnsReminder",true);Set(form,"hideAntigravityRestart",false);
+            int openForms=Application.OpenForms.Count;
+            typeof(MainForm).GetMethod("ShowDnsReminder",flags).Invoke(form,null);
+            Check(Application.OpenForms.Count==openForms,"Disabled browser reminder returns without opening a dialog or restarting anything");
             using(var settings=form.CreateSettingsDialog()) {
                 var save=(Button)typeof(StyledDialog).GetField("primaryAction",flags).GetValue(settings);
                 var open=(Button)typeof(StyledDialog).GetField("settingsOpenBackup",flags).GetValue(settings);
                 var choice=(DialogServicePicker)typeof(StyledDialog).GetField("settingsGoalChoice",flags).GetValue(settings);
                 var manual=(RadioButton)typeof(StyledDialog).GetField("settingsManualMode",flags).GetValue(settings);
                 var automatic=(RadioButton)typeof(StyledDialog).GetField("settingsAutoMode",flags).GetValue(settings);
+                var browserPrompt=(CheckBox)typeof(StyledDialog).GetField("settingsBrowserRestart",flags).GetValue(settings);
+                var antigravityPrompt=(CheckBox)typeof(StyledDialog).GetField("settingsAntigravityRestart",flags).GetValue(settings);
+                Check(!settings.ShowBrowserRestartPrompt&&settings.ShowAntigravityRestartPrompt,"Settings loads the saved browser dismissal independently from Antigravity");
+                browserPrompt.Checked=true;antigravityPrompt.Checked=false;
+                Check(settings.ShowBrowserRestartPrompt&&!settings.ShowAntigravityRestartPrompt&&(bool)Get(form,"hideDnsReminder")&&!(bool)Get(form,"hideAntigravityRestart"),"Changing restart switches does not affect the application before Save");
                 Check(save.Text=="Сохранить"&&save.DialogResult==DialogResult.OK&&settings.CancelButton.DialogResult==DialogResult.Cancel,"Settings saves only by explicit acceptance and Escape cancels");
                 Check(open.Enabled==System.IO.Directory.Exists(AgCleanupBackup.Root)&&open.Bottom<save.Top,"Backup folder action remains separate from saving the default service");
                 Check(settings.SettingsGoal==1&&choice.Items.Length==AutoDns.Goals.Length&&automatic.Checked,"Settings loads saved service with a separate automatic mode selector");
@@ -94,9 +103,9 @@ static class UiPerformanceTests
                 }
             }
             foreach(float requested in new[]{1f,1.25f,1.5f,2f})foreach(bool dark in new[]{false,true}) {
-                float fitted=Math.Min(requested,(Screen.FromControl(form).WorkingArea.Height-32f)/680f);
+                float fitted=Math.Min(requested,(Screen.FromControl(form).WorkingArea.Height-32f)/760f);
                 using(var settings=new StyledDialog(form,dark,(FontFamily)Get(form,"fBold"),(FontFamily)Get(form,"fMed"),"","Настройки",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1,fitted)) {
-                    settings.AddSettingsControls(true,()=>{},AutoDns.Goals.Select(g=>g.Name).ToArray(),1,url=>{});settings.AddLogSettingsAction(logAction=>{});settings.AddResolverSettingsAction(true);
+                    settings.AddSettingsControls(true,()=>{},AutoDns.Goals.Select(g=>g.Name).ToArray(),1,url=>{});settings.AddRestartSettingsControls(true,false);settings.AddLogSettingsAction(logAction=>{});settings.AddResolverSettingsAction(true);
                     settings.StartPosition=FormStartPosition.Manual;settings.Location=new Point(-10000,-10000);settings.ShowInTaskbar=false;settings.Show();Application.DoEvents();
                     var manual=(RadioButton)typeof(StyledDialog).GetField("settingsManualMode",flags).GetValue(settings);
                     var automatic=(RadioButton)typeof(StyledDialog).GetField("settingsAutoMode",flags).GetValue(settings);
@@ -105,11 +114,15 @@ static class UiPerformanceTests
                     var save=(Button)typeof(StyledDialog).GetField("primaryAction",flags).GetValue(settings);
                     var lastLink=(Control)typeof(StyledDialog).GetField("settingsTunnel",flags).GetValue(settings);
                     var observerOption=(Control)typeof(StyledDialog).GetField("settingsResolverCheck",flags).GetValue(settings);
+                    var browserPrompt=(Control)typeof(StyledDialog).GetField("settingsBrowserRestart",flags).GetValue(settings);
+                    var antigravityPrompt=(Control)typeof(StyledDialog).GetField("settingsAntigravityRestart",flags).GetValue(settings);
+                    var restartHint=(Control)typeof(StyledDialog).GetField("settingsRestartHint",flags).GetValue(settings);
                     int repaints=0;settings.Invalidated+=(s,e)=>{if(e.InvalidRect.Contains(settings.ClientRectangle))repaints++;};
                     for(int cycle=0;cycle<8;cycle++) {
                         if(cycle%2==0)manual.Checked=true;else automatic.Checked=true;Application.DoEvents();
                         Check(connection.Controls.Cast<Control>().Where(c=>c.Visible).All(c=>connection.ClientRectangle.Contains(c.Bounds)),"Connection controls stay inside their opaque card, scale="+requested+" dark="+dark+" cycle="+cycle);
                         Check(backup.Controls.Cast<Control>().All(c=>backup.ClientRectangle.Contains(c.Bounds))&&connection.Bottom<backup.Top,"Backup card never overlaps connection controls");
+                        Check(connection.Bottom<browserPrompt.Top&&browserPrompt.Right<antigravityPrompt.Left&&browserPrompt.Bottom<restartHint.Top&&restartHint.Bottom<backup.Top&&settings.ClientRectangle.Contains(antigravityPrompt.Bounds),"Both restart switches and their explanation fit between DNS selection and backups");
                         Check(lastLink.Bottom<observerOption.Top&&observerOption.Bottom<save.Top&&settings.ClientRectangle.Contains(save.Bounds),"Settings links and footer remain separated inside the window");
                         Check(settings.Region.IsVisible(settings.ClientSize.Width/2,settings.ClientSize.Height-2)&&!settings.Region.IsVisible(settings.ClientSize.Width/2,settings.ClientSize.Height+2),"Rounded window region follows the current manual/automatic height");
                     }
@@ -118,6 +131,7 @@ static class UiPerformanceTests
                     if(requested==2f)using(var image=new Bitmap(settings.Width,settings.Height)){settings.DrawToBitmap(image,new Rectangle(Point.Empty,image.Size));image.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(),"SmartDNS-settings-switch-"+(dark?"dark":"light")+".png"));}
                 }
             }
+            using(var settings=form.CreateSettingsDialog())Check(!settings.ShowBrowserRestartPrompt&&settings.ShowAntigravityRestartPrompt,"Reopening settings after cancellation preserves the original restart preferences");
             Set(form,"active",false);Set(form,"manualSelection",false);
             Check((bool)typeof(MainForm).GetProperty("UseDefaultGoal",flags).GetValue(form,null),"Saved service enables one-click auto selection");
             typeof(MainForm).GetMethod("PickSet",flags).Invoke(form,new object[]{(int)Get(form,"dnsSet")});
@@ -293,6 +307,34 @@ static class UiPerformanceTests
                 Check(!details.Visible&&dialog.Height==runningHeight,"Repeating a test clears the previous details and height");
             }
             foreach(float testScale in new[]{1f,1.5f,2f})
+            using(var dialog=form.CreateDialog("Проверка DNS","DNS и доступность",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1)) {
+                dialog.AddDnsTestControls(new[]{"Webshift"},0,index=>{});dialog.AddServiceTestControls(0);dialog.SelectResolverTest();
+                var result=new ResolverCheckResult{Official=new ProviderCheckResult{Provider="Webshift",Source="dns.webshiftvpn.ru",State=ProviderCheckState.Confirmed},Provider="Webshift",Detail="Official marker=true; no account or model test"};
+                var show=typeof(MainForm).GetMethod("ShowResolverResult",BindingFlags.Static|BindingFlags.NonPublic);
+                show.Invoke(null,new object[]{dialog,result});
+                dialog.StartPosition=FormStartPosition.Manual;dialog.Location=new Point(-10000,-10000);dialog.ShowInTaskbar=false;dialog.Show();Application.DoEvents();
+                string copied=null;Check(dialog.CopyDnsTestResults(value=>copied=value)&&copied.Contains("dns.webshiftvpn.ru")&&copied.Contains("Official marker=true")&&!copied.Contains("Системных узлов:"),"Official checker result copies its source and technical details without inventing observed recursive nodes");
+                var summary=(Label)typeof(StyledDialog).GetField("messageText",flags).GetValue(dialog);
+                Check(summary.Text.Contains("чекер подтвердил")&&summary.Text.Contains("dns.webshiftvpn.ru"),"Official confirmation appears in the compact test summary");
+                using(var image=new Bitmap(dialog.Width,dialog.Height)){dialog.DrawToBitmap(image,new Rectangle(Point.Empty,image.Size));image.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(),"SmartDNS-provider-checker-confirmed.png"));}
+                result.Official.State=ProviderCheckState.Inconclusive;show.Invoke(null,new object[]{dialog,result});
+                Check(summary.Text.Contains("не удалось проверить")&&!summary.Text.Contains("чекер подтвердил"),"An inconclusive official check replaces the previous success");
+                var marker=(DialogStatusIcon)typeof(StyledDialog).GetField("statusMarker",flags).GetValue(dialog);
+                Check(marker.Kind==DialogStatusKind.Information,"An unavailable official checker has an information icon rather than a success check");
+                result.Official.State=ProviderCheckState.NotConfirmed;show.Invoke(null,new object[]{dialog,result});
+                Check(marker.Kind==DialogStatusKind.Warning,"An explicit official negative marker receives a warning");
+                result.Official.State=ProviderCheckState.Confirmed;show.Invoke(null,new object[]{dialog,result});
+                Check(marker.Kind==DialogStatusKind.Success,"An explicit official confirmation retains its success marker");
+                result.Official=null;result.Comparison=ResolverComparison.Shared;
+                result.SystemNodes=result.ProviderNodes=new[]{new ResolverNode{Address="78.29.1.10",Network="AS8369 Intersvyaz-2 JSC"}};
+                show.Invoke(null,new object[]{dialog,result});
+                Check(marker.Kind==DialogStatusKind.Information&&summary.Text.Contains("провайдер не подтверждён"),"Matching ISP observations never show a green provider confirmation");
+                using(var image=new Bitmap(dialog.Width,dialog.Height)){dialog.DrawToBitmap(image,new Rectangle(Point.Empty,image.Size));image.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(),"SmartDNS-resolver-unconfirmed.png"));}
+                Check(dialog.CopyDnsTestResults(value=>copied=value)&&copied.Contains("78.29.1.10")&&copied.Contains("могут перенаправляться"),"Unconfirmed comparison keeps observed nodes and limitations in copied details");
+                dialog.ShowDnsTestStatus("DNS replies only","Прямые ответы: 14/14",false,false,"Применение DNS на ПК не проверялось.",true,true);
+                Check(marker.Kind==DialogStatusKind.Information,"Reachable DNS servers can be reported without implying applied DNS");
+                dialog.Close();
+            }
             using(var dialog=form.CreateDialog("Update test","Обновление",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1)) {
                 dialog.AddUpdateControls(()=>{});
                 dialog.ShowUpdateStatus("Скачиваем","Загрузка 50%","Скачиваем…",false);
@@ -304,6 +346,30 @@ static class UiPerformanceTests
                 var updateBody=(Panel)typeof(StyledDialog).GetField("messageBody",flags).GetValue(dialog);
                 var updateText=(Label)typeof(StyledDialog).GetField("messageText",flags).GetValue(dialog);
                 Check(updateBody.Height>=updateText.GetPreferredSize(new Size(updateText.MaximumSize.Width,0)).Height&&primary.Bottom<dialog.ClientSize.Height,"Update summary fits without clipping text or install action");
+            }
+            foreach(float scale in new[]{1f,1.5f,2f})foreach(bool dark in new[]{false,true}) {
+                typeof(MainForm).GetMethod("SetTheme",flags).Invoke(form,new object[]{dark,false});
+                using(var dialog=form.CreateDialog("Проверка обновлений","Обновление программы",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1,scale)) {
+                    dialog.AddUpdateControls(()=>{});
+                    var failure=new System.ComponentModel.Win32Exception(12029,"WinHTTP: send; code=12029; token=private-update-fixture");
+                    dialog.ShowUpdateFailure(failure,false,false);
+                    dialog.StartPosition=FormStartPosition.Manual;dialog.Location=new Point(-10000,-10000);dialog.ShowInTaskbar=false;dialog.Show();Application.DoEvents();
+                    var body=(Panel)typeof(StyledDialog).GetField("messageBody",flags).GetValue(dialog);
+                    var text=(Label)typeof(StyledDialog).GetField("messageText",flags).GetValue(dialog);
+                    var caption=(Label)typeof(StyledDialog).GetField("statusCaption",flags).GetValue(dialog);
+                    var action=(Button)typeof(StyledDialog).GetField("primaryAction",flags).GetValue(dialog);
+                    var marker=(DialogStatusIcon)typeof(StyledDialog).GetField("statusMarker",flags).GetValue(dialog);
+                    Check(caption.Text=="Нет сетевого подключения"&&text.Text.Contains("Wi-Fi")&&!text.Text.Contains("12029")&&marker.Kind==DialogStatusKind.Error,"Offline update failure has a readable explanation and error marker, scale="+scale+" dark="+dark);
+                    Check(action.Enabled&&action.Text=="Повторить проверку"&&action.DialogResult==DialogResult.None&&dialog.CancelButton.DialogResult==DialogResult.Cancel,"Failure permits retry and closing without accepting an update");
+                    Check(dialog.DiagnosticMessage.Contains("12029")&&!dialog.DiagnosticMessage.Contains("private-update-fixture"),"Technical error stays available in scrubbed diagnostics");
+                    Check(body.Height>=text.GetPreferredSize(new Size(text.MaximumSize.Width,0)).Height&&body.Bottom<action.Top&&dialog.ClientRectangle.Contains(action.Bounds),"Failure text and retry action fit in the update dialog");
+                    using(var image=new Bitmap(dialog.Width,dialog.Height)){dialog.DrawToBitmap(image,new Rectangle(Point.Empty,image.Size));image.Save(System.IO.Path.Combine(System.IO.Path.GetTempPath(),"SmartDNS-update-offline-"+scale+"-"+dark+".png"));}
+                    dialog.ShowUpdateFailure(failure,false,true);
+                    Check(caption.Text=="Нет соединения с GitHub"&&!text.Text.Contains("WinHTTP"),"Connected update failure does not claim that the PC is offline");
+                    dialog.ShowUpdateFailure(new System.TimeoutException("raw timeout"),true,true);
+                    Check(action.Text=="Повторить загрузку"&&caption.Text=="Сервер не ответил вовремя","Download failure offers a download retry rather than installation");
+                    dialog.Close();
+                }
             }
             Set(form,"autoGoal",0);Set(form,"initializing",false);Set(form,"hasBackup",true);Set(form,"dnsConfirmed",true);
             typeof(MainForm).GetMethod("EnsureProviderVisible",flags).Invoke(form,new object[0]);

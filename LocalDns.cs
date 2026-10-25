@@ -17,7 +17,7 @@ namespace HbAi.XboxDns
     interface ILocalDnsConfiguration { void SetAntigravity(int provider); }
     sealed class LocalDnsRouting
     {
-        readonly Func<byte[],byte[]> common,antigravity;
+        Func<byte[],byte[]> common;readonly Func<byte[],byte[]> antigravity;
         internal LocalDnsRouting(Func<byte[],byte[]> common,Func<byte[],byte[]> antigravity=null){this.common=common;this.antigravity=antigravity;}
         internal static int[] Providers {get{return Dns.AvailableProviders.Where(Supports).ToArray();}}
         internal static bool Supports(int provider){return Dns.IsAvailable(provider)&&ProviderCatalog.All[provider].autoGoals.Contains("Antigravity")&&EncryptedDns.Templates[provider]!=null;}
@@ -27,7 +27,13 @@ namespace HbAi.XboxDns
             while(offset<end-4){int length=query[offset++];if(length==0)break;labels.Add(Encoding.ASCII.GetString(query,offset,length));offset+=length;}
             return AntigravityDns.Domains.Contains(string.Join(".",labels),StringComparer.OrdinalIgnoreCase);
         }
-        internal byte[] Query(byte[] query){return antigravity!=null&&IsAntigravity(query)?antigravity(query):common(query);}
+        internal byte[] Query(byte[] query){return antigravity!=null&&IsAntigravity(query)?antigravity(query):Volatile.Read(ref common)(query);}
+        internal void ReplaceCommon(Func<byte[],byte[]> next,Action flush)
+        {
+            if(next==null)throw new ArgumentNullException("next");
+            var previous=Interlocked.Exchange(ref common,next);
+            try{flush();}catch{Interlocked.Exchange(ref common,previous);try{flush();}catch{}throw;}
+        }
         internal void Probe(Action<string> trace)
         {
             if(antigravity==null)return;
@@ -205,12 +211,23 @@ namespace HbAi.XboxDns
                             var special=antigravity>=0?new TunnelUpstream(antigravity,false,s=>trace("ANTIGRAVITY "+s)):null;
                             var routes=new LocalDnsRouting(upstream.Query,special==null?null:(Func<byte[],byte[]>)special.Query);
                             trace("ANTIGRAVITY separate="+(special!=null)+(special==null?"":"; provider="+Dns.Name[antigravity]+"; protocol=DoH; exact API domains only")+"; client/account NOT modified or verified");
+                            var switching=new LocalDnsSwitchController();
                             using(var proxy=new LocalDnsProxy(routes.Query,trace)){
                                 LocalDnsLifecycle.Run(()=>{phase("start-loopback-listeners");proxy.Start();if(system.Adapters(true).Any(a=>a.V6)&&!proxy.Ipv6)throw new IOException("IPv6 включён у адаптера, но локальный IPv6 DNS недоступен. Настройки не изменены.");},()=>{phase("encrypted-dns-preflight");proxy.Probe();routes.Probe(trace);},()=>command.IsCompleted,
                                     ()=>{phase("start-recovery-process");if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась. Включите режим заново.");guard=LocalDnsGuardian.Start();if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась до применения DNS. Включите режим заново.");phase("arm-recovery");guard.Mark(snapshots.Ids);},
                                     ()=>{phase("apply-and-verify");if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась до применения DNS.");engine.ChangeVerified(proxy.Ipv6?new[]{"127.0.0.1","::1"}:new[]{"127.0.0.1"},null,false,()=>{proxy.Probe();SystemDnsVerification.Verify();if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась при проверке DNS.");});},
                                     ()=>{phase("connected");trace("LOCAL connected; provider="+Dns.Name[provider]+"; protocol="+(tls?"DoT":"DoH")+"; default route=unchanged; Wintun=not used");lock(logGate)writer.WriteLine("CONNECTED Локальный DNS · "+Dns.Name[provider]);},
-                                    ()=>{phase("running");int ticks=0;while(!command.IsCompleted&&proxy.Error==null){if(guard.Exited)throw new IOException("Процесс восстановления остановлен. Локальный DNS выключается.");if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась. Локальный DNS выключен; включите его заново.");lock(logGate)writer.WriteLine("STATS "+proxy.Statistics);if(ticks++%10==0)trace("LOCAL COUNTERS "+proxy.Counters);Thread.Sleep(500);}if(proxy.Error!=null)throw new IOException("Локальный DNS остановлен: "+proxy.Error);},
+                                    ()=>{phase("running");int ticks=0;try{while(proxy.Error==null){
+                                        if(guard.Exited)throw new IOException("Процесс восстановления остановлен. Локальный DNS выключается.");
+                                        if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась. Локальный DNS выключен; включите его заново.");
+                                        if(command.IsCompleted){string line=command.GetAwaiter().GetResult();if(line==null||line=="STOP")break;
+                                            var requested=LocalDnsSwitchCommand.Parse(line);trace("LOCAL SWITCH requested provider="+Dns.Name[requested.Provider]+"; protocol="+(requested.Tls?"DoT":"DoH"));
+                                            if(!switching.Begin(requested,candidate=>{var next=new TunnelUpstream(candidate.Provider,candidate.Tls,trace);var question=DnsProbe.Query("example.com");DnsProbe.Validate(question,next.Query(question));return next.Query;}))lock(logGate)writer.WriteLine("SWITCH_FAILED Предыдущая проверка ещё завершается. Повторите позже; прежний DNS работает.");
+                                            command=reader.ReadLineAsync();command.ContinueWith(t=>{var observed=t.Exception;},TaskContinuationOptions.OnlyOnFaulted);
+                                        }
+                                        switching.Poll(routes,system.Flush,line=>{trace("LOCAL "+line);lock(logGate)writer.WriteLine(line);});
+                                        if(ticks%5==0)lock(logGate)writer.WriteLine("STATS "+proxy.Statistics);if(ticks++%50==0)trace("LOCAL COUNTERS "+proxy.Counters);Thread.Sleep(100);
+                                    }if(proxy.Error!=null)throw new IOException("Локальный DNS остановлен: "+proxy.Error);}finally{switching.Cancel();}},
                                     ()=>{string before=stage;phase("restore-original-dns");string failure=DnsTunnel.RestoreSnapshot(engine,snapshots);trace("LOCAL RESTORE="+(failure??"complete"));if(failure!=null)result=failure;stage=before;},
                                     ()=>{string before=stage;phase("stop-loopback-listeners");trace("LOCAL FINAL "+proxy.Counters);proxy.Dispose();stage=before;});
                             }

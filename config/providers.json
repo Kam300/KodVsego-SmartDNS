@@ -37,7 +37,7 @@
     ],
     "description": "ChatGPT, Claude, Gemini, ElevenLabs",
     "site": "comss.ru",
-    "url": "https://www.comss.ru/",
+    "url": "https://www.comss.ru/page.php?id=7315",
     "dot": "dns.comss.one",
     "windowsDotServers": [
       "83.220.169.155",
@@ -212,7 +212,7 @@
     ],
     "description": "ChatGPT, Gemini, Spotify",
     "site": "bezmezhau.com",
-    "url": "https://bezmezhau.com/",
+    "url": "https://bezmezhau.com/ru/setup",
     "dot": "dns.bezmezhau.com",
     "windowsDotServers": [
       "181.215.40.49",
@@ -272,7 +272,7 @@
     ],
     "description": "AI-сервисы · только с шифрованием",
     "site": "dns-ai.ru",
-    "url": "https://dns-ai.ru/#setup",
+    "url": "https://dns-ai.ru/",
     "dot": "dns.dns-ai.ru",
     "windowsDotServers": [
       "194.87.196.13",
@@ -418,7 +418,7 @@
       "open.spotify.com"
     ],
     "description": "ChatGPT, Claude, Gemini, ElevenLabs",
-    "site": "us.geohide.ru",
+    "site": "geohide.ru",
     "url": "https://geohide.ru/",
     "dot": "us.geohide.ru",
     "windowsDotServers": [
@@ -475,7 +475,7 @@
       "daily-cloudcode-pa.googleapis.com"
     ],
     "description": "ChatGPT, Claude, Gemini, ElevenLabs",
-    "site": "dns.malw.link",
+    "site": "info.dns.malw.link",
     "url": "https://info.dns.malw.link/setup",
     "dot": "dns.malw.link",
     "windowsDotServers": [
@@ -520,7 +520,7 @@
       "open.spotify.com"
     ],
     "description": "ChatGPT, Claude, Gemini, Spotify",
-    "site": "dns.wlrus.cfd",
+    "site": "site.dns.wlrus.cfd",
     "url": "https://site.dns.wlrus.cfd/",
     "dot": "dns.wlrus.cfd",
     "windowsDotServers": [
@@ -548,8 +548,8 @@
       "example.com"
     ],
     "description": "Зашифрованный DNS · DoH",
-    "site": "d.webshiftvpn.ru",
-    "url": "https://d.webshiftvpn.ru/dns-query",
+    "site": "dns.webshiftvpn.ru",
+    "url": "https://dns.webshiftvpn.ru/",
     "dot": null,
     "windowsDotServers": []
   },
@@ -579,7 +579,7 @@
     ],
     "description": "Фильтрация рекламы и трекеров",
     "site": "adguard-dns.io",
-    "url": "https://adguard-dns.io/en/public-dns.html",
+    "url": "https://adguard-dns.io/ru/public-dns.html",
     "dot": "dns.adguard-dns.com",
     "windowsDotServers": [
       "94.140.14.14",
@@ -631,7 +631,7 @@
     ],
     "description": "ChatGPT, Claude, Gemini, ElevenLabs",
     "site": "info.dns.malw.link",
-    "url": "https://info.dns.malw.link/",
+    "url": "https://info.dns.malw.link/setup/cloudflare",
     "dot": "5u35p8m9i7.cloudflare-gateway.com",
     "windowsDotServers": [
       "162.159.36.20",

@@ -82,11 +82,13 @@ namespace HbAi.XboxDns
                 {
                     udp.Client.ReceiveTimeout = 2000; udp.Client.SendTimeout = 2000;
                     udp.Connect(IPAddress.Parse(server), 53); udp.Send(request, request.Length);
-                    IPEndPoint sender = null; Validate(request, udp.Receive(ref sender));
+                    IPEndPoint sender = null;var response=udp.Receive(ref sender);
+                    var addresses=Addresses(request,response);
+                    result.Detail="Transport=UDP; requested DNS="+server+":53; packet source="+sender+"\nAnswers="+string.Join(", ",addresses)+"\nUDP source and answers do not authenticate the resolver or prove the absence of redirection.";
                 }
             }
-            catch (SocketException e) { result.Error = e.SocketErrorCode == SocketError.TimedOut ? "нет ответа (2 с)" : "ошибка сети: " + e.SocketErrorCode; }
-            catch (IOException e) { result.Error = e.Message; }
+            catch (SocketException e) { result.Error = e.SocketErrorCode == SocketError.TimedOut ? "нет ответа (2 с)" : "ошибка сети: " + e.SocketErrorCode;result.Detail="Transport=UDP; requested DNS="+server+":53; socket="+e.SocketErrorCode; }
+            catch (IOException e) { result.Error = e.Message;result.Detail="Transport=UDP; requested DNS="+server+":53; validation failed"; }
             result.Milliseconds = (int)timer.ElapsedMilliseconds; return result;
         }
         internal static DnsProbeResult CheckHttps(string template, string host)
@@ -126,7 +128,7 @@ namespace HbAi.XboxDns
         }
         internal static string Report(int provider, DnsProbeResult[] results)
         {
-            string report = Dns.EncryptedOnly(provider) ? "Проверен DoH через HTTPS. Обычный DNS не использовался. Это не проверка DNS браузера.\n\nОтветы не подтверждают доступ к API или отсутствие ошибки 400.\n\n" : "Проверены прямые запросы к выбранным серверам. Это не проверка DNS браузера.\n\nУспешные ответы не подтверждают, что браузер использует этот DNS или сайт доступен. Браузер может использовать DoH, IPv6 DNS или VPN.\n\n";
+            string report = Dns.EncryptedOnly(provider) ? "Проверен DoH через HTTPS. Обычный DNS не использовался. Это не проверка DNS браузера.\n\nОтветы не подтверждают доступ к API или отсутствие ошибки 400.\n\n" : "Проверены прямые запросы к выбранным серверам. Это не проверка DNS браузера.\n\nОтветы на обычные DNS-запросы не подтверждают выбранного провайдера: запросы могут перенаправляться по пути. Это не проверка применения DNS на ПК или доступности сайта. Браузер может использовать DoH, IPv6 DNS или VPN.\n\n";
             foreach (string server in Targets(provider))
             {
                 report += server + "\n";

@@ -7,7 +7,7 @@ using System.Windows.Forms;
 namespace HbAi.XboxDns
 {
     // Modal messages share the application's palette and fonts. No network operations.
-    sealed class StyledDialog : Form
+    sealed partial class StyledDialog : Form
     {
         readonly Color surface, border;
         readonly Font titleFont, bodyFont, buttonFont;
@@ -51,6 +51,10 @@ namespace HbAi.XboxDns
         LinkLabel settingsSource;
         LinkLabel settingsTunnel;
         CheckBox settingsResolverCheck;
+        Label settingsRestartHeading,settingsRestartHint;
+        CheckBox settingsBrowserRestart,settingsAntigravityRestart;
+        internal bool ShowBrowserRestartPrompt {get{return settingsBrowserRestart==null||settingsBrowserRestart.Checked;}}
+        internal bool ShowAntigravityRestartPrompt {get{return settingsAntigravityRestart==null||settingsAntigravityRestart.Checked;}}
         internal bool AutoResolverCheck { get { return settingsResolverCheck==null||settingsResolverCheck.Checked; } }
         internal int SettingsGoal {get{return settingsGoalChoice==null||!settingsAutoMode.Checked?-1:settingsGoalChoice.SelectedIndex;}}
         internal void StartAutoDnsSearch(){if(autoLayout&&!autoRunning&&!autoReady)primaryAction.PerformClick();}
@@ -256,7 +260,7 @@ namespace HbAi.XboxDns
             Controls.Add(testCopyResults);
             UpdateDialogLayout();
         }
-        internal void ShowDnsTestStatus(string text, string caption, bool busy, bool warning, string summary=null,bool isResult=true)
+        internal void ShowDnsTestStatus(string text, string caption, bool busy, bool warning, string summary=null,bool isResult=true,bool informational=false)
         {
             testFullText=text;testSummary=summary;testDetailsExpanded=false;
             diagnosticDetails=null;testResultReady=!busy&&isResult;
@@ -266,7 +270,7 @@ namespace HbAi.XboxDns
             messageText.Text=details?summary:text; messageBody.AutoScrollPosition = Point.Empty;
             statusCaption.Text = caption;
             statusCaption.ForeColor = warning ? statusWarning : statusAccent;
-            statusMarker.Kind = warning ? DialogStatusKind.Warning : busy ? DialogStatusKind.Search : DialogStatusKind.Success;
+            statusMarker.Kind = warning ? DialogStatusKind.Warning : busy ? DialogStatusKind.Search : informational||!isResult ? DialogStatusKind.Information : DialogStatusKind.Success;
             statusMarker.ForeColor = statusCaption.ForeColor;
             browserChoice.Enabled = !busy; restartBrowser.Enabled = !busy;
             if(serviceTestChoice!=null)serviceTestChoice.Enabled=!busy;
@@ -292,12 +296,12 @@ namespace HbAi.XboxDns
                 Left=px(28),Width=ClientSize.Width-px(56),AccessibleName="Сервис для проверки доступности"};
             serviceTestChoice.Items.Add("Только DNS");
             serviceTestChoice.Items.AddRange(ServiceAvailability.Targets.Select(t=>t.Name+" · сайт и API (без ключа)").ToArray());
-            serviceTestChoice.Items.Add("Фактический DNS Windows · MangoProxy");
+            serviceTestChoice.Items.Add("Применение DNS · проверка провайдера");
             serviceTestChoice.SelectedIndex=selected>=0&&selected<ServiceAvailability.Targets.Length?selected+1:0;
             browserRowHeight=px(96);browserHint.Visible=false;
             restartBrowser.AccessibleName="Проверить DNS и доступность сервиса";
             Controls.Add(serviceTestChoice);
-            EventHandler changed=(s,e)=>{SetDiagnosticDetails(null,false);ShowDnsTestStatus(TestService==ResolverCheck.ServiceIndex?"MangoProxy увидит DNS-узлы для уникальных тестовых имён. Сравним системный путь с выбранным провайдером. Настройки не меняются, ключи и журнал не отправляются.":"Нажмите «Проверить» для выбранного DNS и сервиса.","Готово к проверке",false,false,null,false);};
+            EventHandler changed=(s,e)=>{SetDiagnosticDetails(null,false);ShowDnsTestStatus(TestService==ResolverCheck.ServiceIndex?"Проверим применение выбранного DNS через официальный чекер, если он поддерживается. Для остальных используется наблюдатель MangoProxy. Настройки не меняются.":"Нажмите «Проверить» для выбранного DNS и сервиса.","Готово к проверке",false,false,null,false);};
             serviceTestChoice.SelectedIndexChanged+=changed;browserChoice.SelectedIndexChanged+=changed;
             UpdateDialogLayout();
         }
@@ -471,6 +475,14 @@ namespace HbAi.XboxDns
             settingsLayout=true;
             UpdateDialogLayout();
         }
+        internal void AddRestartSettingsControls(bool browser,bool antigravity)
+        {
+            settingsRestartHeading=new Label{Text="Предлагать перезапуск",Font=buttonFont,ForeColor=ForeColor};
+            settingsRestartHint=new Label{Text="При отключении перезапускайте вручную.",Font=bodyFont,ForeColor=messageText.ForeColor};
+            settingsBrowserRestart=new CheckBox{Text="Браузер",Checked=browser,Font=bodyFont,ForeColor=ForeColor,BackColor=surface,UseVisualStyleBackColor=false,AccessibleName="Показывать окно перезапуска браузера после смены DNS"};
+            settingsAntigravityRestart=new CheckBox{Text="Antigravity",Checked=antigravity,Font=bodyFont,ForeColor=ForeColor,BackColor=surface,UseVisualStyleBackColor=false,AccessibleName="Предлагать перезапуск Antigravity после настройки его DNS"};
+            Controls.Add(settingsRestartHeading);Controls.Add(settingsRestartHint);Controls.Add(settingsBrowserRestart);Controls.Add(settingsAntigravityRestart);UpdateDialogLayout();
+        }
         internal void AddTunnelSettingsAction(Action open)
         {
             settingsTunnel=new LinkLabel{Text="DNS-туннель · beta",Font=bodyFont,LinkColor=statusAccent,ActiveLinkColor=statusAccent,UseMnemonic=false,AccessibleName="Открыть тестовый DNS-туннель"};
@@ -483,7 +495,7 @@ namespace HbAi.XboxDns
         }
         internal void AddResolverSettingsAction(bool enabled)
         {
-            settingsResolverCheck=new CheckBox{Text="Автопроверка DNS · MangoProxy",Checked=enabled,Font=bodyFont,ForeColor=ForeColor,BackColor=surface,UseVisualStyleBackColor=false,AccessibleName="После включения проверять фактический DNS через MangoProxy; отправляются только тестовые имена"};
+            settingsResolverCheck=new CheckBox{Text="Автопроверка применения DNS",Checked=enabled,Font=bodyFont,ForeColor=ForeColor,BackColor=surface,UseVisualStyleBackColor=false,AccessibleName="После включения проверять DNS через официальный чекер провайдера или MangoProxy; история браузера и журнал не отправляются"};
             Controls.Add(settingsResolverCheck);UpdateDialogLayout();
         }
         void LayoutSettings()
@@ -491,15 +503,21 @@ namespace HbAi.XboxDns
             SuspendLayout();settingsConnectionPanel.SuspendLayout();settingsBackupPanel.SuspendLayout();
             try {
             float scale=actionHeight/42f;Func<int,int> px=n=>(int)Math.Round(n*scale);bool automatic=settingsAutoMode.Checked;
-            int height=Math.Min(maxDialogHeight,px((automatic?574:518)+(settingsTunnel==null?0:32)+(settingsResolverCheck==null?0:30)));if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
+            int height=Math.Min(maxDialogHeight,px((automatic?574:518)+(settingsTunnel==null?0:32)+(settingsResolverCheck==null?0:30)+(settingsRestartHeading==null?0:94)+(providerPanel==null?0:44)));if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
             int innerWidth=ClientSize.Width-px(88),half=(innerWidth-px(8))/2;
-            settingsConnectionBounds=new Rectangle(px(28),px(100),ClientSize.Width-px(56),px(automatic?148:92));
+            settingsConnectionBounds=new Rectangle(px(28),px(providerPanel==null?100:144),ClientSize.Width-px(56),px(automatic?148:92));
             settingsConnectionPanel.Bounds=settingsConnectionBounds;
             settingsManualMode.Bounds=new Rectangle(px(16),px(16),half,px(34));settingsAutoMode.Bounds=new Rectangle(px(16)+half+px(8),px(16),half,px(34));
             settingsModeHint.Text=automatic?"Подключать выбранный сервис одной кнопкой.":"Выбирайте DNS на главном экране.";
             settingsModeHint.Bounds=new Rectangle(px(16),px(60),innerWidth,px(24));
             settingsGoalChoice.Visible=automatic;settingsGoalChoice.Enabled=automatic;settingsGoalChoice.Bounds=new Rectangle(px(16),px(96),innerWidth,px(36));
-            settingsBackupHeading.Bounds=new Rectangle(px(28),settingsConnectionBounds.Bottom+px(20),ClientSize.Width-px(56),px(24));
+            if(settingsRestartHeading!=null) {
+                settingsRestartHeading.Bounds=new Rectangle(px(28),settingsConnectionBounds.Bottom+px(16),ClientSize.Width-px(56),px(24));
+                settingsBrowserRestart.Bounds=new Rectangle(px(28),settingsRestartHeading.Bottom+px(6),(ClientSize.Width-px(64))/2,px(24));
+                settingsAntigravityRestart.Bounds=new Rectangle(settingsBrowserRestart.Right+px(8),settingsBrowserRestart.Top,settingsBrowserRestart.Width,px(24));
+                settingsRestartHint.Bounds=new Rectangle(px(28),settingsBrowserRestart.Bottom+px(6),ClientSize.Width-px(56),px(22));
+            }
+            settingsBackupHeading.Bounds=new Rectangle(px(28),settingsRestartHeading==null?settingsConnectionBounds.Bottom+px(20):settingsRestartHint.Bottom+px(16),ClientSize.Width-px(56),px(24));
             settingsBackupBounds=new Rectangle(px(28),settingsBackupHeading.Bottom+px(8),ClientSize.Width-px(56),px(64));
             settingsBackupPanel.Bounds=settingsBackupBounds;
             settingsBackupTitle.Bounds=new Rectangle(px(16),px(9),ClientSize.Width-px(232),px(24));
@@ -514,7 +532,14 @@ namespace HbAi.XboxDns
             if(settingsResolverCheck!=null)settingsResolverCheck.Bounds=new Rectangle(px(28),(settingsTunnel!=null?settingsTunnel.Bottom:settingsSource.Bottom)+px(6),ClientSize.Width-px(56),px(24));
             primaryAction.Bounds=new Rectangle(ClientSize.Width-px(178),ClientSize.Height-footerGap-actionHeight,px(150),actionHeight);
             cancelAction.Bounds=new Rectangle(px(28),primaryAction.Top,px(112),actionHeight);
+            LayoutProviderSettings(px);
             }finally{settingsBackupPanel.ResumeLayout(false);settingsConnectionPanel.ResumeLayout(false);ResumeLayout(false);}
+        }
+        internal void ShowUpdateFailure(Exception error,bool download,bool connected)
+        {
+            var problem=UpdateProblem.Describe(error,download,connected);
+            ShowUpdateStatus(problem.Message,problem.Caption,problem.Action,true);
+            SetDiagnosticDetails("Operation="+(download?"DownloadUpdate":"CheckUpdate")+"; connected="+connected+"\n"+error.ToString(),false);
         }
         internal void ShowUpdateStatus(string text,string caption,string action,bool enabled)
         {

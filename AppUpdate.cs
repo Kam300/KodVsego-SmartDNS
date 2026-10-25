@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -17,6 +18,65 @@ using System.Windows.Forms;
 
 namespace HbAi.XboxDns
 {
+    sealed class UpdateOfflineException : IOException
+    {
+        internal UpdateOfflineException() : base("No usable network connection before update request") { }
+    }
+    sealed class UpdateElevationException : IOException
+    {
+        internal UpdateElevationException() : base("Self-update requires an unelevated process") { }
+    }
+    sealed class UpdateHttpException : IOException
+    {
+        internal readonly int Status;
+        internal UpdateHttpException(int status,Exception inner=null) : base("Update HTTP "+status,inner) {Status=status;}
+    }
+    sealed class UpdateProblem
+    {
+        internal string Caption, Message, Action;
+        internal static UpdateProblem Describe(Exception error,bool download,bool connected)
+        {
+            string caption=null,message=null;bool network=false;
+            for(var cause=error;cause!=null;cause=cause.InnerException) {
+                if(cause is UpdateOfflineException)return Offline(download);
+                if(cause is UpdateElevationException)return new UpdateProblem {Caption="Нужен обычный запуск",Message="Для обновления закройте Smart DNS и запустите его без прав администратора.",Action="Повторить загрузку"};
+                var http=cause as UpdateHttpException;
+                if(http!=null) {
+                    caption=http.Status==429?"Слишком много запросов":http.Status==403?"GitHub отклонил запрос":http.Status==404?"Релиз не найден":"Ошибка сервера обновлений";
+                    message=http.Status==429?"GitHub ограничил частоту запросов. Подождите и повторите попытку.":http.Status==403?"GitHub отказал в доступе к обновлению. Попробуйте позже или откройте страницу релизов в браузере.":http.Status==404?"Запрошенный релиз или файл недоступен. Повторите проверку позже.":"Сервер обновлений временно не отвечает корректно. Повторите попытку позже.";
+                    break;
+                }
+                if(cause is InvalidDataException) {
+                    caption=download?"Файл не прошёл проверку":"Некорректный ответ сервера";
+                    message=download?"Загруженный файл не прошёл проверку. Повторите загрузку. Текущая программа не изменена.":"Не удалось прочитать сведения о выпуске. Повторите проверку позже.";break;
+                }
+                if(cause is UnauthorizedAccessException||cause is System.Security.SecurityException) {
+                    caption="Нет доступа к файлам";message="Не удалось сохранить или подготовить обновление. Проверьте доступ к папке программы и повторите попытку.";break;
+                }
+                // WinHTTP codes: https://learn.microsoft.com/windows/win32/winhttp/error-messages
+                var native=cause as Win32Exception;
+                var socket=cause as SocketException;
+                var web=cause as WebException;
+                int code=socket!=null?socket.ErrorCode:native==null?0:native.NativeErrorCode;
+                if(cause is AuthenticationException||code==12037||code==12038||code==12045||code==12057||code==12157||code==12169||code==12170||code==12175||code==12179||web!=null&&(web.Status==WebExceptionStatus.TrustFailure||web.Status==WebExceptionStatus.SecureChannelFailure)) {
+                    caption="Не удалось проверить HTTPS";message="Не удалось установить защищённое соединение с сервером обновлений. Проверьте дату и время Windows и повторите попытку.";network=true;break;
+                }
+                if(cause is TimeoutException||code==12002||code==10060||web!=null&&web.Status==WebExceptionStatus.Timeout) {
+                    caption="Сервер не ответил вовремя";message="Соединение с сервером обновлений заняло слишком много времени. Проверьте подключение и повторите попытку.";network=true;break;
+                }
+                if(code==12007||code==11001||code==11002||web!=null&&(web.Status==WebExceptionStatus.NameResolutionFailure||web.Status==WebExceptionStatus.ProxyNameResolutionFailure)) {
+                    caption="Не удалось найти сервер";message="Не удалось получить адрес сервера обновлений. Проверьте подключение и настройки DNS, затем повторите попытку.";network=true;break;
+                }
+                if(socket!=null||code==12029||code==12030||code==12031||web!=null) {
+                    caption="Нет соединения с GitHub";message="Не удалось связаться с сервером обновлений. Проверьте доступ к GitHub и повторите попытку.";network=true;
+                }
+            }
+            if(network&&!connected)return Offline(download);
+            return new UpdateProblem {Caption=caption??(download?"Не удалось скачать обновление":"Не удалось проверить обновления"),Message=message??"Повторите попытку. Подробности ошибки доступны в журнале программы в настройках.",Action=download?"Повторить загрузку":"Повторить проверку"};
+        }
+        static UpdateProblem Offline(bool download)
+        {return new UpdateProblem {Caption="Нет сетевого подключения",Message="Подключитесь к Wi-Fi или Ethernet и повторите "+(download?"загрузку.":"проверку.")+"\nТекущая программа не изменена.",Action=download?"Повторить загрузку":"Повторить проверку"};}
+    }
     sealed class UpdateRelease
     {
         internal string Version, Name, Url, Hash, ChecksumUrl;
@@ -96,7 +156,12 @@ namespace HbAi.XboxDns
             try {ReceiveSystem(url,output,limit,cancel,progress,metadata);}
             catch(WebException ex) {
                 cancel.ThrowIfCancellationRequested();
-                if(ex.Status==WebExceptionStatus.ProtocolError)throw;
+                if(ex.Status==WebExceptionStatus.ProtocolError) {
+                    using(var response=ex.Response as HttpWebResponse) {
+                        if(response!=null)throw new UpdateHttpException((int)response.StatusCode,ex);
+                    }
+                    throw;
+                }
                 output.SetLength(position);output.Position=position;
                 ReceiveDirect(url,output,limit,cancel,progress,metadata);
             }
@@ -120,7 +185,7 @@ namespace HbAi.XboxDns
                             if(metadata||!Uri.TryCreate(new Uri(url),response.Headers["Location"],out destination))throw new IOException("Неожиданное перенаправление обновления.");
                             url=destination.AbsoluteUri;continue;
                         }
-                        if(response.StatusCode!=HttpStatusCode.OK)throw new IOException("Сервер обновлений вернул HTTP "+status);
+                        if(response.StatusCode!=HttpStatusCode.OK)throw new UpdateHttpException(status);
                         if(response.ContentLength>limit)throw new IOException("Файл обновления слишком большой.");
                         using(var input=response.GetResponseStream()) {
                             var buffer=new byte[32768];long total=0;int count;
@@ -208,12 +273,12 @@ namespace HbAi.XboxDns
                         using(var tcp=new TcpClient(AddressFamily.InterNetwork))
                         using(cancel.Register(()=>tcp.Close())) {
                             var connect=tcp.BeginConnect(IPAddress.Parse(address),443,null,null);
-                            using(var wait=connect.AsyncWaitHandle)if(!wait.WaitOne(8000))throw new IOException("GitHub не ответил вовремя.");
+                            using(var wait=connect.AsyncWaitHandle)if(!wait.WaitOne(8000))throw new TimeoutException("GitHub connect timeout");
                             tcp.EndConnect(connect);cancel.ThrowIfCancellationRequested();
                             using(var ssl=new SslStream(tcp.GetStream(),false)) {
                                 ssl.ReadTimeout=12000;ssl.WriteTimeout=12000;
                                 var auth=ssl.BeginAuthenticateAsClient(uri.Host,null,SslProtocols.Tls12,true,null,null);
-                                using(var wait=auth.AsyncWaitHandle)if(!wait.WaitOne(8000))throw new IOException("Не удалось установить HTTPS с GitHub.");
+                                using(var wait=auth.AsyncWaitHandle)if(!wait.WaitOne(8000))throw new TimeoutException("GitHub TLS timeout");
                                 ssl.EndAuthenticateAsClient(auth);cancel.ThrowIfCancellationRequested();
                                 byte[] request=Encoding.ASCII.GetBytes("GET "+uri.PathAndQuery+" HTTP/1.1\r\nHost: "+uri.Host+"\r\nUser-Agent: KodVsego-SmartDNS\r\nAccept: "+(metadata?"application/vnd.github+json":"application/octet-stream")+"\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n");
                                 ssl.Write(request,0,request.Length);
@@ -222,21 +287,25 @@ namespace HbAi.XboxDns
                         }
                     }
                     catch(Exception ex) {
-                        cancel.ThrowIfCancellationRequested();if(!(ex is IOException||ex is SocketException||ex is AuthenticationException))throw;
+                        cancel.ThrowIfCancellationRequested();if(!(ex is IOException||ex is SocketException||ex is AuthenticationException||ex is TimeoutException))throw;
                         failure=ex;output.SetLength(position);output.Position=position;
                     }
                 }
                 if(!received)throw new IOException("Нет защищённого соединения с GitHub. Повторите попытку позже.",failure);
                 if(status==200)return;
                 if(status>=300&&status<400&&!metadata) {Uri next;if(Uri.TryCreate(uri,location,out next)){url=next.AbsoluteUri;continue;}}
-                throw new IOException("Сервер обновлений вернул HTTP "+status+".");
+                throw new UpdateHttpException(status);
             }
             throw new IOException("Слишком много перенаправлений обновления.");
         }
         static string FetchText(string url,int limit,CancellationToken cancel,bool metadata=false)
         {using(var stream=new MemoryStream()){Receive(url,stream,limit,cancel,null,metadata);return Encoding.UTF8.GetString(stream.ToArray());}}
         internal static UpdateRelease Check(string current,CancellationToken cancel)
-        {return Parse(FetchText(LatestApi,1024*1024,cancel,true),current);}
+        {return Check(current,cancel,NetworkCheck.HasConnection,token=>FetchText(LatestApi,1024*1024,token,true));}
+        internal static void RequireConnection(CancellationToken cancel,Func<bool> connected)
+        {cancel.ThrowIfCancellationRequested();if(!connected())throw new UpdateOfflineException();}
+        internal static UpdateRelease Check(string current,CancellationToken cancel,Func<bool> connected,Func<CancellationToken,string> fetch)
+        {RequireConnection(cancel,connected);return Parse(fetch(cancel),current);}
         internal static string Checksum(string text,string name)
         {
             var matches=text.Split('\n').Select(line=>Regex.Match(line.Trim(),@"^([a-fA-F0-9]{64})\s+\*?(.+)$"))
@@ -255,6 +324,7 @@ namespace HbAi.XboxDns
         }
         internal static string Download(UpdateRelease release,CancellationToken cancel,Action<int> progress)
         {
+            RequireConnection(cancel,NetworkCheck.HasConnection);
             if(string.IsNullOrEmpty(release.Hash))release.Hash=Checksum(FetchText(release.ChecksumUrl,65536,cancel),release.Name);
             string directory=Path.Combine(CacheRoot,Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
             string package=Path.Combine(directory,"update.exe");
@@ -292,7 +362,7 @@ namespace HbAi.XboxDns
         {
             cancel.ThrowIfCancellationRequested();
             EnsureSelfUpdateAllowed(Application.ExecutablePath);
-            if(DnsElevation.IsAdministrator())throw new IOException("Для обновления запустите Smart DNS обычным способом, без прав администратора.");
+            if(DnsElevation.IsAdministrator())throw new UpdateElevationException();
             if(release==null)throw new InvalidDataException("Не найдены сведения о проверенном обновлении.");
             var expected=new UpdateRelease {Version=release.Version,Hash=release.Hash,Size=release.Size};
             using(var locked=OpenValidatedPackage(package,expected,cancel)) {

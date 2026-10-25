@@ -2,7 +2,7 @@
 cd /d "%~dp0"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\Sync-ProviderAvailability.ps1
 if errorlevel 1 exit /b 1
-"%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /optimize+ /out:"KodVsego_SmartDNS.2.23.6-test.28.exe" ^
+"%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /optimize+ /out:"KodVsego_SmartDNS.2.23.6.exe" ^
  /win32icon:res\app.ico /win32manifest:app.manifest ^
  /resource:LICENSE,licenses.MIT /resource:LICENSE.ru.md,licenses.Russian ^
  /resource:res\OFL-Unbounded.txt,licenses.OFL-Unbounded /resource:res\OFL-Manrope.txt,licenses.OFL-Manrope ^
@@ -13,4 +13,4 @@ if errorlevel 1 exit /b 1
  /resource:res\service-icons\gemini.png,service-icons.gemini.png /resource:res\service-icons\elevenlabs.png,service-icons.elevenlabs.png ^
  /resource:res\service-icons\xbox.png,service-icons.xbox.png /resource:res\service-icons\spotify.png,service-icons.spotify.png ^
  /resource:res\wintun\wintun-x64.dll,native.wintun.x64 /resource:res\wintun\wintun-x86.dll,native.wintun.x86 /resource:res\wintun\LICENSE.txt,licenses.Wintun ^
- /r:"%WINDIR%\Microsoft.NET\assembly\GAC_MSIL\Microsoft.Management.Infrastructure\v4.0_1.0.0.0__31bf3856ad364e35\Microsoft.Management.Infrastructure.dll" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Management.dll /r:System.Core.dll /r:System.Web.Extensions.dll /r:System.Security.dll XboxDns.cs ProviderAvailability.cs SingleInstance.cs AppUpdate.cs AutoDns.cs ServiceAvailability.cs ResolverCheck.cs DnsTunnel.cs LocalDns.cs DnsTunnelNative.cs DnsTunnelPackets.cs DnsTunnelWindow.cs NrptCimReader.cs EncryptedDns.cs DotDns.cs DohHttp2.cs NetworkCheck.cs DnsProbe.cs NativeDns.cs DnsElevation.cs UninstallCleanup.cs ProcessSecurity.cs VpnCheck.cs StyledDialog.cs ConnectionUi.cs AntigravityDns.cs AgTakeover.cs AgCleanup.cs DiagnosticReport.cs BrowserRestart.cs BrowserProfiles.cs AssemblyInfo.cs
+ /r:"%WINDIR%\Microsoft.NET\assembly\GAC_MSIL\Microsoft.Management.Infrastructure\v4.0_1.0.0.0__31bf3856ad364e35\Microsoft.Management.Infrastructure.dll" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Management.dll /r:System.Core.dll /r:System.Web.Extensions.dll /r:System.Security.dll XboxDns.cs ProviderAvailability.cs SingleInstance.cs AppUpdate.cs AutoDns.cs ServiceAvailability.cs ResolverCheck.cs ProviderCheck.cs DnsTunnel.cs LocalDns.cs ProviderPreferences.cs LocalDnsSwitch.cs ProviderSettingsUi.cs DnsTunnelNative.cs DnsTunnelPackets.cs DnsTunnelWindow.cs NrptCimReader.cs EncryptedDns.cs DotDns.cs DohHttp2.cs NetworkCheck.cs DnsProbe.cs NativeDns.cs DnsElevation.cs UninstallCleanup.cs ProcessSecurity.cs VpnCheck.cs StyledDialog.cs ConnectionUi.cs AntigravityDns.cs AgTakeover.cs AgCleanup.cs DiagnosticReport.cs BrowserRestart.cs BrowserProfiles.cs AssemblyInfo.cs

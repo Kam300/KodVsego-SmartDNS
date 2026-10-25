@@ -32,14 +32,15 @@ namespace HbAi.XboxDns
     sealed class ResolverCheckResult
     {
         internal ResolverComparison Comparison;
+        internal ProviderCheckResult Official;
         internal ResolverNode[] SystemNodes=new ResolverNode[0], ProviderNodes=new ResolverNode[0];
         internal string Detail, Provider, Protocol;
-        internal string Summary { get { return Comparison==ResolverComparison.Shared?"DNS: общие узлы найдены":Comparison==ResolverComparison.DifferentNodes?"DNS: узлы различаются":Comparison==ResolverComparison.NetworkChanged?"DNS: сеть изменилась · повторите":"DNS: проверка не завершена"; } }
-        internal string Report { get { return Summary+"\n\nСистемный путь Windows:\n"+Nodes(SystemNodes)+"\n\nКонтроль: "+Provider+" · "+Protocol+"\n"+Nodes(ProviderNodes)+
+        internal string Summary { get { return Official!=null?Official.Summary:Comparison==ResolverComparison.Shared||Comparison==ResolverComparison.DifferentNodes?"DNS: провайдер не подтверждён":Comparison==ResolverComparison.NetworkChanged?"DNS: сеть изменилась · повторите":"DNS: проверка не завершена"; } }
+        internal string Report { get { return Official!=null?Official.Report:Summary+"\n\nСистемный путь Windows:\n"+Nodes(SystemNodes)+"\n\nКонтроль: "+Provider+" · "+Protocol+"\n"+Nodes(ProviderNodes)+
             "\n\nНаблюдатель: MangoProxy / bash.ws. Уникальные тестовые имена обходят старый кэш этих имён. " +
             "Сравниваются адреса рекурсивных DNS-узлов, которые увидел внешний сервис, а не только настройки адаптера. " +
             "Адрес узла может отличаться от IP, введённого в настройках DNS.\n\n"+
-            (Comparison==ResolverComparison.Shared?"В обеих выборках есть общий узел. Это не доказывает отсутствие перехвата: обычные DNS-запросы могут перенаправляться и в контрольном пути.":
+            (Comparison==ResolverComparison.Shared?"В обеих выборках есть общий узел. Совпадение не подтверждает выбранного провайдера и не доказывает отсутствие перехвата: обычные DNS-запросы могут перенаправляться и в контрольном пути.":
             Comparison==ResolverComparison.DifferentNodes?"Общих узлов в этих выборках нет. Возможны другой DNS, VPN, пересылка запросов или разные узлы пула провайдера. Перехват и утечка не доказаны.":
             Comparison==ResolverComparison.NetworkChanged?"Во время проверки изменилось подключение или DNS. Результат не относится к текущей сети.":"Не удалось получить обе выборки. Недоступность тестового сервиса не означает, что ваш DNS не работает.")+
             "\n\nПроверяется системный путь приложения. Собственный DoH браузера, доступ в аккаунт и ответы ИИ не проверялись. Настройки сети не менялись."; } }

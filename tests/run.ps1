@@ -4,7 +4,7 @@ $root = Split-Path $PSScriptRoot -Parent
 & (Join-Path $root 'tools\Sync-ProviderAvailability.ps1')
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $compiler = if($Compiler){(Resolve-Path -LiteralPath $Compiler).Path}else{Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'}
-$sources = @('XboxDns.cs','ProviderAvailability.cs','SingleInstance.cs','AppUpdate.cs','AutoDns.cs','ServiceAvailability.cs','ResolverCheck.cs','DnsTunnel.cs','LocalDns.cs','DnsTunnelNative.cs','DnsTunnelPackets.cs','DnsTunnelWindow.cs','NrptCimReader.cs','EncryptedDns.cs','DotDns.cs','DohHttp2.cs','NetworkCheck.cs','DnsProbe.cs','NativeDns.cs','DnsElevation.cs','UninstallCleanup.cs','ProcessSecurity.cs','VpnCheck.cs','StyledDialog.cs','ConnectionUi.cs','AntigravityDns.cs','AgTakeover.cs','AgCleanup.cs','DiagnosticReport.cs','BrowserRestart.cs','BrowserProfiles.cs') | ForEach-Object { Join-Path $root $_ }
+$sources = @('XboxDns.cs','ProviderAvailability.cs','SingleInstance.cs','AppUpdate.cs','AutoDns.cs','ServiceAvailability.cs','ResolverCheck.cs','ProviderCheck.cs','DnsTunnel.cs','LocalDns.cs','ProviderPreferences.cs','LocalDnsSwitch.cs','ProviderSettingsUi.cs','DnsTunnelNative.cs','DnsTunnelPackets.cs','DnsTunnelWindow.cs','NrptCimReader.cs','EncryptedDns.cs','DotDns.cs','DohHttp2.cs','NetworkCheck.cs','DnsProbe.cs','NativeDns.cs','DnsElevation.cs','UninstallCleanup.cs','ProcessSecurity.cs','VpnCheck.cs','StyledDialog.cs','ConnectionUi.cs','AntigravityDns.cs','AgTakeover.cs','AgCleanup.cs','DiagnosticReport.cs','BrowserRestart.cs','BrowserProfiles.cs') | ForEach-Object { Join-Path $root $_ }
 $miAssembly = Join-Path $env:WINDIR 'Microsoft.NET\assembly\GAC_MSIL\Microsoft.Management.Infrastructure\v4.0_1.0.0.0__31bf3856ad364e35\Microsoft.Management.Infrastructure.dll'
 $framework=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
 $refs=@('mscorlib.dll','System.dll','System.Xml.dll','System.Core.dll','System.Management.dll','System.Web.Extensions.dll','System.Security.dll','System.Windows.Forms.dll','System.Drawing.dll') | ForEach-Object {'/r:'+(Join-Path $framework $_)}
@@ -13,10 +13,15 @@ $cases = @(@('NativeDnsTests','NativeDns.Tests.cs'),@('DotDnsTests','DotDns.Test
 $cases+=,@('TunnelTests','DnsTunnel.Tests.cs')
 $cases+=,@('UninstallTests','UninstallCleanup.Tests.cs')
 $cases+=,@('ResolverCheckTests','ResolverCheck.Tests.cs')
+$cases+=,@('ProviderCheckTests','ProviderCheck.Tests.cs')
 $cases+=,@('LocalDnsTests','LocalDns.Tests.cs')
 $cases+=,@('ConnectionMenuTests','ConnectionMenu.Tests.cs')
 $cases+=,@('LocalAutoTests','LocalAuto.Tests.cs')
 $cases+=,@('SessionPipeTests','SessionPipe.Tests.cs')
+$cases+=,@('ProviderOptionsTests','ProviderOptions.Tests.cs')
+$cases+=,@('CheckerStatusTests','CheckerStatus.Tests.cs')
+$cases+=,@('LatencyLinksTests','LatencyLinks.Tests.cs')
+$cases+=,@('LiveLocalAutoTests','LiveLocalAuto.Tests.cs')
 foreach ($case in $cases) {
     if ($Only.Count -gt 0 -and $case[0] -notin $Only) { continue }
     $exe = Join-Path $OutputDirectory ($case[0] + '.exe')

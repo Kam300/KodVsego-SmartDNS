@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -118,7 +118,7 @@ static class AutoDnsTests
         Check(AutoDns.Best(verified)!=null&&AutoDns.Report(0,verified).Contains("API:"),"Expected API response is eligible with separate website and API results");
         var concurrent=new Probe{AnyProvider=true};
         AutoDns.Search(0,false,concurrent,CancellationToken.None);
-        Check(concurrent.maxRequests<=2&&concurrent.calls==18,"Expanded catalog checks remain bounded to two concurrent HTTP requests");
+        Check(concurrent.maxRequests<=4&&concurrent.calls==18,"Expanded catalog checks remain bounded to four concurrent HTTP requests");
         Check(!diagnostic.Contains("Missing authentication"),"Auto diagnostics do not copy raw API response bodies");
         Console.WriteLine("All "+passed+" auto-selection checks passed; fake probes only, no network or DNS changes.");
     }

@@ -28,6 +28,10 @@ static class ResolverCheckTests
         Check(f.Created==2&&f.Queries==12&&f.Collected==2,"Exactly two independent tickets and twelve bounded lookups");
         Check(f.Hosts.Count(h=>h.StartsWith("S:")&&h.Contains("system123456"))==6&&f.Hosts.Count(h=>h.StartsWith("C:")&&h.Contains("control123456"))==6,"System and control tickets cannot contaminate each other");
         Check(r.Comparison==ResolverComparison.Shared&&r.Report.Contains("не доказывает отсутствие перехвата"),"Shared recursive nodes do not assert the configured provider or absence of interception");
+        Check(r.Summary.Contains("провайдер не подтверждён"),"Shared samples cannot be presented as a provider confirmation");
+        var isp=new[]{new ResolverNode{Address="78.29.1.10",Network="AS8369 Intersvyaz-2 JSC"}};
+        var intercepted=ResolverCheck.Run(0,DnsTransport.Plain,new Fake{System=isp,Control=isp},CancellationToken.None);
+        Check(intercepted.Comparison==ResolverComparison.Shared&&intercepted.Summary.Contains("не подтверждён")&&intercepted.Report.Contains("могут перенаправляться"),"Matching ISP nodes in both Plain paths do not establish Comss identity");
         Check(r.Report.Contains("DoH браузера")&&r.Report.Contains("Настройки сети не менялись"),"Scope states browser limitation and read-only behavior");
         Check(!r.Detail.Contains("system123456")&&!r.Detail.Contains("testnonce"),"Session and nonce never enter diagnostics");
         Check(r.Report.Contains("8.8.8.8")&&r.Report.Contains("Test network")&&r.Provider=="Comss.one", "Report includes observed nodes, networks and control provider");

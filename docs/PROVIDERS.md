@@ -1,4 +1,4 @@
-# Каталог DNS-провайдеров
+﻿# Каталог DNS-провайдеров
 
 В 2.23.6-test.20 добавлены Zapret DNS, GeoHide US, Malw DNS, WLrus DNS, Webshift, AdGuard DNS и альтернатива Malw через Cloudflare Gateway. Адреса, протоколы и источники перечислены в [сводке от 25 октября](PROVIDER-SOURCES-2026-10-25.md). GeoHide RU/EU остаются выключенными. Описания ниже от 23 октября относятся к прежнему состоянию каталога.
 
@@ -61,3 +61,7 @@ DNS-AI: актуальная пара `194.87.196.13`, `45.151.102.219` свер
 На ПК тесты и Авто проверяют DNS-AI через WinHTTP с HTTP/2 и исходным именем для TLS. При сетевом таймауте или отказе соединения неответивший адрес временно пропускается: сначала 30 секунд, затем 60, 120 и далее до 15 минут. Успешный ответ сбрасывает историю ошибок адреса. Смена сети и ручной запуск «Тест DNS» или подбора сбрасывают пропуски. Ошибки сертификата, HTTP и некорректные DNS-ответы не запускают переключение адресов. Настройки адаптера эта оптимизация не меняет.
 
 Для выбора IP при сохранении имени TLS используется [WINHTTP_OPTION_RESOLUTION_HOSTNAME](https://learn.microsoft.com/en-us/windows/win32/winhttp/option-flags#winhttp_option_resolution_hostname), доступный с Windows 10 21H1. На более ранней поддерживаемой Windows остаётся обычное разрешение имени WinHTTP без отдельного пропуска адресов. Шифрование и проверка сертификата сохраняются.
+
+## Информационные ссылки (25 октября 2026)
+
+Поля site/url — информационный сайт и его подпись в интерфейсе; поле doh — отдельный технический endpoint. В test.35 Comss.one открывает https://www.comss.ru/page.php?id=7315, Bezmezhau — https://bezmezhau.com/ru/setup, Webshift — https://dns.webshiftvpn.ru/, Malw CF — https://info.dns.malw.link/setup/cloudflare, AdGuard — https://adguard-dns.io/ru/public-dns.html. У DNS-AI используется https://dns-ai.ru/ с актуальными инструкциями подключения. Malw DNS, WLrus и GeoHide показывают домен информационной страницы, а не DNS-узла.

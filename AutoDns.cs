@@ -50,18 +50,18 @@ namespace HbAi.XboxDns
             new AutoGoal {Name="Xbox", Hosts=new[]{"xbox.com"}},
             new AutoGoal {Name="Antigravity", Hosts=new[]{"cloudcode-pa.googleapis.com","daily-cloudcode-pa.googleapis.com"}, Api=true}
         }.Where(goal=>ProviderCatalog.All.Any(provider=>Dns.IsAvailable(provider.id)&&provider.autoGoals.Contains(goal.Name))).ToArray();
-        internal static int[] Candidates(int goal, bool encrypted, bool tls = false)
+        internal static int[] Candidates(int goal, bool encrypted, bool tls = false,int[] allowedProviders=null)
         {
             if(goal<0 || goal>=Goals.Length) throw new ArgumentOutOfRangeException("goal");
-            return Enumerable.Range(0,ProviderCatalog.All.Length).Where(p=>ProviderCatalog.All[p].autoGoals.Contains(Goals[goal].Name)&&Dns.IsAvailable(p)&&(!encrypted || (tls ? DotDns.Available(p) : EncryptedDns.Templates[p]!=null))).ToArray();
+            return Enumerable.Range(0,ProviderCatalog.All.Length).Where(p=>ProviderCatalog.All[p].autoGoals.Contains(Goals[goal].Name)&&Dns.IsAvailable(p)&&(allowedProviders==null||allowedProviders.Contains(p))&&(!encrypted || (tls ? DotDns.Available(p) : EncryptedDns.Templates[p]!=null))).ToArray();
         }
-        internal static AutoDnsResult[] Search(int goal, bool encrypted, IAutoDnsProbe probe, CancellationToken cancel, Action<AutoDnsResult> progress=null, int? onlyProvider=null, bool tls=false)
+        internal static AutoDnsResult[] Search(int goal, bool encrypted, IAutoDnsProbe probe, CancellationToken cancel, Action<AutoDnsResult> progress=null, int? onlyProvider=null, bool tls=false,int[] allowedProviders=null)
         {
-            var providers=Candidates(goal,encrypted,tls);
+            var providers=Candidates(goal,encrypted,tls,allowedProviders);
             if(onlyProvider.HasValue) providers=providers.Where(p=>p==onlyProvider.Value).ToArray();
             var results=new AutoDnsResult[providers.Length];
-            // At most two providers at once; never a task for every host/server.
-            Parallel.For(0,providers.Length,new ParallelOptions {MaxDegreeOfParallelism=2,CancellationToken=cancel},i=> {
+            // Four bounded provider checks; endpoints within each stay sequential.
+            Parallel.For(0,providers.Length,new ParallelOptions {MaxDegreeOfParallelism=4,CancellationToken=cancel},i=> {
                 int provider=providers[i];
                 var result=new AutoDnsResult {Provider=provider,Encrypted=encrypted||Dns.EncryptedOnly(provider),Tls=tls};
                 var watch=Stopwatch.StartNew();
@@ -71,7 +71,7 @@ namespace HbAi.XboxDns
                     int service=Array.FindIndex(ServiceAvailability.Targets,t=>t.Name==Goals[goal].Name);
                     if(service>=0) {
                         trace.AppendLine("DNS servers="+(result.Encrypted?(tls?DotDns.Host(provider):EncryptedDns.Templates[provider]):string.Join(",",Dns.V4[provider])));
-                        // Two providers in parallel, with sequential endpoints within each provider.
+                        // Sequential endpoints keep the overall network concurrency bounded.
                         result.Availability=ServiceAvailability.Check(service,provider,result.Encrypted,probe,cancel,1);
                         trace.AppendLine(result.Availability.Diagnostic);
                         result.NeedsBrowser=result.Availability.Endpoints.Any(e=>e.Reply==ServiceReply.BrowserCheck);
@@ -137,6 +137,8 @@ namespace HbAi.XboxDns
                     }
                     DnsProbe.Validate(request,response);
                     addresses.AddRange(DnsProbe.Addresses(request,response));
+                    // The alternate DNS server is a fallback, not a mandatory second round trip.
+                    if(addresses.Count>0)break;
                 }
                 catch(Exception ex){last=ex;}
             }
