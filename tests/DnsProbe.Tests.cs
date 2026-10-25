@@ -111,11 +111,12 @@ static class ProbeTests
         {
             var hosts = DnsProbe.HostsForProvider(k);
             Check(hosts.Contains("example.com") && hosts.Distinct().Count() == hosts.Length, Dns.Name[k] + " has a unique test suite and baseline");
-            Check(k == 3 ? hosts.Contains("xsts.auth.xboxlive.com") && !hosts.Contains("claude.ai") : k == 6 ? hosts.Contains("gemini.google.com") && hosts.Contains("claude.ai") && AntigravityDns.Domains.All(hosts.Contains) : hosts.Contains("cloudcode-pa.googleapis.com"), Dns.Name[k] + " tests its intended services");
-            var results = DnsProbe.CheckProvider(k, (server,host) => new DnsProbeResult {Server=server,Host=host,Milliseconds=12,Error=host=="example.com"?null:"simulated failure"});
+            var goals=ProviderCatalog.All[k].autoGoals;
+            Check((!goals.Contains("ChatGPT")||hosts.Contains("chatgpt.com"))&&(!goals.Contains("Claude")||hosts.Contains("claude.ai"))&&(!goals.Contains("Gemini")||hosts.Contains("generativelanguage.googleapis.com")||hosts.Contains("gemini.google.com"))&&(!goals.Contains("Antigravity")||AntigravityDns.Domains.All(hosts.Contains))&&(!goals.Contains("Xbox")||hosts.Contains("xsts.auth.xboxlive.com")),Dns.Name[k]+" tests its declared services without assuming every DNS supports AI");
+            var results = DnsProbe.CheckProvider(k, (server,host) => new DnsProbeResult {Server=server,Host=host,Milliseconds=12,Error=hosts.Length>1&&host=="example.com"?null:"simulated failure"});
             Check(results.Length == hosts.Length * DnsProbe.Targets(k).Length && DnsProbe.Targets(k).All(server => results.Count(r=>r.Server==server) == hosts.Length), Dns.Name[k] + " tests every host on each selected transport target");
             string report = DnsProbe.Report(k,results);
-            Check(DnsProbe.Targets(k).All(report.Contains) && report.Contains("12 мс") && report.Contains("simulated failure"), Dns.Name[k] + " report contains transport targets, timing and failure");
+            Check(DnsProbe.Targets(k).All(report.Contains) && (!results.Any(r=>r.Ok)||report.Contains("12 мс")) && report.Contains("simulated failure"), Dns.Name[k] + " report contains transport targets, available timings and failure");
             if(args.Contains("--live")) foreach (var result in DnsProbe.CheckProvider(k)) Console.WriteLine(result);
         }
         if(args.Contains("--https")) foreach(var template in EncryptedDns.Templates.Where(t=>t!=null)) {

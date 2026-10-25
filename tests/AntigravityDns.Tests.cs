@@ -333,6 +333,8 @@ static class AntigravityTests
                 "Main selector mapping wrong");
             Assert(AntigravityDns.ProviderForMainSet(3) == -1 && AntigravityDns.ProviderForMainSet(5) == -1, "Xbox or encrypted-only DNS accepted for plain rules");
             Assert(AntigravityDns.ProviderNames[4] == "MagicDNS" && AntigravityDns.ServerSets[4].SequenceEqual(Dns.V4[6]), "MagicDNS rule addresses differ from the shared catalog");
+            Assert(AntigravityDns.ProviderForMainSet(9)==5&&AntigravityDns.ProviderNames[5]=="Malw DNS"&&AntigravityDns.ServerSets[5].SequenceEqual(Dns.V4[9]),"Appended Malw provider has its own rule slot without shifting historical slots");
+            Assert(AntigravityDns.ProviderForMainSet(13)==-1,"Encrypted Cloudflare Gateway must not create plaintext NRPT rules");
             bool rejected = false;
             try { using (AntigravityDns.UseProvider(AntigravityDns.ServerSets.Length)) { } } catch (ArgumentOutOfRangeException) { rejected = true; }
             Assert(rejected, "Unknown provider accepted");

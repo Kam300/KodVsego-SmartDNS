@@ -21,9 +21,9 @@ $exe=Join-Path $OutputDirectory ('KodVsego_SmartDNS.'+$version+'.exe')
 $sources=@([regex]::Matches($build,'(?<![\w.])([A-Za-z][A-Za-z0-9]*\.cs)') | ForEach-Object {$_.Groups[1].Value} | Select-Object -Unique)
 if($sources.Count -lt 20 -or 'AssemblyInfo.cs' -notin $sources){throw 'Could not resolve build sources'}
 $resources=@([regex]::Matches($build,'/resource:([^,\s]+),([^\s\r\n]+)') | ForEach-Object {[pscustomobject]@{Path=$_.Groups[1].Value;Name=$_.Groups[2].Value}})
-if($resources.Count -ne 15){throw 'Unexpected resource list; review before building'}
+if($resources.Count -ne 18){throw 'Unexpected resource list; review before building'}
 $framework=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
-$references=@('mscorlib.dll','System.dll','System.Core.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Management.dll','System.Web.Extensions.dll') | ForEach-Object {Join-Path $framework $_}
+$references=@('mscorlib.dll','System.dll','System.Core.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Management.dll','System.Web.Extensions.dll','System.Security.dll') | ForEach-Object {Join-Path $framework $_}
 $references+=Join-Path $env:WINDIR 'Microsoft.NET\assembly\GAC_MSIL\Microsoft.Management.Infrastructure\v4.0_1.0.0.0__31bf3856ad364e35\Microsoft.Management.Infrastructure.dll'
 foreach($file in $references){if(!(Test-Path -LiteralPath $file)){throw ('Missing framework reference: '+[IO.Path]::GetFileName($file))}}
 $arguments=@('/noconfig','/nologo','/nostdlib+','/target:winexe','/optimize+','/deterministic+','/debug-','/langversion:5','/codepage:65001','/utf8output',('/pathmap:'+$root+'=/_/src'),('/out:'+$exe),('/win32icon:'+(Join-Path $root 'res\app.ico')),('/win32manifest:'+(Join-Path $root 'app.manifest')))

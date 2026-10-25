@@ -24,7 +24,9 @@ static class ArtifactInspection {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] static extern uint SizeofResource(IntPtr module,IntPtr resource);
     static readonly Dictionary<string,string> AllowedReferences=new Dictionary<string,string>(StringComparer.Ordinal) {
         {"mscorlib","b77a5c561934e089"},{"System","b77a5c561934e089"},{"System.Core","b77a5c561934e089"},
-        {"System.Drawing","b03f5f7f11d50a3a"},{"System.Windows.Forms","b77a5c561934e089"},{"System.Management","b03f5f7f11d50a3a"},{"System.Web.Extensions","31bf3856ad364e35"},{"Microsoft.Management.Infrastructure","31bf3856ad364e35"}
+        {"System.Drawing","b03f5f7f11d50a3a"},{"System.Windows.Forms","b77a5c561934e089"},{"System.Management","b03f5f7f11d50a3a"},{"System.Web.Extensions","31bf3856ad364e35"},{"Microsoft.Management.Infrastructure","31bf3856ad364e35"},
+        // Current-user DPAPI protection for the local Gemini API credential.
+        {"System.Security","b03f5f7f11d50a3a"}
     };
     static readonly string[] AllowedDlls={"kernel32.dll","user32.dll","shell32.dll","rstrtmgr.dll","iphlpapi.dll","dnsapi.dll","ntdll.dll","winhttp.dll"};
     // This application has no feature that needs explicit foreign-process memory/thread primitives.
@@ -61,11 +63,13 @@ static class ArtifactInspection {
             if(!AllowedReferences.TryGetValue(reference.Name,out token)||Hex(reference.GetPublicKeyToken())!=token||reference.Version!=new Version(reference.Name=="Microsoft.Management.Infrastructure"?"1.0.0.0":"4.0.0.0"))throw new InvalidDataException("Unapproved assembly reference: "+reference.FullName);
         }
         var resources=new List<object>();
+        var nativeResources=new Dictionary<string,string>{{"native.wintun.x64","e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce"},{"native.wintun.x86","d694fa46ab4cfebcb2632d094c7aa97278eef2f8052438621766d863ae98a931"}};
         foreach(string name in assembly.GetManifestResourceNames()){
-            if(!AllowedResources.Contains(name))throw new InvalidDataException("Unapproved embedded resource: "+name);
+            if(!AllowedResources.Contains(name)&&!nativeResources.ContainsKey(name)&&name!="licenses.Wintun")throw new InvalidDataException("Unapproved embedded resource: "+name);
             using(var stream=assembly.GetManifestResourceStream(name))using(var memory=new MemoryStream()){
                 stream.CopyTo(memory);var data=memory.ToArray();
-                if(data.Length>=2&&data[0]=='M'&&data[1]=='Z')throw new InvalidDataException("Embedded executable payload: "+name);
+                if(nativeResources.ContainsKey(name)){if(Hash(data)!=nativeResources[name])throw new InvalidDataException("Modified Wintun resource: "+name);}
+                else if(data.Length>=2&&data[0]=='M'&&data[1]=='Z')throw new InvalidDataException("Embedded executable payload: "+name);
                 resources.Add(new {Name=name,Bytes=data.Length,SHA256=Hash(data)});
             }
         }

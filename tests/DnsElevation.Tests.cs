@@ -38,6 +38,26 @@ static class ElevationTests
     }
     static void Main(string[] args)
     {
+        Test("Every encrypted operation reaches the normal-user elevation path", () => {
+            foreach(int offset in new[]{200,300,400,500}) foreach(int provider in Enumerable.Range(0,Dns.V4.Length)) {
+                int operation=offset+provider, elevated=0;
+                string error=DnsElevation.Route(true,operation,()=>false,(on,set)=>{throw new Exception("Unexpected direct execution");},(on,set)=> {
+                    elevated++;var request=Request(on,set);DnsRequest parsed;
+                    Assert(DnsRequest.TryParse(request.Arguments.Split(' '),out parsed)&&parsed.Enable&&parsed.Set==operation,"Elevation parser and launch allowlist differ");
+                    int code;var reply=Exchange(parsed,(enabled,selected)=>{Assert(enabled&&selected==operation,"Operation changed across pipe");return null;},out code);
+                    Assert(code==0&&reply.Code==0,"Valid command failed across authenticated pipe");return reply.Error;
+                });
+                Assert(error==null&&elevated==1,"Supported encrypted command rejected before UAC: "+operation);
+            }
+        });
+        Test("Administrator and normal-user routes share the same operation allowlist", () => {
+            foreach(bool admin in new[]{false,true}) foreach(int operation in Enumerable.Range(-1,610)) {
+                int calls=0;
+                Func<bool,int,string> action=(enable,set)=>{calls++;Assert(enable&&set==operation,"Routed operation changed");return null;};
+                string error=DnsElevation.Route(true,operation,()=>admin,action,action);
+                Assert(DnsRequest.Supported(true,operation)?error==null&&calls==1:error!=null&&calls==0,"Routing/allowlist mismatch: "+operation);
+            }
+        });
         Test("All built-in provider arguments round-trip", () => {
             foreach (int set in Enumerable.Range(0, Dns.Name.Length))
             {
@@ -57,7 +77,7 @@ static class ElevationTests
                 Assert(DnsRequest.TryParse(request.Arguments.Split(' '),out parsed) && parsed.Set==200+provider,"Encrypted provider changed");
             }
             DnsRequest rejected; var good=Request(true,200).Arguments;
-            Assert(!DnsRequest.TryParse(good.Replace("secure-enable 0","secure-enable 7").Split(' '),out rejected),"Unknown encrypted provider accepted");
+            Assert(!DnsRequest.TryParse(good.Replace("secure-enable 0","secure-enable "+Dns.Name.Length).Split(' '),out rejected),"Unknown encrypted provider accepted");
             Assert(!DnsRequest.TryParse(good.Replace("secure-enable 0","secure-enable https://example.com").Split(' '),out rejected),"Arbitrary template accepted");
         });
         Test("Keeping Antigravity requires a separate constrained action", () => {
@@ -68,7 +88,7 @@ static class ElevationTests
                 Assert(DnsRequest.TryParse(request.Arguments.Split(' '), out parsed) && parsed.Enable && parsed.Set == 300 + provider, "Consent flag lost");
             }
             string good = Request(true, 300).Arguments; DnsRequest rejected;
-            foreach (string value in new[] {"-1", "7", "https://example.com"})
+            foreach (string value in new[] {"-1", Dns.Name.Length.ToString(), "https://example.com"})
                 Assert(!DnsRequest.TryParse(good.Replace("secure-keep-ag 0", "secure-keep-ag " + value).Split(' '), out rejected), "Unbounded consent action");
             int code; var reply = Exchange(Request(true, 300), (on, set) => {Assert(on && set == 300, "Wrong consent operation"); return null;}, out code);
             Assert(code == 0 && reply.Code == 0, "Consent operation failed IPC");
@@ -91,7 +111,7 @@ static class ElevationTests
         Test("Arbitrary commands and malformed arguments are rejected", () => {
             string good = Request(true, 0).Arguments;
             foreach (string invalid in new[] { "", good + " extra", good.Replace("enable", "script"),
-                good.Replace("enable 0", "enable 7"), good.Replace("enable 0", "enable -1"),
+                good.Replace("enable 0", "enable "+Dns.Name.Length), good.Replace("enable 0", "enable -1"),
                 good.Replace("enable 0", "restore 3"), good.Replace("enable 0", "restore 1"),
                 good.Replace("enable 0", "reset-known 1"), "--dns-operation enable 0 not-a-guid 1",
                 good.Replace("enable 0", "ag-enable " + AntigravityDns.ServerSets.Length), good.Replace("enable 0", "ag-disable 1"),

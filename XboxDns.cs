@@ -61,13 +61,13 @@ namespace HbAi.XboxDns
             int plain = Array.FindIndex(V4, servers => addresses.SequenceEqual(servers));
             if (plain >= 0) return plain;
             for (int k = 0; k < V4.Length; k++)
-                if (EncryptedDns.Templates[k] != null && addresses.SequenceEqual(EncryptedDns.ServersFor(k))) return k;
+                if (EncryptedDns.Templates[k] != null && (addresses.SequenceEqual(EncryptedDns.ServersFor(k)) || addresses.SequenceEqual(DotDns.Servers(k)))) return k;
             for (int k = 0; k < V4.Length; k++)
                 if (ProviderCatalog.All[k].legacyIpv4.Any(old => addresses.SequenceEqual(old))) return k;
             return -1;
         }
         internal static string[] KnownServers { get { return V4.SelectMany(s=>s).Concat(V6.SelectMany(s=>s)).Concat(XboxOld)
-            .Concat(ProviderCatalog.All.SelectMany(p=>p.windowsDohServers)).Concat(ProviderCatalog.All.SelectMany(p=>p.legacyIpv4).SelectMany(s=>s)).Distinct().ToArray(); } }
+            .Concat(ProviderCatalog.All.SelectMany(p=>p.windowsDotServers)).Concat(ProviderCatalog.All.SelectMany(p=>p.windowsDohServers)).Concat(ProviderCatalog.All.SelectMany(p=>p.legacyIpv4).SelectMany(s=>s)).Distinct().ToArray(); } }
 
         public static string Enable(int set)
         {
@@ -81,6 +81,7 @@ namespace HbAi.XboxDns
         }
 
         public static string ResetKnown() { return DnsElevation.Run(false, 1); }
+        internal static bool NeedsKnownReset() { return new DnsSettingsEngine(new NativeDnsSystem(), new RegistryDnsBackupStore()).NeedsKnownReset(KnownServers); }
 
         internal static string ExecuteDirect(bool enable, int set)
         {
@@ -88,6 +89,8 @@ namespace HbAi.XboxDns
             if (enable && !NetworkCheck.HasConnection()) return NetworkCheck.OfflineMessage;
             if (enable && VpnCheck.Scan().NeedsAttention) return "Отключите VPN и повторите подключение. DNS не изменён.";
             if (enable && set < V4.Length && EncryptedOnly(set)) return EncryptedDns.Run(set);
+            if (enable && set >= 500 && set < 500 + V4.Length) return EncryptedDns.Run(set - 500, true, true);
+            if (enable && set >= 400 && set < 400 + V4.Length) return EncryptedDns.Run(set - 400, false, true);
             if (enable && set >= 300 && set < 300 + V4.Length) return EncryptedDns.Run(set - 300, true);
             if (enable && set >= 200 && set < 200 + V4.Length) return EncryptedDns.Run(set - 200);
             if (enable && set >= 100 && set < 100 + AntigravityDns.ServerSets.Length * 2) return AntigravityDns.Run(true, set % 2 == 1, (set - 100) / 2);
@@ -121,10 +124,14 @@ namespace HbAi.XboxDns
             return adapters.Length > 0 && adapters.All(a => {
                 var state = system.Read(a.Id, "IPv4");
                 return state.DohCaptured && state.Servers.Length > 0 && state.Doh.Length == state.Servers.Length &&
-                    state.Doh.All(d => (d.Flags & 2) != 0 && (d.Flags & 4) == 0) && !system.ReadIpv6Binding(a.Id);
+                    state.Doh.All(EncryptedDns.IsStrict) && !system.ReadIpv6Binding(a.Id);
             });
         }
 
+        internal static bool TlsConfigured() {
+            var system = new NativeDnsSystem(); var adapters = system.Adapters(true).Where(a=>a.V4).ToArray();
+            return adapters.Length>0 && adapters.All(a=> { var state=system.Read(a.Id,"IPv4"); return state.DohCaptured && state.Doh.Length>0 && state.Doh.All(d=>d.Kind==2 && EncryptedDns.IsStrict(d)); });
+        }
     }
 
     class MainForm : Form
@@ -165,14 +172,68 @@ namespace HbAi.XboxDns
         long lastFrame;
         FontFamily fHead, fBold, fMed;
         bool active, busy, hasBackup;
+        readonly ITunnelSession googleTunnel;readonly bool profilePreferences;bool googleMode,googleClosing,googleChecking;CancellationTokenSource googleCheck;
+        readonly ITunnelSession localSession;bool localMode;
+        bool localAntigravity;int localAntigravityProvider=6;
+        internal bool LocalAntigravity {get{return localAntigravity;}}
+        internal int LocalAntigravityProvider {get{return localAntigravityProvider;}}
+        internal Rectangle LocalAntigravityProviderButton {get{return new Rectangle(layoutWidth-160,LowerY(761),114,24);}}
+        bool ManagedMode {get{return googleMode||localMode;}}
+        ITunnelSession ManagedDns {get{return localMode?localSession:googleTunnel;}}
+        internal bool LocalMode {get{return localMode;}}
+        CancellationTokenSource resolverCancel;int resolverRevision,resolverProvider=-1;DnsTransport resolverTransport;bool resolverGoogle,resolverLocal,resolverChecking,autoResolverCheck=true;
+        ResolverCheckResult resolverResult;string resolverStamp;
+        internal bool ResolverResultCurrent { get { return active&&!busy&&resolverProvider==dnsSet&&resolverTransport==Transport&&resolverGoogle==googleMode&&resolverLocal==localMode; } }
+        string ResolverCaption { get { return ResolverResultCurrent?(resolverChecking?"Проверяем фактический DNS…":resolverResult==null?null:resolverResult.Summary):null; } }
+        ContextMenuStrip connectionMenu,connectionProtocolMenu;
+        internal ConnectionMethod ConnectionMethod {get{return localMode?ConnectionMethod.Application:googleMode?ConnectionMethod.Google:ConnectionMethod.Windows;}}
+        internal bool ConnectionChangeLocked {get{return initializing||busy||active||ManagedDns.Running;}}
+        internal Rectangle ConnectionModeButton {get{return new Rectangle(rSecureOption.X+12,rSecureOption.Y+24,rSecureOption.Width-168,28);}}
+        internal Rectangle ConnectionProtocolButton {get{return new Rectangle(rSecureOption.Right-148,rSecureOption.Y+24,136,28);}}
+        internal string ConnectionHint {get{return ConnectionUi.Hint(ConnectionMethod);}}
+        internal string ConnectionCardHint {get{return Transport==DnsTransport.Plain?"Открытые DNS-запросы · возможен перехват":ConnectionHint;}}
         bool hideDnsReminder = ReadHideDnsReminder();
         AgStatus agStatus = new AgStatus();
         bool agLoading = true;
         bool cleanupDone, cleanupBackupAvailable = Directory.Exists(AgCleanupBackup.Root);
         Rectangle rAgCleanup = new Rectangle(280, 807, 114, 26);
         Rectangle rAgOption = new Rectangle(28, 754, 384, 58);
-        Rectangle rSecureOption = new Rectangle(28, 678, 384, 58);
-        bool secureDns;
+        Rectangle rSecureOption = new Rectangle(28, 672, 384, 72);
+        bool secureDns, tlsDns;
+        internal DnsTransport Transport { get { return secureDns ? (tlsDns ? DnsTransport.Tls : DnsTransport.Https) : DnsTransport.Plain; } }
+        internal bool TransportAvailable(DnsTransport mode) { return mode == DnsTransport.Plain ? !ManagedMode&&!Dns.EncryptedOnly(dnsSet) : mode == DnsTransport.Tls ? DotDns.Available(dnsSet) : EncryptedDns.Templates[dnsSet] != null; }
+        internal void SelectTransport(DnsTransport mode) {
+            if (busy || initializing || (ManagedMode&&(ManagedDns.Running||mode==DnsTransport.Plain)) || !TransportAvailable(mode) || Transport == mode) return;
+            if (active) Apply(true, transport: mode);
+            else { operationRevision++; secureDns = mode != DnsTransport.Plain; tlsDns = mode == DnsTransport.Tls; }
+            if(ManagedMode)SaveGooglePreference();
+            probeResults = new DnsProbeResult[Dns.Name.Length][];
+            probeLabels = Enumerable.Repeat("Ответы DNS ещё не проверены",Dns.Name.Length).ToArray(); Invalidate();
+        }
+        internal void SelectConnectionMethod(ConnectionMethod method,bool persist=true)
+        {
+            if(method==ConnectionMethod||ConnectionChangeLocked)return;
+            switch(method){case ConnectionMethod.Application:SelectLocalMode(true,persist);break;case ConnectionMethod.Google:SelectGoogleMode(true,persist);break;case ConnectionMethod.Windows:if(localMode)SelectLocalMode(false,persist);else SelectGoogleMode(false,persist);break;default:throw new ArgumentOutOfRangeException("method");}
+        }
+        internal string TransportUnavailableHint(DnsTransport transport)
+        {return transport==DnsTransport.Plain?(ManagedMode?"В способах 2 и 3 используется только шифрованный DNS":Dns.Name[dnsSet]+" работает только с шифрованием"):Dns.Name[dnsSet]+" не публикует адрес для "+ConnectionUi.ProtocolName(transport);}
+        internal void SelectConnectionTransport(DnsTransport transport){if(!ConnectionChangeLocked)SelectTransport(transport);}
+        internal ContextMenuStrip CreateConnectionMenu()
+        {return ConnectionUi.Methods(ConnectionMethod,ConnectionChangeLocked,method=>SelectConnectionMethod(method),new Font(fMed,Math.Max(12f,14f*uiScale),GraphicsUnit.Pixel),CardBg,Ink,Accent,CardLine,(int)Math.Round(Math.Min(rSecureOption.Width,420)*uiScale));}
+        internal ContextMenuStrip CreateConnectionProtocolMenu()
+        {return ConnectionUi.Protocols(Transport,new[]{TransportAvailable(DnsTransport.Plain),TransportAvailable(DnsTransport.Https),TransportAvailable(DnsTransport.Tls)},ConnectionChangeLocked,SelectConnectionTransport,new Font(fMed,Math.Max(12f,14f*uiScale),GraphicsUnit.Pixel),CardBg,Ink,Accent,CardLine,(int)Math.Round(Math.Min(rSecureOption.Width,420)*uiScale),TransportUnavailableHint);}
+        void ShowConnectionProtocolMenu(){if(connectionProtocolMenu!=null)connectionProtocolMenu.Dispose();connectionProtocolMenu=CreateConnectionProtocolMenu();ShowConnectionPopup(connectionProtocolMenu);}
+        void ShowConnectionMenu()
+        {
+            if(connectionMenu!=null)connectionMenu.Dispose();connectionMenu=CreateConnectionMenu();
+            ShowConnectionPopup(connectionMenu);
+        }
+        void ShowConnectionPopup(ContextMenuStrip popup)
+        {
+            var anchor=new Point((int)(canvasOffset.X+rSecureOption.X*uiScale),(int)(canvasOffset.Y+rSecureOption.Bottom*uiScale));
+            if(PointToScreen(anchor).Y+popup.Height>Screen.FromControl(this).WorkingArea.Bottom)anchor.Y=(int)(canvasOffset.Y+rSecureOption.Top*uiScale)-popup.Height;
+            popup.Show(this,anchor);
+        }
         int dnsSet = Dns.AvailableProviders[0];
         int autoGoal = -1;
         int defaultGoal=-1;
@@ -181,7 +242,7 @@ namespace HbAi.XboxDns
         bool autoNeedsRetry, checkingAuto;
         long lastAutoCheck;
         readonly CancellationTokenSource autoLifetime = new CancellationTokenSource();
-        int SelectedSegment { get { return autoGoal >= 0||(!active&&UseDefaultGoal) ? Dns.Name.Length : dnsSet; } }
+        int SelectedSegment { get { return !googleMode&&(autoGoal >= 0||(!active&&UseDefaultGoal)) ? Dns.Name.Length : dnsSet; } }
         string error;
         float pulse;
         Rectangle rToggle, rClose, rSite, rGroup, rBrand;
@@ -192,7 +253,7 @@ namespace HbAi.XboxDns
         bool checkUpdateAtStartup = true;
         readonly ToolTip themeTip = new ToolTip();
         readonly Rectangle[] rSeg = new Rectangle[Dns.Name.Length + 1];
-        int[] VisibleSegments { get { return Dns.AvailableProviders.Concat(new[]{Dns.Name.Length}).ToArray(); } }
+        int[] VisibleSegments { get { return localMode?new[]{Dns.Name.Length}.Concat(Dns.AvailableProviders.Where(TunnelSession.EncryptedProvider)).ToArray():googleMode?Dns.AvailableProviders.Where(TunnelSession.GoogleProvider).ToArray():new[]{Dns.Name.Length}.Concat(Dns.AvailableProviders).ToArray(); } }
         int ProviderItemWidth = 108;
         Rectangle providerViewport = new Rectangle(58, 500, 324, 56);
         Rectangle providerPrevious = new Rectangle(28, 500, 30, 56);
@@ -218,16 +279,22 @@ namespace HbAi.XboxDns
             if (agStatus.Checked) return agStatus.Complete ? (agStatus.Provider == 1 ? "Проверьте Antigravity" : "Только Antigravity") : "Antigravity частично";
             return agStatus.External ? "Правила Antigravity" : null;
         } }
-        internal string ConnectionLabel { get { return initializing ? "Проверяем настройки…" : busy ? "Применяем настройки…" : !networkAvailable ? "Нет подключения" : liveVpn.NeedsAttention ?
+        internal string ConnectionLabel { get { if(localMode)return initializing?"Проверяем настройки…":ManagedDns.Stopping?"Восстанавливаем DNS…":busy?"Запускаем локальный DNS…":autoGoal>=0?"Авто · "+AutoDns.Goals[autoGoal].Name:!active&&UseDefaultGoal?"Авто · "+AutoDns.Goals[defaultGoal].Name:active?"Локальный DNS включён":"Локальный DNS · beta";if(googleMode)return initializing?"Проверяем настройки…":ManagedDns.Stopping?"Восстанавливаем DNS…":busy?"Подключаем Gemini…":"Gemini / NotebookLM";return initializing ? "Проверяем настройки…" : busy ? "Применяем настройки…" : !networkAvailable ? "Нет подключения" : liveVpn.NeedsAttention ?
             (liveVpn.Failed ? "Проверьте VPN" : "VPN мешает DNS") : active ? (hasBackup ? (dnsConfirmed ? (autoGoal >= 0 ? (autoNeedsRetry ? "Проверьте Авто" : "Авто · " + AutoDns.Goals[autoGoal].Name) : "DNS включён") : "Проверьте DNS") : "Найден DNS сервиса") : AntigravityOnlyLabel ?? "DNS выключен"; } }
         internal string EncryptionNote { get {
+            if(localMode)return "Локальный DNS: Windows → 127.0.0.1 / ::1 → выбранный HTTPS или TLS. Работает, пока приложение открыто.";
+            string protocol = tlsDns ? "DoT" : "DoH";
             if (EncryptedDns.Templates[dnsSet] == null) return "У этого провайдера настроен только обычный DNS";
             if (secureDns && agStatus.WindowsUpdateException)
-                return agStatus.External || agStatus.Checked ? "DoH · исключения Windows Update и Antigravity" : "DoH · исключение для Windows Update";
-            return secureDns && (agStatus.External || agStatus.Checked) ? "DoH · Antigravity по отдельным правилам" : "DoH адаптера · IPv6 приостанавливается";
+                return protocol + (agStatus.External || agStatus.Checked ? " · исключения Windows Update и Antigravity" : " · исключение для Windows Update");
+            return protocol + (secureDns && (agStatus.External || agStatus.Checked) ? " · Antigravity по отдельным правилам" : " адаптера · IPv6 приостанавливается");
         } }
         internal bool AntigravityUsesSharedDoh { get { return secureDns && !agLoading && !agStatus.Checked && !agStatus.External && agStatus.Error == null; } }
-        internal string SharedAntigravityNote { get { return active && dnsConfirmed ? "Используется выбранный зашифрованный DNS" : "Включите DNS большой кнопкой"; } }
+        internal bool SharedAntigravityDeclared {get{return Dns.IsAvailable(dnsSet)&&ProviderCatalog.All[dnsSet].autoGoals.Contains("Antigravity");}}
+        internal bool AntigravityCardInfoOnly {get{return AntigravityUsesSharedDoh||!SharedAntigravityDeclared&&!agLoading&&!agStatus.Checked&&!agStatus.External&&agStatus.Error==null;}}
+        internal string SharedAntigravityTitle {get{return SharedAntigravityDeclared?"Antigravity · общий DNS":"Antigravity · не заявлено";}}
+        internal string PlainAntigravityNote {get{return !Dns.IsAvailable(dnsSet)?"Провайдер отключён · выберите другой DNS":dnsSet==0?"Comss для этой опции отключён":AntigravityDns.ProviderForMainSet(dnsSet)<0?"Отдельный маршрут для этого DNS не заявлен":"Будет использован: "+Dns.Name[dnsSet];}}
+        internal string SharedAntigravityNote { get { return !SharedAntigravityDeclared?"Поддержка Antigravity у "+Dns.Name[dnsSet]+" не заявлена.":active&&dnsConfirmed?"Общий DNS настроен · Antigravity не проверен":"Включите DNS большой кнопкой · доступ не проверен"; } }
         internal void UpdateVpnStatus(VpnStatus status)
         {
             if (liveVpn.NeedsAttention != status.NeedsAttention)
@@ -240,12 +307,27 @@ namespace HbAi.XboxDns
             if (changed) Invalidate();
         }
 
-        public MainForm()
+        public MainForm():this(new TunnelSession()){}
+        internal MainForm(ITunnelSession session,bool readProfilePreference=true,ITunnelSession local=null)
         {
+            googleTunnel=session;localSession=local??new TunnelSession(null,true);profilePreferences=readProfilePreference;googleTunnel.Changed+=GoogleTunnelChanged;localSession.Changed+=GoogleTunnelChanged;
             LoadFonts();
             LoadServiceIcons();
             darkTheme = ReadDarkTheme();
             defaultGoal=ReadDefaultGoal();
+            if(readProfilePreference)try{using(var key=Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KodVsego\SmartDns"))autoResolverCheck=key==null||!object.Equals(key.GetValue("AutoResolverCheck"),0);}catch(Exception){}
+            if(readProfilePreference)try{using(var key=Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KodVsego\SmartDns"))googleMode=key!=null&&object.Equals(key.GetValue("GoogleTunnelMode"),1);}catch(Exception){}
+            if(googleMode){secureDns=true;tlsDns=true;manualSelection=true;try{using(var key=Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KodVsego\SmartDns")){
+                object saved=key==null?null:key.GetValue("GoogleTunnelProvider");if(saved is int&&TunnelSession.GoogleProvider((int)saved))dnsSet=(int)saved;
+                string protocol=key==null?null:key.GetValue("GoogleTunnelProtocol") as string;tlsDns=protocol=="HTTPS"?false:DotDns.Available(dnsSet)&&dnsSet!=6;
+            }}catch(Exception){}}
+            if(readProfilePreference)try{using(var key=Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KodVsego\SmartDns"))if(key!=null&&object.Equals(key.GetValue("LocalResolverMode"),1)){
+                localMode=true;googleMode=false;secureDns=true;manualSelection=defaultGoal<0;
+                object saved=key.GetValue("LocalResolverProvider");if(saved is int&&TunnelSession.EncryptedProvider((int)saved))dnsSet=(int)saved;
+                tlsDns=key.GetValue("LocalResolverProtocol") as string=="TLS"&&DotDns.Available(dnsSet);
+            }}catch(Exception){}
+            if(readProfilePreference)try{using(var key=Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KodVsego\SmartDns"))if(key!=null){localAntigravity=object.Equals(key.GetValue("LocalAntigravityEnabled"),1);object provider=key.GetValue("LocalAntigravityProvider");if(provider is int&&LocalDnsRouting.Supports((int)provider))localAntigravityProvider=(int)provider;else if(provider!=null)localAntigravity=false;}}catch(Exception){}
+            if(!LocalDnsRouting.Supports(localAntigravityProvider)){localAntigravityProvider=LocalDnsRouting.Providers.DefaultIfEmpty(-1).First();if(localAntigravityProvider<0)localAntigravity=false;}
             themeMix = darkTheme ? 1 : 0;
             Text = "Код Всего · Smart DNS";
             AutoScaleMode = AutoScaleMode.None;
@@ -287,21 +369,23 @@ namespace HbAi.XboxDns
 
         void RefreshNetworkStatus()
         {
-            if (checkingNetwork || busy || !Visible || WindowState == FormWindowState.Minimized) return;
+            if (checkingNetwork || busy || ManagedDns.Running || !Visible || WindowState == FormWindowState.Minimized) return;
             checkingNetwork = true;
             int revision = operationRevision;
             ThreadPool.QueueUserWorkItem(_ => {
                 var status = VpnCheck.Scan();
                 bool connected = NetworkCheck.HasConnection();
+                string observerNetwork=null;try{observerNetwork=new MangoResolverCheckIo().Stamp();}catch(Exception){}
                 var extraDns = AntigravityDns.GetStatus();
-                int actual = -1; bool backup = hasBackup, availableBackup = false, strictNow = false;
-                try { actual = Dns.ActiveSet(); backup = Dns.HasBackup(); availableBackup = backup && Dns.HasAvailableBackup(); if (actual >= 0) strictNow = Dns.EncryptedOnly(actual) || Dns.StrictConfigured(); }
+                int actual = -1; bool backup = hasBackup, availableBackup = false, strictNow = false, tlsNow = false;
+                try { actual = Dns.ActiveSet(); backup = Dns.HasBackup(); availableBackup = backup && Dns.HasAvailableBackup(); if (actual >= 0) { strictNow = Dns.EncryptedOnly(actual) || Dns.StrictConfigured(); tlsNow = strictNow && Dns.TlsConfigured(); } }
                 catch (Exception) { }
                 if (IsDisposed || Disposing) return;
                 try { BeginInvoke((Action)(() => {
                     checkingNetwork = false;
                     if (!AcceptNetworkSnapshot(revision)) return;
                     bool firstRead = initializing;
+                    if(resolverStamp!=null&&resolverStamp!=observerNetwork)CancelResolverCheck();
                     string before = VisualState();
                     if (networkAvailable != connected) {
                         probeResults = new DnsProbeResult[Dns.Name.Length][];
@@ -309,22 +393,22 @@ namespace HbAi.XboxDns
                     }
                     networkAvailable = connected; hasBackup = backup; dnsConfirmed = actual >= 0;
                     agStatus = extraDns; agLoading = false;
-                    if (actual >= 0) secureDns = strictNow;
-                    active = actual >= 0 || availableBackup;
-                    if (actual >= 0 && actual != dnsSet) { if (!firstRead) autoGoal = -1; dnsSet = actual; EnsureProviderVisible(); }
+                    if (actual >= 0&&!ManagedMode) { secureDns = strictNow; tlsDns = tlsNow; }
+                    active = !ManagedMode&&(actual >= 0 || availableBackup);
+                    if (actual >= 0 && actual != dnsSet&&!ManagedMode) { if (!firstRead) autoGoal = -1; dnsSet = actual; EnsureProviderVisible(); }
                     initializing = false;
                     if(firstRead)EnsureProviderVisible();
                     UpdateVpnStatus(status);
                     if (before != VisualState()) Invalidate();
-                    if (firstRead) CheckDnsServers();
-                    CheckAutoConnection();
+                    if (firstRead&&!ManagedMode) CheckDnsServers();
+                    if(!ManagedMode)CheckAutoConnection();
                 })); }
                 catch (InvalidOperationException) { }
             });
         }
 
         internal bool AcceptNetworkSnapshot(int revision)
-        { return !busy && revision == operationRevision; }
+        { return !busy && !ManagedDns.Running && revision == operationRevision; }
 
         void CheckUpdatesQuietly()
         {
@@ -354,8 +438,93 @@ namespace HbAi.XboxDns
         internal StyledDialog CreateSettingsDialog()
         {
             bool available=Directory.Exists(AgCleanupBackup.Root);
-            var dialog=CreateDialog(available?"Копия правил Antigravity\n\nОткройте папку с сохранёнными копиями правил.":"Копия правил Antigravity\n\nСохранённых копий пока нет. Копия создаётся при удалении старых правил.","Настройки",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1,uiScale);
-            dialog.AddSettingsControls(available,()=>Open(AgCleanupBackup.Root),AutoDns.Goals.Select(goal=>goal.Name).ToArray(),defaultGoal,url=>Open(url));return dialog;
+            var dialog=CreateDialog(available?"Копия правил Antigravity\n\nОткройте папку с сохранёнными копиями правил.":"Копия правил Antigravity\n\nСохранённых копий пока нет. Копия создаётся при удалении старых правил.","Настройки",MessageBoxButtons.OK,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1,Math.Min(uiScale,(Screen.FromControl(this).WorkingArea.Height-32f)/680f));
+            dialog.AddSettingsControls(available,()=>Open(AgCleanupBackup.Root),AutoDns.Goals.Select(goal=>goal.Name).ToArray(),defaultGoal,url=>Open(url));
+            dialog.AddLogSettingsAction(update=>SaveApplicationLog(dialog,update));dialog.AddResolverSettingsAction(autoResolverCheck);
+            return dialog;
+        }
+        string LogContext(){return "Provider="+Dns.Name[dnsSet]+"; transport="+Transport+"; Google profile="+googleMode+"; local resolver="+localMode+"; separate Antigravity="+localAntigravity+"; Antigravity provider="+localAntigravityProvider+"; active="+active+"; worker running="+ManagedDns.Running+"; connected="+ManagedDns.Connected+"; stopping="+ManagedDns.Stopping+"; statistics="+ManagedDns.Statistics;}
+        void SaveApplicationLog(Form owner,Action<string> update)
+        {
+            using(var save=new SaveFileDialog{Filter="Журнал (*.txt)|*.txt",FileName="SmartDNS-"+VersionLabel+"-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".txt"}) {
+                if(save.ShowDialog(owner)!=DialogResult.OK)return;string file=save.FileName,context=LogContext();update("Сохраняем журнал…");
+                ThreadPool.QueueUserWorkItem(_=>{string result;
+                    try{File.WriteAllText(file,DiagnosticReport.Export(context),new System.Text.UTF8Encoding(true));result="Журнал сохранён · скачать ещё раз";}
+                    catch(Exception problem){DiagnosticReport.Record("Сохранение журнала",problem.ToString());result="Не удалось сохранить · повторить";}
+                    if(!owner.IsDisposed)try{owner.BeginInvoke((Action)(()=>update(result)));}catch(InvalidOperationException){}
+                });
+            }
+        }
+        internal bool GoogleMode{get{return googleMode;}}
+        void SaveGooglePreference()
+        {
+            if(!profilePreferences)return;
+            try{using(var key=Registry.CurrentUser.CreateSubKey(@"SOFTWARE\KodVsego\SmartDns")){key.SetValue("GoogleTunnelMode",googleMode?1:0,RegistryValueKind.DWord);key.SetValue("LocalResolverMode",localMode?1:0,RegistryValueKind.DWord);string prefix=localMode?"LocalResolver":"GoogleTunnel";key.SetValue(prefix+"Provider",dnsSet,RegistryValueKind.DWord);key.SetValue(prefix+"Protocol",tlsDns?"TLS":"HTTPS",RegistryValueKind.String);}}
+            catch(Exception problem){DiagnosticReport.Record("Настройки профиля",problem.ToString());}
+        }
+        internal void SelectGoogleMode(bool enabled,bool persist=false)
+        {
+            if(initializing||busy||ManagedDns.Running)return;
+            if(!ManagedMode&&active&&dnsConfirmed){error="Сначала выключите обычный DNS большой кнопкой";Invalidate();return;}
+            CancelResolverCheck();operationRevision++;localMode=false;googleMode=enabled;manualSelection=true;autoGoal=-1;error=null;
+            if(enabled){if(!TunnelSession.GoogleProvider(dnsSet))dnsSet=0;secureDns=true;tlsDns=dnsSet!=6&&DotDns.Available(dnsSet);active=false;dnsConfirmed=false;}
+            if(persist)SaveGooglePreference();
+            DiagnosticReport.Record("Профиль подключения","Gemini / NotebookLM="+enabled+"; DNS scope=entire PC");
+            layoutReady=false;UpdateCanvasBounds();Invalidate();
+        }
+        internal void SelectLocalMode(bool enabled,bool persist=false)
+        {
+            if(initializing||busy||ManagedDns.Running)return;
+            if(!ManagedMode&&active&&dnsConfirmed){error="Сначала выключите обычный DNS большой кнопкой";Invalidate();return;}
+            CancelResolverCheck();operationRevision++;localMode=enabled;googleMode=false;manualSelection=!enabled||defaultGoal<0;autoGoal=-1;error=null;
+            if(enabled){if(!TunnelSession.EncryptedProvider(dnsSet))dnsSet=5;secureDns=true;tlsDns=false;active=false;dnsConfirmed=false;}
+            if(persist)SaveGooglePreference();
+            DiagnosticReport.Record("Профиль подключения","Local resolver="+enabled+"; loopback only; DNS scope=entire PC");EnsureProviderVisible();layoutReady=false;UpdateCanvasBounds();Invalidate();
+        }
+        internal void SelectLocalAntigravity(bool enabled,int provider)
+        {
+            if(!localMode||busy||ManagedDns.Running||!LocalDnsRouting.Supports(provider))return;
+            localAntigravity=enabled;localAntigravityProvider=provider;
+            if(profilePreferences)try{using(var key=Registry.CurrentUser.CreateSubKey(@"SOFTWARE\KodVsego\SmartDns")){key.SetValue("LocalAntigravityEnabled",enabled?1:0,RegistryValueKind.DWord);key.SetValue("LocalAntigravityProvider",provider,RegistryValueKind.DWord);}}catch(Exception problem){DiagnosticReport.Record("Настройки Antigravity",problem.ToString());}
+            DiagnosticReport.Record("Локальный Antigravity","enabled="+enabled+"; provider="+Dns.Name[provider]+"; DoH; not applied until local DNS starts; model NOT verified");Invalidate();
+        }
+        void GoogleTunnelChanged()
+        {
+            if(IsDisposed||Disposing||!IsHandleCreated)return;
+            try{BeginInvoke((Action)(()=>{
+                if(IsDisposed)return;bool wasConnected=active;operationRevision++;busy=ManagedDns.Running&&(!ManagedDns.Connected||ManagedDns.Stopping);active=ManagedDns.Connected&&!ManagedDns.Stopping;dnsConfirmed=active;error=ManagedDns.LastError;
+                if(active&&!wasConnected)StartResolverCheck();else if(!active)CancelResolverCheck();
+                if(!ManagedDns.Running&&googleCheck!=null)googleCheck.Cancel();Invalidate();
+                if(googleClosing&&!ManagedDns.Running){googleClosing=false;Close();}
+            }));}catch(InvalidOperationException){}
+        }
+        void ToggleGoogleTunnel()
+        {
+            if(ManagedDns.Running){CancelResolverCheck();ManagedDns.Stop();return;}
+            if(busy)return;operationRevision++;error=null;busy=true;Invalidate();
+            try{if(localMode){var config=localSession as ILocalDnsConfiguration;if(config!=null)config.SetAntigravity(localAntigravity?localAntigravityProvider:-1);}ManagedDns.Start(dnsSet,tlsDns);}catch(Exception problem){busy=false;error=TunnelDiagnostics.Error(problem);DiagnosticReport.Record(localMode?"Локальный DNS":"Gemini / NotebookLM",error);Invalidate();}
+        }
+        internal bool LocalAutoHasSeparateTarget(int goal)
+        {return localMode&&localAntigravity&&goal>=0&&goal<AutoDns.Goals.Length&&AutoDns.Goals[goal].Name=="Antigravity";}
+        internal bool StartLocalAuto(AutoDnsResult result,int goal)
+        {
+            if(!localMode||initializing||busy||active||ManagedDns.Running||result==null||!result.Ok||!result.Encrypted||goal<0||goal>=AutoDns.Goals.Length||LocalAutoHasSeparateTarget(goal)||!AutoDns.Candidates(goal,true,result.Tls).Contains(result.Provider))return false;
+            CancelResolverCheck();dnsSet=result.Provider;secureDns=true;tlsDns=result.Tls;autoGoal=goal;manualSelection=false;autoNeedsRetry=false;
+            lastAutoCheck=frameClock.ElapsedMilliseconds;SaveGooglePreference();layoutReady=false;UpdateCanvasBounds();EnsureProviderVisible();
+            DiagnosticReport.Record("Авто · локальный DNS","Goal="+AutoDns.Goals[goal].Name+"; provider="+Dns.Name[dnsSet]+"; protocol="+(tlsDns?"TLS":"HTTPS")+"; activation=local worker; separate Antigravity="+localAntigravity);
+            ToggleGoogleTunnel();return true;
+        }
+        void CheckGoogleServices()
+        {
+            if(googleChecking)return;
+            if(!ManagedDns.Connected){probeLabels[dnsSet]="Сначала включите Gemini / NotebookLM";Invalidate();return;}
+            googleChecking=true;int selected=dnsSet;bool tls=tlsDns;var cancel=new CancellationTokenSource();googleCheck=cancel;cancel.CancelAfter(90000);probeLabels[selected]="Проверяем Gemini / NotebookLM…";Invalidate();
+            ThreadPool.QueueUserWorkItem(_=>{string result="Проверка завершена · журнал в настройках";
+                try{var upstream=new TunnelUpstream(selected,tls);var probe=new ServiceAvailabilityProbe(tls);TunnelDiagnostics.Check(upstream.Query,probe.Request,line=>DiagnosticReport.Record("Проверка Google",line),cancel.Token,true);}
+                catch(OperationCanceledException){result="Проверка отменена · журнал в настройках";}
+                catch(Exception problem){DiagnosticReport.Record("Проверка Google",problem.ToString());result="Ошибка проверки · журнал в настройках";}
+                if(!IsDisposed)try{BeginInvoke((Action)(()=>{googleChecking=false;if(googleCheck==cancel)googleCheck=null;cancel.Dispose();probeLabels[selected]=result;Invalidate();}));}catch(InvalidOperationException){}
+            });
         }
         void ShowSettings()
         {
@@ -363,9 +532,10 @@ namespace HbAi.XboxDns
                 if(dialog.ShowDialog(this)!=DialogResult.OK)return;
                 int selected=dialog.SettingsGoal;
                 try {
-                    using(var key=Registry.CurrentUser.CreateSubKey(@"SOFTWARE\KodVsego\SmartDns"))key.SetValue("DefaultService",selected<0?"":AutoDns.Goals[selected].Name,RegistryValueKind.String);
+                    using(var key=Registry.CurrentUser.CreateSubKey(@"SOFTWARE\KodVsego\SmartDns")){key.SetValue("DefaultService",selected<0?"":AutoDns.Goals[selected].Name,RegistryValueKind.String);key.SetValue("AutoResolverCheck",dialog.AutoResolverCheck?1:0,RegistryValueKind.DWord);}
+                    autoResolverCheck=dialog.AutoResolverCheck;if(!autoResolverCheck)CancelResolverCheck();
                     defaultGoal=selected;manualSelection=false;if(selected<0)autoGoal=-1;EnsureProviderVisible();Invalidate();
-                }catch(Exception error){ShowMessage("Не удалось сохранить сервис по умолчанию.\n\n"+error.Message,"Настройки",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+                }catch(Exception error){ShowMessage("Не удалось сохранить настройки.\n\n"+error.Message,"Настройки",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
             }
         }
         static int ReadDefaultGoal()
@@ -441,11 +611,11 @@ namespace HbAi.XboxDns
                 !networkAvailable || liveVpn.NeedsAttention || frameClock.ElapsedMilliseconds - lastAutoCheck < 60000) return;
             checkingAuto = true; lastAutoCheck = frameClock.ElapsedMilliseconds;
             int goal = autoGoal, provider = dnsSet, revision = operationRevision;
-            bool encrypted = secureDns;
+            bool encrypted = secureDns; bool tls = tlsDns;
             var token = autoLifetime.Token;
             ThreadPool.QueueUserWorkItem(_ => {
                 bool available = false;
-                try { available = AutoDns.Best(AutoDns.Search(goal, encrypted, new AutoDnsProbe(), token, null, provider)) != null; }
+                try { available = AutoDns.Best(AutoDns.Search(goal, encrypted, new AutoDnsProbe(tls), token, null, provider, tls)) != null; }
                 catch (OperationCanceledException) { return; }
                 catch (Exception) { }
                 if (IsDisposed || token.IsCancellationRequested) return;
@@ -459,6 +629,7 @@ namespace HbAi.XboxDns
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            if(googleTunnel!=null&&ManagedDns.Running){e.Cancel=true;googleClosing=true;ManagedDns.Stop();base.OnFormClosing(e);return;}
             if(e.CloseReason==CloseReason.UserClosing&&(busy||agLoading))e.Cancel=true;
             base.OnFormClosing(e);
         }
@@ -466,6 +637,8 @@ namespace HbAi.XboxDns
         {
             if (disposing && !resourcesDisposed) {
                 resourcesDisposed = true;
+                if(connectionMenu!=null)connectionMenu.Dispose();if(connectionProtocolMenu!=null)connectionProtocolMenu.Dispose();
+                CancelResolverCheck();googleTunnel.Changed-=GoogleTunnelChanged;localSession.Changed-=GoogleTunnelChanged;googleTunnel.Dispose();localSession.Dispose();if(googleCheck!=null)googleCheck.Cancel();
                 autoLifetime.Cancel(); autoLifetime.Dispose();
                 anim.Dispose(); networkMonitor.Dispose(); themeTip.Dispose();
                 foreach (var image in serviceIcons.Values) image.Dispose();
@@ -668,6 +841,15 @@ namespace HbAi.XboxDns
             }
         }
 
+        void DrawConnectionChoice(Graphics g,Rectangle bounds,string text,Color color)
+        {
+            using(var path=RoundPath(bounds,8))using(var fill=new SolidBrush(Bg))using(var line=new Pen(CardLine)){g.FillPath(fill,path);g.DrawPath(line,path);}
+            float size;using(var measure=UiFont(fBold,9.5f))size=Math.Min(9.5f,9.5f*(bounds.Width-34)/g.MeasureString(text,measure).Width);
+            using(var font=UiFont(fBold,Math.Max(8f,size)))using(var ink=new SolidBrush(ConnectionChangeLocked?Muted:color))using(var format=new StringFormat{FormatFlags=StringFormatFlags.NoWrap,Trimming=StringTrimming.EllipsisCharacter,LineAlignment=StringAlignment.Center})
+                g.DrawString(text,font,ink,new RectangleF(bounds.Left+10,bounds.Top,bounds.Width-34,bounds.Height),format);
+            using(var pen=new Pen(ConnectionChangeLocked?Muted:Accent,1.4f)){float x=bounds.Right-14,y=bounds.Top+bounds.Height/2f;g.DrawLines(pen,new[]{new PointF(x-3,y-2),new PointF(x,y+1),new PointF(x+3,y-2)});}
+        }
+
         void LoadFonts()
         {
             foreach (var name in new[] { "Unbounded-ExtraBold.ttf", "Manrope-Bold.ttf", "Manrope-Medium.ttf" })
@@ -718,7 +900,7 @@ namespace HbAi.XboxDns
 
         string VisualState()
         {
-            return ConnectionLabel + "|" + dnsSet + "|" + secureDns + "|" + hasBackup + "|" + dnsConfirmed + "|" +
+            return ConnectionLabel + "|" + dnsSet + "|" + secureDns + "/" + tlsDns + "|" + hasBackup + "|" + dnsConfirmed + "|" +
                 agLoading + "|" + agStatus.Checked + "|" + agStatus.Complete + "|" + agStatus.External + "|" +
                 agStatus.Error + "|" + agStatus.Provider + "|" + agStatus.RecoveryNeeded + "|" + agStatus.WindowsUpdateException;
         }
@@ -783,7 +965,7 @@ namespace HbAi.XboxDns
                 layoutWidth=width;layoutHeight=height;
                 rClose=new Rectangle(width-58,22,36,36);rTheme=new Rectangle(width-108,24,36,34);rSettings=new Rectangle(width-152,24,36,34);
                 rToggle=new Rectangle((width-200)/2,196+(height-CanvasHeight)/2,200,200);
-                rSecureOption=new Rectangle(28,LowerY(678),width-56,58);rAgOption=new Rectangle(28,LowerY(754),width-56,58);rAgCleanup=new Rectangle(width-160,LowerY(775),114,26);
+                rSecureOption=new Rectangle(28,LowerY(672),width-56,72);rAgOption=new Rectangle(28,LowerY(754),width-56,58);rAgCleanup=new Rectangle(width-160,LowerY(775),114,26);
                 providerViewport=new Rectangle(58,LowerY(500),width-116,56);providerPrevious=new Rectangle(28,LowerY(500),30,56);providerNext=new Rectangle(width-58,LowerY(500),30,56);
                 int visible=Math.Min(VisibleSegments.Length,Math.Max(3,providerViewport.Width/108));ProviderItemWidth=providerViewport.Width/visible;
                 for(int k=0;k<rSeg.Length;k++)rSeg[k]=Rectangle.Empty;
@@ -969,6 +1151,8 @@ namespace HbAi.XboxDns
             if (!busy && autoGoal >= 0 && autoNeedsRetry && networkAvailable && !liveVpn.NeedsAttention)
                 sub = AutoDns.Goals[autoGoal].Name + ": соединение не подтверждено · повторите Авто";
             if(!busy&&!active&&UseDefaultGoal&&networkAvailable&&!liveVpn.NeedsAttention)sub="Для подключения: "+AutoDns.Goals[defaultGoal].Name;
+            if(googleMode)sub=error??(ManagedDns.Stopping?"Ожидаем восстановление прежних DNS":ManagedDns.Connected?(tlsDns?"DoT":"DoH")+" · "+Dns.Name[dnsSet]+" · DNS всего ПК":busy?"Проверяем сервер и создаём DNS-туннель":"Быстрый профиль · DNS всего ПК · beta");
+            if(localMode)sub=error??(ManagedDns.Stopping?"Восстанавливаем прежние DNS":ManagedDns.Connected?"127.0.0.1 → "+Dns.Name[dnsSet]+" · "+(tlsDns?"TLS":"HTTPS"):autoGoal>=0||UseDefaultGoal?"Подберём DNS для "+AutoDns.Goals[autoGoal>=0?autoGoal:defaultGoal].Name:"Совместимость · шифрование внутри программы");
             using (var f = UiFont(fHead, busy ? 12f : 15f))
             using (var b = new SolidBrush((active || ((agStatus.Checked || agStatus.External) && agStatus.Error == null)) && !busy ? Accent : Ink))
                 Centered(g, status, f, b, LowerY(420));
@@ -1013,37 +1197,37 @@ namespace HbAi.XboxDns
             using (var bv = new SolidBrush(Ink))
             {
                 g.DrawString("DNS", fl, bl, card.X + 20, card.Y + 10);
-                g.DrawString(string.Join("  /  ", secureDns && EncryptedDns.Templates[dnsSet] != null ? EncryptedDns.ServersFor(dnsSet) : Dns.V4[dnsSet]), fv, bv, card.X + 76, card.Y + 8);
+                var addresses=localMode&&active?new[]{"127.0.0.1","::1"}:secureDns&&EncryptedDns.Templates[dnsSet]!=null?(tlsDns?DotDns.Servers(dnsSet):EncryptedDns.ServersFor(dnsSet)):Dns.V4[dnsSet];
+                g.DrawString(string.Join("  /  ",addresses.Take(2))+(addresses.Length>2?"  +"+(addresses.Length-2):""),fv,bv,card.X+76,card.Y+8);
             }
-            DrawServiceIcons(g, new RectangleF(card.X + 20, card.Y + 33, card.Width - 40, 23));
+            if(googleMode){using(var font=UiFont(fBold,10f))using(var brush=new SolidBrush(Ink))g.DrawString("Gemini app · NotebookLM",font,brush,card.X+20,card.Y+33);}
+            else DrawServiceIcons(g, new RectangleF(card.X + 20, card.Y + 33, card.Width - 40, 23));
             using (var f = UiFont(fMed, 8f))
-            using (var b = new SolidBrush(Accent)) g.DrawString(probing ? "Проверяем ответы DNS…" : probeLabels[dnsSet], f, b, 48, LowerY(636));
+            using (var b = new SolidBrush(Accent)) g.DrawString(ResolverCaption??(probing ? "Проверяем ответы DNS…" : probeLabels[dnsSet]), f, b, 48, LowerY(636));
             using (var path = RoundPath(DnsTestButton, 8))
             using (var b = new SolidBrush(Selection)) g.FillPath(b, path);
             using (var f = UiFont(fBold, 8f))
             using (var b = new SolidBrush(ContrastInk))
             using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                g.DrawString("Тест DNS", f, b, DnsTestButton, sf);
+                g.DrawString(googleMode?"Проверить":"Тест DNS", f, b, DnsTestButton, sf);
 
             using (var path = RoundPath(rSecureOption, 16))
             using (var fill = new SolidBrush(CardBg))
             using (var line = new Pen(CardLine)) { g.FillPath(fill, path); g.DrawPath(line, path); }
-            using (var path = RoundPath(new Rectangle(46, LowerY(696), 20, 20), 5))
-            using (var fill = new SolidBrush(secureDns ? ActiveBg : Bg))
-            using (var line = new Pen(Accent, 1.5f)) { g.FillPath(fill, path); g.DrawPath(line, path); }
-            if (secureDns) using (var pen = new Pen(ContrastInk, 2f)) g.DrawLines(pen, new[] { new Point(50, LowerY(706)), new Point(55, LowerY(711)), new Point(63, LowerY(701)) });
-            using (var title = UiFont(fBold, 10f))
-            using (var body = UiFont(fMed, 8f))
-            using (var ink = new SolidBrush(Ink))
-            using (var muted = new SolidBrush(Muted)) {
-                g.DrawString(EncryptedDns.Templates[dnsSet] == null ? "DoH недоступен" : "Зашифрованный DNS", title, ink, 76, LowerY(686));
-                g.DrawString(EncryptionNote, body, muted, 76, LowerY(710));
+            using(var font=UiFont(fMed,8f))using(var ink=new SolidBrush(Muted)){
+                g.DrawString("Способ подключения",font,ink,ConnectionModeButton.Left,rSecureOption.Top+5);
+                g.DrawString("Шифрование",font,ink,ConnectionProtocolButton.Left,rSecureOption.Top+5);
             }
+            DrawConnectionChoice(g,ConnectionModeButton,ConnectionUi.CompactName(ConnectionMethod),Ink);
+            DrawConnectionChoice(g,ConnectionProtocolButton,ConnectionUi.ProtocolName(Transport),Transport==DnsTransport.Plain?(darkTheme?Color.FromArgb(236,176,64):Color.FromArgb(155,92,0)):Accent);
+            using(var font=UiFont(fMed,8f))using(var ink=new SolidBrush(Muted))using(var format=new StringFormat{Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap})
+                g.DrawString(ConnectionCardHint,font,ink,new RectangleF(rSecureOption.X+12,rSecureOption.Top+55,rSecureOption.Width-24,16),format);
+            if(!ManagedMode){
             using (var path = RoundPath(rAgOption, 16))
             using (var fill = new SolidBrush(CardBg))
             using (var line = new Pen(CardLine))
             { g.FillPath(fill, path); g.DrawPath(line, path); }
-            bool sharedAntigravity = AntigravityUsesSharedDoh;
+            bool sharedAntigravity = AntigravityCardInfoOnly;
             if (!sharedAntigravity) {
                 var check = new Rectangle(46, LowerY(771), 20, 20);
                 using (var path = RoundPath(check, 5))
@@ -1060,12 +1244,12 @@ namespace HbAi.XboxDns
             using (var muted = new SolidBrush(Muted))
             {
                 int textLeft = sharedAntigravity ? 46 : 76;
-                g.DrawString(sharedAntigravity ? "Antigravity через DoH" : "Доп. DNS Antigravity", title, ink, textLeft, LowerY(764));
+                g.DrawString(sharedAntigravity ? SharedAntigravityTitle : "Доп. DNS Antigravity", title, ink, textLeft, LowerY(764));
                 string note = sharedAntigravity ? SharedAntigravityNote : agLoading ? "Проверяем настройки…" : agStatus.Error != null ? "Не удалось проверить · нажмите для повтора" :
                     agStatus.RecoveryNeeded ? "Снимите галочку: завершить восстановление" : agStatus.External ? "Есть правила другой программы" : agStatus.Checked ?
                     (agStatus.Complete ? (agStatus.Provider == 1 ? "Comss: смените DNS" : "Включено · " + (agStatus.Provider >= 0 ? AntigravityDns.ProviderNames[agStatus.Provider] : "DNS")) +
                         (agStatus.Provider != AntigravityDns.ProviderForMainSet(dnsSet) ? " · смена после отключения" : "") : "Включено частично · снимите для отмены") :
-                    (cleanupDone ? "Старые правила удалены" : !Dns.IsAvailable(dnsSet) ? "Провайдер отключён · выберите другой DNS" : secureDns ? "С шифрованием — через общий DoH" : dnsSet == 0 ? "Comss для этой опции отключён" : dnsSet == 3 ? "Выберите DNS для нейросетей выше" : "Будет использован: " + Dns.Name[dnsSet]);
+                    (cleanupDone ? "Старые правила удалены" : secureDns ? (tlsDns ? "С шифрованием — через общий TLS" : "С шифрованием — через общий HTTPS") : PlainAntigravityNote);
                 bool showCleanup = agStatus.External;
                 using (var format = new StringFormat { FormatFlags = StringFormatFlags.NoWrap, Trimming = StringTrimming.EllipsisCharacter })
                     g.DrawString(string.IsNullOrEmpty(note)?"Может помочь при ошибке 400 в Antigravity":note, body, muted, new RectangleF(textLeft, LowerY(788), showCleanup ? W-242 : W-textLeft-44, 22), format);
@@ -1080,6 +1264,22 @@ namespace HbAi.XboxDns
                     g.DrawString("Удалить старые", f, b, rAgCleanup, format);
             }
 
+            }else if(localMode){
+                using(var path=RoundPath(rAgOption,16))using(var fill=new SolidBrush(CardBg))using(var line=new Pen(CardLine)){g.FillPath(fill,path);g.DrawPath(line,path);}
+                var check=new Rectangle(46,LowerY(770),20,20);
+                using(var path=RoundPath(check,5))using(var fill=new SolidBrush(localAntigravity?Accent:CardBg))using(var line=new Pen(ManagedDns.Running?Muted:Accent,1.4f)){g.FillPath(fill,path);g.DrawPath(line,path);}
+                if(localAntigravity)using(var line=new Pen(ContrastInk,2f))g.DrawLines(line,new[]{new Point(50,LowerY(780)),new Point(55,LowerY(785)),new Point(63,LowerY(775))});
+                using(var font=UiFont(fBold,9.5f))using(var ink=new SolidBrush(Ink))g.DrawString("Antigravity · отдельно",font,ink,76,LowerY(764));
+                using(var path=RoundPath(LocalAntigravityProviderButton,7))using(var fill=new SolidBrush(CardLine))g.FillPath(fill,path);
+                using(var font=UiFont(fMed,8.5f))using(var ink=new SolidBrush(ManagedDns.Running?Muted:Soft))using(var format=new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center})g.DrawString((LocalDnsRouting.Supports(localAntigravityProvider)?Dns.Name[localAntigravityProvider]:"Недоступен")+" ›",font,ink,LocalAntigravityProviderButton,format);
+                using(var font=UiFont(fMed,8f))using(var ink=new SolidBrush(Muted))g.DrawString(localAntigravity?"DoH для двух API-доменов · доступ не проверен":"Отдельный маршрут выключен",font,ink,76,LowerY(789));
+            }else{
+                using(var path=RoundPath(rAgOption,16))using(var fill=new SolidBrush(CardBg))using(var border=new Pen(CardLine)){g.FillPath(fill,path);g.DrawPath(border,path);}
+                using(var title=UiFont(fBold,10f))using(var body=UiFont(fMed,8.5f))using(var ink=new SolidBrush(Ink))using(var muted=new SolidBrush(Muted)){
+                    g.DrawString(localMode?"Локальный DNS · совместимость":"DNS-туннель · beta",title,ink,46,LowerY(764));
+                    g.DrawString(localMode?"При выходе прежние DNS восстанавливаются":"Не VPN · внешний IP не меняется · DNS всего ПК",body,muted,46,LowerY(788));
+                }
+            }
             // подвал
             using (var fb = UiFont(fHead, 13f))
             using (var bb = new SolidBrush(Accent))
@@ -1202,23 +1402,21 @@ namespace HbAi.XboxDns
             if (rSettings.Contains(e.Location)) { ShowSettings(); return; }
             if (rVersion.Contains(e.Location)) { ShowUpdates(); return; }
             if (initializing) return;
-            if (rSecureOption.Contains(e.Location)) {
-                if (EncryptedDns.Templates[dnsSet] == null) return;
-                if (busy) return;
-                if (Dns.EncryptedOnly(dnsSet)) { ShowMessage("DNS-AI работает только через зашифрованный DNS. Шифрование для него обязательно.", "DNS-AI", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-                if (!secureDns && EncryptedDns.Templates[dnsSet] == null) { ShowMessage("Выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS. Для остальных провайдеров параметры системного DoH пока не подтверждены.", "Зашифрованный DNS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-                if (active) Apply(true, null, false, !secureDns); else { secureDns = !secureDns; Invalidate(); }
-                return;
+            if(ConnectionProtocolButton.Contains(e.Location)){ShowConnectionProtocolMenu();return;}
+            if(ConnectionModeButton.Contains(e.Location)){ShowConnectionMenu();return;}
+            if(localMode&&rAgOption.Contains(e.Location)){
+                if(LocalAntigravityProviderButton.Contains(e.Location)){var choices=LocalDnsRouting.Providers;if(choices.Length>0)SelectLocalAntigravity(localAntigravity,choices[(Array.IndexOf(choices,localAntigravityProvider)+1)%choices.Length]);}
+                else SelectLocalAntigravity(!localAntigravity,localAntigravityProvider);return;
             }
             if (providerPrevious.Contains(e.Location)) { ScrollProviderPage(-1); return; }
             if (providerNext.Contains(e.Location)) { ScrollProviderPage(1); return; }
-            if (DnsTestButton.Contains(e.Location)) { ShowDnsDiagnostics(); return; }
-            if (rAgCleanup.Contains(e.Location) && agStatus.External) {
+            if (DnsTestButton.Contains(e.Location)) { if(googleMode&&resolverResult==null)CheckGoogleServices();else ShowDnsDiagnostics(); return; }
+            if (rAgCleanup.Contains(e.Location) && agStatus.External&&!ManagedMode) {
                 if (busy || agLoading) return;
                 RemoveOldAntigravity();
                 return;
             }
-            if (rAgOption.Contains(e.Location)) { ToggleAntigravity(); return; }
+            if (rAgOption.Contains(e.Location)) { if(!ManagedMode&&!ManagedDns.Running)ToggleAntigravity(); return; }
             if (rGroup.Contains(e.Location)) { Open("https://t.me/TotalC0de"); return; }
             if (rSite.Contains(e.Location)) { Open(Dns.Url[dnsSet]); return; }
             if (rBrand.Contains(e.Location)) { Open("https://t.me/TotalC0de"); return; }
@@ -1238,10 +1436,10 @@ namespace HbAi.XboxDns
             bool overPower = dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0;
             if (powerHovered != overPower) { powerHovered = overPower; Invalidate(rToggleGlow()); }
             bool overTheme=rTheme.Contains(e.Location);if(themeHovered!=overTheme){themeHovered=overTheme;Invalidate();}
-            bool hand = rSettings.Contains(e.Location) || rVersion.Contains(e.Location) || (rSecureOption.Contains(e.Location) && EncryptedDns.Templates[dnsSet] != null) || (rAgOption.Contains(e.Location) && !AntigravityUsesSharedDoh) || rTheme.Contains(e.Location) || rClose.Contains(e.Location) || rGroup.Contains(e.Location) || rSite.Contains(e.Location) || rBrand.Contains(e.Location) || ProviderBar.Contains(e.Location) || DnsTestButton.Contains(e.Location)
+            bool hand = rSettings.Contains(e.Location) || rVersion.Contains(e.Location) || (ConnectionModeButton.Contains(e.Location)||ConnectionProtocolButton.Contains(e.Location)) || (rAgOption.Contains(e.Location) && (localMode||!AntigravityCardInfoOnly)) || rTheme.Contains(e.Location) || rClose.Contains(e.Location) || rGroup.Contains(e.Location) || rSite.Contains(e.Location) || rBrand.Contains(e.Location) || ProviderBar.Contains(e.Location) || DnsTestButton.Contains(e.Location)
                         || dx * dx + dy * dy <= rToggle.Width * rToggle.Width / 4.0;
             Cursor = hand && !busy ? Cursors.Hand : Cursors.Default;
-            string tip = rSettings.Contains(e.Location)?"Настройки":providerPrevious.Contains(e.Location)?"Предыдущие 3 варианта":providerNext.Contains(e.Location)?"Следующие 3 варианта":rVersion.Contains(e.Location)?(availableUpdate==null?"Проверить обновления":"Доступна новая версия "+availableUpdate.Version):rTheme.Contains(e.Location) ? (darkTheme ? "Светлая тема" : "Тёмная тема") : null;
+            string tip = localMode&&rAgOption.Contains(e.Location)?(ManagedDns.Running?"Для смены отдельного маршрута сначала выключите локальный DNS":"Галочка включает отдельный DoH для API Antigravity; справа выбирается его провайдер. Ошибка 400 не проверяется DNS-запросом."):ConnectionProtocolButton.Contains(e.Location)?(ConnectionChangeLocked?"Сначала выключите DNS для смены шифрования":"Шифрование: "+ConnectionUi.ProtocolName(Transport)+". Нажмите для выбора HTTPS, TLS или обычного DNS."):ConnectionModeButton.Contains(e.Location) ? (ConnectionChangeLocked?"Для смены способа сначала выключите DNS":ConnectionHint+". Нажмите для выбора способа подключения.") : rSettings.Contains(e.Location)?"Настройки":providerPrevious.Contains(e.Location)?"Предыдущие 3 варианта":providerNext.Contains(e.Location)?"Следующие 3 варианта":rVersion.Contains(e.Location)?(availableUpdate==null?"Проверить обновления":"Доступна новая версия "+availableUpdate.Version):rTheme.Contains(e.Location) ? (darkTheme ? "Светлая тема" : "Тёмная тема") : null;
             if (themeTip.GetToolTip(this) != tip) themeTip.SetToolTip(this, tip);
             if (e.Button == MouseButtons.Left && !hand)
                 Location = new Point(Location.X + (int)Math.Round((e.X - dragFrom.X) * uiScale),
@@ -1264,7 +1462,7 @@ namespace HbAi.XboxDns
             if (allowDismiss) dialog.AddBrowserControls(BrowserCatalog.Find(), browser => RestartSelectedBrowser(dialog, browser));
             if (buttons == MessageBoxButtons.OK)
                 dialog.AddSupportControls((eventTitle, eventMessage) => DiagnosticReport.Create(eventTitle, eventMessage,
-                    "Выбранный DNS: " + Dns.Name[dnsSet] + "\nDoH selected: " + secureDns + "; encrypted-only: " + Dns.EncryptedOnly(dnsSet) +
+                    "Выбранный DNS: " + Dns.Name[dnsSet] + "\nПротокол: " + Transport + "; encrypted-only: " + Dns.EncryptedOnly(dnsSet) +
                     "\nОбщий DNS active: " + active + "; confirmed: " + dnsConfirmed + "; backup: " + hasBackup +
                     "\nAntigravity checked: " + agStatus.Checked + "; complete: " + agStatus.Complete + "; provider: " + agStatus.Provider + "; external: " + agStatus.External),
                     (icon == MessageBoxIcon.Warning || icon == MessageBoxIcon.Error) && DiagnosticReport.ShouldOffer(title, message));
@@ -1331,7 +1529,7 @@ namespace HbAi.XboxDns
         {
             if (probing) return;
             if (!Dns.IsAvailable(dnsSet)) { probeLabels[dnsSet] = "Провайдер отключён · выберите другой DNS"; Invalidate(); return; }
-            if (secureDns || Dns.EncryptedOnly(dnsSet)) { probeLabels = Enumerable.Repeat("Режим DoH · тест через HTTPS", Dns.Name.Length).ToArray(); Invalidate(); return; }
+            if (secureDns || Dns.EncryptedOnly(dnsSet)) { probeLabels = Enumerable.Repeat((tlsDns ? "Режим TLS · тест через TLS" : "Режим HTTPS · тест через HTTPS"), Dns.Name.Length).ToArray(); Invalidate(); return; }
             if (!networkAvailable) { probeLabels = Enumerable.Repeat("Нет сетевого подключения", Dns.Name.Length).ToArray(); Invalidate(); return; }
             if (liveVpn.NeedsAttention)
             {
@@ -1365,48 +1563,64 @@ namespace HbAi.XboxDns
         }
         void ShowDnsDiagnostics()
         {
-            using (var dialog = CreateDialog("Выберите DNS и нажмите «Проверить».\n\nПроверим основной и резервный серверы, время ответа и домены сервисов. Результаты появятся здесь.",
-                "Тест DNS", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1))
+            using (var cancellation=new CancellationTokenSource())
+            using (var dialog = CreateDialog("Выберите DNS и тип проверки. Проверяется доступность сервера; вход в аккаунт и ответ модели не проверяются.",
+                "DNS и доступность", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1,
+                Math.Min(uiScale,(Screen.FromControl(this).WorkingArea.Height-32f)/520f)))
             {
                 var choices=Dns.AvailableProviders;int selected=Array.IndexOf(choices,dnsSet);
-                dialog.AddDnsTestControls(choices.Select(p=>Dns.Name[p]).ToArray(),Math.Max(0,selected), index => RunDnsTest(dialog, choices[index]));
+                dialog.AddDnsTestControls(choices.Select(p=>Dns.Name[p]).ToArray(),Math.Max(0,selected), index => RunDnsTest(dialog, choices[index],cancellation.Token));
+                dialog.AddServiceTestControls(defaultGoal>=0&&defaultGoal<4?defaultGoal:0);
+                if(resolverResult!=null&&ResolverResultCurrent){dialog.SelectResolverTest();ShowResolverResult(dialog,resolverResult);}
+                dialog.SetPrimaryText("Закрыть");
+                dialog.FormClosed+=(s,e)=>cancellation.Cancel();
                 dialog.ShowDialog(this);
             }
         }
         void ShowAutoDns(bool startImmediately=false)
         {
-            if (busy || initializing) return;
+            if (busy || initializing || googleMode || (localMode&&(active||ManagedDns.Running))) return;
+            bool localSearch=localMode;
+            string connectionDiagnostic=localSearch?"Connection=LocalResolver; encrypted queries only; activation=local worker":"Connection=Windows";
+            string localNote=localSearch?"\n\nСпособ подключения 2: DNS будет запущен через приложение с шифрованием. Программа должна оставаться открытой.":"";
+            if(localSearch&&localAntigravity)localNote+="\nОтдельный Antigravity сохраняет провайдера "+Dns.Name[localAntigravityProvider]+"; Авто подбирает основной DNS.";
             AutoDnsResult chosen = null; int chosenGoal = -1; bool running = false;
             using (var cancellation = new CancellationTokenSource())
             using (var dialog = CreateDialog("Выберите сервис и нажмите «Подобрать DNS».",
-                "Авто-подключение · beta", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, uiScale))
+                "Авто-подключение · beta", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1,
+                Math.Min(uiScale,(Screen.FromControl(this).WorkingArea.Height-32f)/640f)))
             {
                 var token = cancellation.Token;
                 dialog.SetPrimaryText("Закрыть");
                 dialog.FormClosed += (s, e) => cancellation.Cancel();
                 dialog.AddAutoDnsControls(AutoDns.Goals.Select(g => g.Name).ToArray(), startImmediately&&UseDefaultGoal?defaultGoal:autoGoal >= 0 ? autoGoal : defaultGoal>=0?defaultGoal:0, goal => {
                     if (running) return;
+                    if(localSearch&&LocalAutoHasSeparateTarget(goal)){
+                        chosen=null;chosenGoal=-1;
+                        dialog.ShowAutoDnsResult("Antigravity использует отдельный DNS","Для него закреплён "+Dns.Name[localAntigravityProvider]+". Измените провайдера в карточке Antigravity или выключите отдельный маршрут, чтобы подбирать основной DNS для Antigravity.","Для других сервисов Авто подбирает основной DNS. Закреплённый отдельный маршрут не меняется.");
+                        dialog.SetDiagnosticDetails(connectionDiagnostic+"; goal=Antigravity; separate route provider="+Dns.Name[localAntigravityProvider]+"; search=NotStarted; no DNS changes",false);return;
+                    }
                     DohHttp2.ResetAddressHealth();
                     chosen = null; chosenGoal = -1;
                     dialog.SetPrimaryText("Отмена");
                     running = true;
-                    bool encrypted = secureDns;
+                    bool encrypted = localSearch||secureDns; bool tls = tlsDns;
                     dialog.ShowAutoDnsStatus("Проверяем сеть и подходящие DNS…", "Подбираем для " + AutoDns.Goals[goal].Name, true, false);
                     ThreadPool.QueueUserWorkItem(_ => {
                         AutoDnsResult[] results = null; string failure = null, failureDetail=null;
                         try {
                             if (!NetworkCheck.HasConnection()) throw new IOException(NetworkCheck.OfflineMessage);
                             if (VpnCheck.Scan().NeedsAttention) throw new IOException("Отключите VPN и повторите подбор.");
-                            if (AutoDns.Candidates(goal, encrypted).Length == 0) throw new IOException("Для этой цели нет DNS с выбранным шифрованием. Снимите галочку DoH для обычного DNS или выберите другую цель.");
-                            int completed=0,total=AutoDns.Candidates(goal,encrypted).Length;
-                            results = AutoDns.Search(goal, encrypted, new AutoDnsProbe(), token, result => {
+                            if (AutoDns.Candidates(goal, encrypted, tls).Length == 0) throw new IOException("Для этой цели нет DNS с выбранным шифрованием. Выберите другую цель или измените шифрование в настройках.");
+                            int completed=0,total=AutoDns.Candidates(goal,encrypted,tls).Length;
+                            results = AutoDns.Search(goal, encrypted, new AutoDnsProbe(tls), token, result => {
                                 int done=Interlocked.Increment(ref completed);
                                 if(token.IsCancellationRequested||dialog.IsDisposed||IsDisposed)return;
                                 try {BeginInvoke((Action)(()=> {
                                     if(!token.IsCancellationRequested&&!dialog.IsDisposed&&running)
                                         dialog.ShowAutoDnsStatus("Проверено "+done+" из "+total+" вариантов.\nНастройки пока не меняем.","Подбираем DNS",true,false);
                                 }));}catch(InvalidOperationException){}
-                            });
+                            }, null, tls);
                             token.ThrowIfCancellationRequested();
                             if (!NetworkCheck.HasConnection()) throw new IOException(NetworkCheck.OfflineMessage);
                             if (VpnCheck.Scan().NeedsAttention) throw new IOException("Во время проверки обнаружен VPN. Отключите VPN и повторите подбор.");
@@ -1420,15 +1634,15 @@ namespace HbAi.XboxDns
                             if (failure != null) {
                                 string hint=failure.Contains("VPN")?"Отключите VPN и повторите подбор.":failure==NetworkCheck.OfflineMessage?"Подключитесь к Wi-Fi или Ethernet.":"Повторите подбор или выберите DNS вручную.";
                                 dialog.ShowAutoDnsResult("Не удалось завершить подбор",hint,failure);
-                                dialog.SetDiagnosticDetails("Goal="+AutoDns.Goals[goal].Name+"; DoH="+encrypted+"\n"+failureDetail+(results==null?"":"\n"+AutoDns.Diagnostic(goal,results)),DiagnosticReport.ShouldOffer("Авто",failure));return;
+                                dialog.SetDiagnosticDetails(connectionDiagnostic+"\nGoal="+AutoDns.Goals[goal].Name+"; DoH="+encrypted+"\n"+failureDetail+(results==null?"":"\n"+AutoDns.Diagnostic(goal,results)),DiagnosticReport.ShouldOffer("Авто",failure));return;
                             }
                             var best = AutoDns.Best(results);
-                            string report = AutoDns.Report(goal, results);
-                            if (best == null) { dialog.ShowAutoDnsResult("Нет подходящего варианта","Попробуйте позже или выберите DNS вручную.\nНастройки не изменены.",report); dialog.SetDiagnosticDetails(AutoDns.Diagnostic(goal,results),true); return; }
+                            string report = AutoDns.Report(goal, results)+localNote;
+                            if (best == null) { dialog.ShowAutoDnsResult("Нет подходящего варианта","Попробуйте позже или выберите DNS вручную.\nНастройки не изменены.",report); dialog.SetDiagnosticDetails(connectionDiagnostic+"\n"+AutoDns.Diagnostic(goal,results),true); return; }
                             dialog.ShowAutoDnsResult(Dns.Name[best.Provider]+" для "+AutoDns.Goals[goal].Name,
-                                best.NeedsBrowser?"":"Сервер доступен.\nМожно подключить выбранный DNS.",
+                                best.Availability!=null?best.Summary:best.NeedsBrowser?"Требуется проверка в браузере.":"Сервер доступен.\nМожно подключить выбранный DNS.",
                                 report,"Подключить "+Dns.Name[best.Provider]);
-                            dialog.SetDiagnosticDetails(AutoDns.Diagnostic(goal,results),results.Any(r=>!r.Ok));
+                            dialog.SetDiagnosticDetails(connectionDiagnostic+"\n"+AutoDns.Diagnostic(goal,results),false);
                             // One review of the concrete choice before the existing elevation/apply flow.
                             chosen = best; chosenGoal = goal;
                             if(startImmediately){dialog.DialogResult=DialogResult.OK;dialog.Close();}
@@ -1441,13 +1655,77 @@ namespace HbAi.XboxDns
                 if(startImmediately)dialog.Shown+=(s,e)=>dialog.BeginInvoke((Action)(()=>dialog.StartAutoDnsSearch()));
                 if (dialog.ShowDialog(this) != DialogResult.OK || chosen == null || running) return;
             }
-            Apply(true, chosen.Provider, false, chosen.Encrypted, chosenGoal);
+            if(localSearch){StartLocalAuto(chosen,chosenGoal);return;}
+            Apply(true, chosen.Provider, false, chosen.Encrypted, chosenGoal,chosen.Encrypted?(chosen.Tls?DnsTransport.Tls:DnsTransport.Https):DnsTransport.Plain);
         }
 
-        void RunDnsTest(StyledDialog dialog, int provider)
+        void CancelResolverCheck()
         {
-            bool encrypted = secureDns || Dns.EncryptedOnly(provider);
-            if (encrypted && EncryptedDns.Templates[provider] == null) { dialog.ShowDnsTestStatus("Для этого провайдера HTTPS-тест пока недоступен. Выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS. Обычные DNS-запросы не отправлялись.", "Нет параметров DoH", false, true); return; }
+            resolverRevision++;var previous=resolverCancel;resolverCancel=null;
+            if(previous!=null)try{previous.Cancel();}catch(ObjectDisposedException){}
+            resolverChecking=false;resolverResult=null;resolverProvider=-1;resolverStamp=null;
+        }
+        void StartResolverCheck()
+        {
+            CancelResolverCheck();
+            // The alternate constructor is for deterministic UI tests: no external requests.
+            if(!profilePreferences||!autoResolverCheck||!active||busy||!IsHandleCreated)return;
+            int revision=resolverRevision,provider=dnsSet;var protocol=Transport;
+            resolverProvider=provider;resolverTransport=protocol;resolverGoogle=googleMode;resolverLocal=localMode;resolverChecking=true;
+            try{resolverStamp=new MangoResolverCheckIo().Stamp();}catch(Exception){}
+            var lifetime=CancellationTokenSource.CreateLinkedTokenSource(autoLifetime.Token);resolverCancel=lifetime;lifetime.CancelAfter(35000);Invalidate();
+            ThreadPool.QueueUserWorkItem(_=>{
+                ResolverCheckResult result;
+                try{result=ObserveResolvers(provider,protocol,lifetime.Token);}
+                catch(OperationCanceledException){result=new ResolverCheckResult{Provider=Dns.Name[provider],Protocol=protocol.ToString(),Detail="Observer deadline reached or operation cancelled"};}
+                catch(Exception problem){result=new ResolverCheckResult{Provider=Dns.Name[provider],Protocol=protocol.ToString(),Detail="Observer failure: "+problem.GetType().Name};}
+                finally{lifetime.Dispose();}
+                if(IsDisposed||Disposing)return;
+                try{BeginInvoke((Action)(()=>{
+                    if(revision!=resolverRevision||!ResolverResultCurrent)return;
+                    resolverCancel=null;resolverChecking=false;resolverResult=result;
+                    DiagnosticReport.Record("Фактический DNS",result.Report+"\n"+result.Detail);Invalidate();
+                }));}catch(InvalidOperationException){}
+            });
+        }
+        static ResolverCheckResult ObserveResolvers(int provider,DnsTransport protocol,CancellationToken cancel)
+        {
+            var result=ResolverCheck.Run(provider,protocol,new MangoResolverCheckIo(),cancel);
+            var vpn=VpnCheck.Scan();result.Detail+="\n"+vpn.Label+"\n"+vpn.Details;return result;
+        }
+        static void ShowResolverResult(StyledDialog dialog,ResolverCheckResult result)
+        {
+            dialog.ShowDnsTestStatus(result.Report,"Фактический DNS Windows",false,result.Comparison!=ResolverComparison.Shared,result.Summary+"\nСистемных узлов: "+result.SystemNodes.Length+" · контрольных: "+result.ProviderNodes.Length+"\nDoH браузера проверяется отдельно.");
+            dialog.SetDiagnosticDetails(result.Detail,false);
+        }
+        void RunResolverTest(StyledDialog dialog,int provider,CancellationToken cancel)
+        {
+            if(resolverChecking)CancelResolverCheck();
+            var protocol=(secureDns||Dns.EncryptedOnly(provider))?(tlsDns?DnsTransport.Tls:DnsTransport.Https):DnsTransport.Plain;
+            dialog.ShowDnsTestStatus("Наблюдатель MangoProxy проверяет уникальные тестовые имена. Сравниваем системный путь и выбранный DNS. Настройки не меняются.","Проверяем фактический DNS…",true,false);
+            int revision=resolverRevision;
+            ThreadPool.QueueUserWorkItem(_=>{
+                ResolverCheckResult result;
+                using(var lifetime=CancellationTokenSource.CreateLinkedTokenSource(cancel,autoLifetime.Token)){
+                    lifetime.CancelAfter(35000);
+                    try{result=ObserveResolvers(provider,protocol,lifetime.Token);}
+                    catch(OperationCanceledException){if(cancel.IsCancellationRequested||autoLifetime.IsCancellationRequested)return;result=new ResolverCheckResult{Provider=Dns.Name[provider],Protocol=protocol.ToString(),Detail="Observer deadline reached"};}
+                    catch(Exception problem){result=new ResolverCheckResult{Provider=Dns.Name[provider],Protocol=protocol.ToString(),Detail="Observer failure: "+problem.GetType().Name};}
+                }
+                if(cancel.IsCancellationRequested||dialog.IsDisposed||IsDisposed)return;
+                try{BeginInvoke((Action)(()=>{
+                    if(cancel.IsCancellationRequested||dialog.IsDisposed||IsDisposed)return;
+                    if(revision!=resolverRevision){dialog.ShowDnsTestStatus("Настройки подключения изменились. Повторите проверку.","Результат устарел",false,true);return;}
+                    DiagnosticReport.Record("Фактический DNS · вручную",result.Report+"\n"+result.Detail);ShowResolverResult(dialog,result);
+                }));}catch(InvalidOperationException){}
+            });
+        }
+        void RunDnsTest(StyledDialog dialog, int provider, CancellationToken cancel)
+        {
+            if(dialog.TestService==ResolverCheck.ServiceIndex){RunResolverTest(dialog,provider,cancel);return;}
+            bool encrypted = secureDns || Dns.EncryptedOnly(provider); bool tls = encrypted && tlsDns;
+            int service=dialog.TestService;
+            if (encrypted && (tls ? !DotDns.Available(provider) : EncryptedDns.Templates[provider] == null)) { dialog.ShowDnsTestStatus("Для этого провайдера HTTPS-тест пока недоступен. Выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS. Обычные DNS-запросы не отправлялись.", "Нет параметров DoH", false, true); return; }
             if (!NetworkCheck.HasConnection()) { dialog.ShowDnsTestStatus(NetworkCheck.OfflineMessage, "Нет подключения", false, true); return; }
             var vpn = VpnCheck.Scan();
             if (vpn.NeedsAttention)
@@ -1455,24 +1733,31 @@ namespace HbAi.XboxDns
                 dialog.ShowDnsTestStatus("Отключите VPN и нажмите «Проверить» ещё раз. VPN может перехватывать запросы к любому серверу.\n\n" + vpn.Details,
                     "Сначала отключите VPN", false, true); return;
             }
-            dialog.ShowDnsTestStatus("Проверяем серверы " + Dns.Name[provider] + " и домены сервисов…", "Проверяем " + Dns.Name[provider], true, false);
+            dialog.ShowDnsTestStatus(service>=0?"Проверяем DNS, TLS и ответы "+ServiceAvailability.Targets[service].Name+"…":"Проверяем серверы " + Dns.Name[provider] + " и домены сервисов…", "Проверяем " + Dns.Name[provider], true, false);
             DohHttp2.ResetAddressHealth();
             ThreadPool.QueueUserWorkItem(_ => {
-                DnsProbeResult[] results = null; string failure = null;
+                DnsProbeResult[] results = null; ServiceAvailabilityResult availability=null; string failure = null;
                 try {
-                    results = encrypted ? DnsProbe.HostsForProvider(provider).Select(host => DnsProbe.CheckHttps(EncryptedDns.Templates[provider], host)).ToArray() : DnsProbe.CheckProvider(provider);
+                    if(service>=0)availability=ServiceAvailability.Check(service,provider,encrypted,new ServiceAvailabilityProbe(tls),cancel);
+                    else results = encrypted ? DnsProbe.HostsForProvider(provider).Select(host => {cancel.ThrowIfCancellationRequested();return tls ? DotDns.Check(provider,host) : DnsProbe.CheckHttps(EncryptedDns.Templates[provider], host);}).ToArray() : DnsProbe.CheckProvider(provider);
                 }
+                catch(OperationCanceledException){return;}
                 catch (Exception ex) { failure = ex.Message; }
-                if (IsDisposed || Disposing) return;
+                if (cancel.IsCancellationRequested || IsDisposed || Disposing) return;
                 try { BeginInvoke((Action)(() => {
-                    if (dialog.IsDisposed || dialog.Disposing) return;
+                    if (cancel.IsCancellationRequested || dialog.IsDisposed || dialog.Disposing) return;
                     if (failure != null) { dialog.ShowDnsTestStatus(failure, "Не удалось проверить", false, true); return; }
                     if (VpnCheck.Scan().NeedsAttention) { dialog.ShowDnsTestStatus("Во время теста обнаружен VPN. Отключите его и повторите проверку.", "Результат недостоверен", false, true); return; }
+                    if(availability!=null) {
+                        dialog.ShowDnsTestStatus(availability.Report,availability.Name+" · без ключа",false,availability.Attention,availability.Summary);
+                        dialog.SetDiagnosticDetails("Transport="+(encrypted?(tls?"TLS":"HTTPS"):"DNS")+"\n"+availability.Diagnostic,availability.OfferReport);
+                        return;
+                    }
                     probeResults[provider] = results;
                     int count = results.Count(r => r.Host == "example.com" && r.Ok);
-                    probeLabels[provider] = encrypted ? "DoH: " + results.Count(r => r.Ok) + "/" + results.Length + " ответов" : "Ответы DNS: " + count + "/"+Dns.V4[provider].Length;
-                    string report = encrypted ? "HTTPS: " + EncryptedDns.Templates[provider] + "\n\n" + string.Join("\n", results.Select(r => r.Host + " — " + (r.Ok ? r.Milliseconds + " мс" : r.Error))) + "\n\nЭто проверка сервера через HTTPS, не DNS браузера. Системные настройки не изменялись." : DnsProbe.Report(provider, results);
-                    dialog.ShowDnsTestStatus(report, (encrypted ? "HTTPS-ответы: " : "Прямые ответы: ") + results.Count(r => r.Ok) + "/" + results.Length, false, results.Any(r => !r.Ok), (results.Any(r=>!r.Ok)?"Часть запросов завершилась с ошибкой.":"Серверы ответили на все запросы.")+"\nНастройки DNS не изменялись. Ответ DNS не подтверждает доступ к сервису.");
+                    probeLabels[provider] = encrypted ? (tls ? "DoT: " : "DoH: ") + results.Count(r => r.Ok) + "/" + results.Length + " ответов" : "Ответы DNS: " + count + "/"+Dns.V4[provider].Length;
+                    string report = encrypted ? (tls ? "TLS: " + DotDns.Host(provider) + ":853" : "HTTPS: " + EncryptedDns.Templates[provider]) + "\n\n" + string.Join("\n", results.Select(r => r.Host + " — " + (r.Ok ? r.Milliseconds + " мс" : r.Error))) + "\n\nЭто проверка сервера по выбранному протоколу, не DNS браузера. Системные настройки не изменялись." : DnsProbe.Report(provider, results);
+                    dialog.ShowDnsTestStatus(report, (encrypted ? (tls ? "TLS-ответы: " : "HTTPS-ответы: ") : "Прямые ответы: ") + results.Count(r => r.Ok) + "/" + results.Length, false, results.Any(r => !r.Ok), (results.Any(r=>!r.Ok)?"Часть запросов завершилась с ошибкой.":"Серверы ответили на все запросы.")+"\nНастройки DNS не изменялись. Ответ DNS не подтверждает доступ к сервису.");
                     dialog.SetDiagnosticDetails(string.Join("\n\n",results.Select(r=>r.Server+"; host="+r.Host+"; elapsed="+r.Milliseconds+" ms; error="+r.Error+"\n"+r.Detail)),results.Any(r=>!r.Ok));
                     Invalidate();
                 })); } catch (InvalidOperationException) { }
@@ -1481,21 +1766,26 @@ namespace HbAi.XboxDns
         void PickSet(int k)
         {
             if(!Dns.IsAvailable(k))return;
+            if(ManagedMode){if(busy||ManagedDns.Running||!(localMode?TunnelSession.EncryptedProvider(k):TunnelSession.GoogleProvider(k)))return;manualSelection=true;autoGoal=-1;dnsSet=k;secureDns=true;tlsDns=!localMode&&k!=6&&DotDns.Available(k);SaveGooglePreference();EnsureProviderVisible();Invalidate();return;}
             if (busy || (k == dnsSet && autoGoal < 0&&!UseDefaultGoal)) return;
             manualSelection=true;
-            if (active) Apply(true, k, encrypted: EncryptedDns.Templates[k] != null && secureDns || Dns.EncryptedOnly(k));
-            else { autoGoal = -1; dnsSet = k; if (Dns.EncryptedOnly(k)) secureDns = true; else if (EncryptedDns.Templates[k] == null) secureDns = false; EnsureProviderVisible(); Invalidate(); }
+            if (active) Apply(true, k, encrypted: EncryptedDns.Templates[k] != null && secureDns || Dns.EncryptedOnly(k), transport: tlsDns && DotDns.Available(k) ? DnsTransport.Tls : secureDns || Dns.EncryptedOnly(k) ? DnsTransport.Https : DnsTransport.Plain);
+            else { autoGoal = -1; dnsSet = k; if (!DotDns.Available(k)) tlsDns = false; if (Dns.EncryptedOnly(k)) secureDns = true; else if (EncryptedDns.Templates[k] == null) secureDns = false; EnsureProviderVisible(); Invalidate(); }
         }
 
         void Toggle()
         {
+            if(localMode&&!active&&!ManagedDns.Running&&!busy&&(autoGoal>=0||UseDefaultGoal)){ShowAutoDns(true);return;}
+            if(ManagedMode){ToggleGoogleTunnel();return;}
             if (busy) return;
             if (!active && (autoGoal >= 0||UseDefaultGoal)) { ShowAutoDns(true); return; }
-            bool resetKnown = active && !hasBackup;
+            bool resetKnown;
+            try { resetKnown = active && Dns.NeedsKnownReset(); }
+            catch (Exception ex) { ShowMessage("Не удалось проверить резервные копии: " + ex.Message, "Ошибка отключения DNS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             if (resetKnown && ShowMessage(
-                "DNS сервиса уже задан, но копии прежних настроек нет.\n\nПерейти на автоматическое получение DNS? " +
+                "Для текущего подключения нет копии прежних DNS. Копии других адаптеров не восстанавливают его настройки.\n\nПерейти на автоматическое получение DNS? " +
                 "Изменятся только активные адаптеры, в которых все ручные DNS-адреса соответствующего семейства входят в список программы. " +
-                "Смешанные и сторонние адреса останутся без изменений.\n\nЭто не восстановит неизвестные прежние ручные настройки.",
+                "Смешанные и сторонние адреса останутся без изменений. Копии недоступных адаптеров сохранятся.\n\nЭто не восстановит неизвестные прежние ручные настройки.",
                 "Нет резервной копии DNS", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             Apply(!active, null, resetKnown);
@@ -1534,17 +1824,17 @@ namespace HbAi.XboxDns
         void ToggleAntigravity()
         {
             if (busy || agLoading) return;
-            if (AntigravityUsesSharedDoh) return;
+            if (AntigravityCardInfoOnly) return;
             bool enable = !agStatus.Checked;
             if (enable && secureDns) {
                 if (agStatus.External) RemoveOldAntigravity();
-                else ShowMessage(active ? "Antigravity использует общий DoH. Отдельная галочка DNS не нужна." : "Для шифрованного подключения Antigravity включите DNS большой кнопкой. Будет использован выбранный DoH без отдельных DNS-правил.", "Режим DoH", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                else ShowMessage(active ? "Antigravity использует общий зашифрованный DNS. Отдельная галочка DNS не нужна." : "Для шифрованного подключения Antigravity включите DNS большой кнопкой. Будет использован выбранный зашифрованный DNS без отдельных DNS-правил.", "Зашифрованный DNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             int provider = AntigravityDns.ProviderForMainSet(dnsSet);
             if (enable && agStatus.Error == null && provider < 0)
             {
-                ShowMessage(Dns.EncryptedOnly(dnsSet) ? "DNS-AI используется через общий DoH. Включите его большой кнопкой. Отдельные DNS-правила Antigravity для него не создаются." : dnsSet == 0 ? "Comss для доп. DNS Antigravity пока отключён. Выберите другой DNS выше. Общий DNS Comss остаётся доступен." : "Для Antigravity выберите выше MagicDNS или Bezmezhau. Xbox DNS предназначен для Xbox.",
+                ShowMessage(Dns.EncryptedOnly(dnsSet) ? Dns.Name[dnsSet]+" используется через общий зашифрованный DNS. Включите его большой кнопкой. Отдельные DNS-правила Antigravity для него не создаются." : dnsSet == 0 ? "Comss для доп. DNS Antigravity пока отключён. Выберите другой DNS выше. Общий DNS Comss остаётся доступен." : "У выбранного DNS не подтверждена поддержка отдельного маршрута Antigravity. Выберите MagicDNS, Bezmezhau или Malw DNS.",
                     "Выберите DNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -1594,12 +1884,15 @@ namespace HbAi.XboxDns
             });
         }
 
-        void Apply(bool turnOn, int? selectedSet = null, bool resetKnown = false, bool? encrypted = null, int? autoTarget = null)
+        void Apply(bool turnOn, int? selectedSet = null, bool resetKnown = false, bool? encrypted = null, int? autoTarget = null, DnsTransport? transport = null)
         {
+            if(ManagedMode||ManagedDns.Running)return;
             int requestedSet = selectedSet ?? dnsSet;
             if(turnOn&&!Dns.IsAvailable(requestedSet)){ShowMessage("Этот провайдер временно скрыт. Выберите другой DNS.","Провайдер недоступен",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
-            bool useEncrypted = (encrypted ?? secureDns) || Dns.EncryptedOnly(requestedSet);
-            if (turnOn && useEncrypted && EncryptedDns.Templates[requestedSet] == null) { ShowMessage("Для DoH выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS либо снимите галочку шифрования.", "DoH недоступен", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+            bool useTls = (transport ?? Transport) == DnsTransport.Tls;
+            bool useEncrypted = (encrypted ?? ((transport ?? Transport) != DnsTransport.Plain)) || Dns.EncryptedOnly(requestedSet);
+            useTls = useTls && useEncrypted;
+            if (turnOn && useEncrypted && (useTls ? !DotDns.Available(requestedSet) : EncryptedDns.Templates[requestedSet] == null)) { ShowMessage("У этого провайдера нет настроек выбранного протокола. Выберите другой способ подключения.", "Протокол недоступен", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
             bool keepAntigravity = false;
             if (turnOn)
             {
@@ -1616,7 +1909,7 @@ namespace HbAi.XboxDns
                         if (EncryptedDns.CanKeepAntigravity(NrptRegistryReader.Read(false), policies))
                         {
                             string preserved = policies.Any(EncryptedDns.IsWindowsUpdateException) ? "Отдельные правила Antigravity и Windows Update сохранят прежние DNS." : "Два домена Antigravity продолжат использовать прежние DNS.";
-                            using (var dialog = CreateDialog("Подключить DoH, сохранив настройки Antigravity?\n\n" + preserved + " Остальные запросы пойдут через DoH. IPv6 временно приостановится.", "DoH и Antigravity", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2))
+                            using (var dialog = CreateDialog("Подключить зашифрованный DNS, сохранив настройки Antigravity?\n\n" + preserved + " Остальные запросы пойдут через выбранный зашифрованный DNS. IPv6 временно приостановится.", "DoH и Antigravity", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2))
                             {
                                 dialog.SetPrimaryText("Подключить");
                                 if (dialog.ShowDialog(this) != DialogResult.Yes) return;
@@ -1628,8 +1921,8 @@ namespace HbAi.XboxDns
                     catch (Exception ex) { ShowMessage("Не удалось проверить DNS-правила: " + ex.Message, "Ошибка DNS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
                 }
             }
-            operationRevision++; busy = true; error = null; Invalidate();
-            DiagnosticReport.Record("Общий DNS", "enable=" + turnOn + "; provider=" + Dns.Name[requestedSet] + "; DoH=" + useEncrypted);
+            CancelResolverCheck();operationRevision++; busy = true; error = null; Invalidate();
+            DiagnosticReport.Record("Общий DNS", "enable=" + turnOn + "; provider=" + Dns.Name[requestedSet] + "; protocol=" + (useTls ? "TLS" : useEncrypted ? "HTTPS" : "DNS"));
             int set = selectedSet ?? dnsSet;
             dnsSet = set;
             ThreadPool.QueueUserWorkItem(_ =>
@@ -1637,15 +1930,15 @@ namespace HbAi.XboxDns
                 string err;string networkDiagnostic=null;
                 try {
                     DnsProbeResult encryptedProbe=null;
-                    if(turnOn&&useEncrypted&&NetworkCheck.HasConnection())encryptedProbe=DnsProbe.CheckHttps(EncryptedDns.Templates[set],"example.com");
+                    if(turnOn&&useEncrypted&&NetworkCheck.HasConnection())encryptedProbe=useTls ? DotDns.Check(set,"example.com") : DnsProbe.CheckHttps(EncryptedDns.Templates[set],"example.com");
                     if (turnOn && !NetworkCheck.HasConnection()) err = NetworkCheck.OfflineMessage;
                     else if (turnOn && useEncrypted && encryptedProbe!=null && !encryptedProbe.Ok) {
-                        err = "Сервер не ответил через HTTPS. Обычный DNS не использовался, настройки не изменены.";
-                        networkDiagnostic="DoH preflight; provider="+Dns.Name[set]+"; endpoint="+encryptedProbe.Server+"; host="+encryptedProbe.Host+"; elapsed="+encryptedProbe.Milliseconds+" ms\n"+encryptedProbe.Detail;
+                        err = "Сервер не ответил через " + (useTls ? "TLS" : "HTTPS") + ". Обычный DNS не использовался, настройки не изменены.";
+                        networkDiagnostic=(useTls?"DoT":"DoH")+" preflight; provider="+Dns.Name[set]+"; endpoint="+encryptedProbe.Server+"; host="+encryptedProbe.Host+"; elapsed="+encryptedProbe.Milliseconds+" ms\n"+encryptedProbe.Detail;
                     }
                     else if (turnOn && !useEncrypted && !DnsProbe.CheckAvailability(set).Any(r => r.Host == "example.com" && r.Ok))
                         err = NetworkCheck.HasConnection() ? "Сетевое подключение есть, но оба DNS-сервера не ответили. Возможны отсутствие интернета или блокировка запросов. Настройки не изменены. Подробнее — «Тест DNS»." : NetworkCheck.OfflineMessage;
-                    else err = turnOn ? (useEncrypted ? DnsElevation.Run(true, (keepAntigravity ? 300 : 200) + set) : Dns.Enable(set)) : resetKnown ? Dns.ResetKnown() : Dns.Disable();
+                    else err = turnOn ? (useEncrypted ? DnsElevation.Run(true, (useTls ? (keepAntigravity ? 500 : 400) : (keepAntigravity ? 300 : 200)) + set) : Dns.Enable(set)) : resetKnown ? Dns.ResetKnown() : Dns.Disable();
                 }
                 catch (Exception ex) { err = ex.Message; }
                 Thread.Sleep(600);
@@ -1659,7 +1952,7 @@ namespace HbAi.XboxDns
                 {
                     busy = false;
                     hasBackup = pending;
-                    if (turnOn && err == null) secureDns = useEncrypted;
+                    if (turnOn && err == null) { secureDns = useEncrypted; tlsDns = useTls; }
                     networkAvailable = connected;
                     dnsConfirmed = now >= 0;
                     active = now >= 0 || availableBackup;
@@ -1670,8 +1963,9 @@ namespace HbAi.XboxDns
                     Invalidate(); Update();
                     if (err != null && err.StartsWith("[DNS-DEFERRED]", StringComparison.Ordinal))
                     {
-                        error = "Копия недоступного адаптера сохранена";
-                        ShowMessage(err.Substring("[DNS-DEFERRED]".Length), "Восстановление отложено", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        error = now < 0 && !availableBackup ? null : "Копия недоступного адаптера сохранена";
+                        DiagnosticReport.Record("Отключение DNS", err);
+                        if (now >= 0 || availableBackup) ShowMessage(err.Substring("[DNS-DEFERRED]".Length), "Восстановление отложено", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     else if (err == NetworkCheck.OfflineMessage)
                     {
@@ -1686,8 +1980,7 @@ namespace HbAi.XboxDns
                         }
                         else ShowMessage( err, "Ошибка DNS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     }
-                    else if (turnOn)
-                        ShowDnsReminder();
+                    else if (turnOn){StartResolverCheck();ShowDnsReminder();}
                     Invalidate();
                 }));
             });
@@ -1699,6 +1992,8 @@ namespace HbAi.XboxDns
         [STAThread]
         static int Main(string[] args)
         {
+            DiagnosticReport.Record("Запуск","version="+MainForm.VersionLabel+"; mode="+(args.Length==0?"main":args[0].StartsWith("--dns-tunnel",StringComparison.Ordinal)?"tunnel-worker":"maintenance"));
+            AppDomain.CurrentDomain.UnhandledException+=(s,e)=>DiagnosticReport.Record("Необработанная ошибка",e.ExceptionObject.ToString());
             try { ProcessSecurity.Initialize(); }
             catch (Exception error)
             {
@@ -1707,6 +2002,10 @@ namespace HbAi.XboxDns
                 return 3;
             }
             if (args.Length == 1 && args[0] == "--install-update") return AppUpdate.Install();
+            if (args.Length == 1 && args[0] == "--dns-tunnel-ui") return DnsTunnelWindow.Run();
+            if (args.Length > 0 && args[0] == "--dns-local-worker") return LocalDnsWorker.Run(args);
+            if (args.Length > 0 && args[0] == "--dns-local-guard") return LocalDnsGuardian.Run(args);
+            if (args.Length > 0 && args[0] == "--dns-tunnel-worker") return DnsTunnel.Worker(args);
             if (args.Length > 0 && args[0] == "--prepare-uninstall") return UninstallCleanup.Handle(args);
             if (args.Length != 0) return DnsElevation.Handle(args, Dns.ExecuteDirect);
             Application.EnableVisualStyles();

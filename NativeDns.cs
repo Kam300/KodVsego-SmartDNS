@@ -64,7 +64,7 @@ namespace HbAi.XboxDns
                 var raw = key.GetValue("Backup") as string;
                 if (raw == null) throw new InvalidDataException("Неверный формат резервной копии DNS.");
                 var state = new JavaScriptSerializer().Deserialize<DnsBackup>(raw);
-                if (state == null || (state.Version != 1 && state.Version != 2) || state.Adapters == null)
+                if (state == null || (state.Version != 1 && state.Version != 2 && state.Version != 3) || state.Adapters == null)
                     throw new InvalidDataException("Неподдерживаемая резервная копия DNS.");
                 var records = state.Adapters.ToList();
                 Validate(records);
@@ -106,7 +106,7 @@ namespace HbAi.XboxDns
             }
         }
         internal static int SnapshotVersion(List<AdapterBackup> records)
-        { return records.Any(r => r.Ipv6Binding.HasValue || r.Families.Any(f => f.Doh != null && f.Doh.Length > 0)) ? 2 : 1; }
+        { return records.Any(r => r.Families.Any(f => f.Doh != null && f.Doh.Any(e => e.Kind == 2))) ? 3 : records.Any(r => r.Ipv6Binding.HasValue || r.Families.Any(f => f.Doh != null && f.Doh.Length > 0)) ? 2 : 1; }
     }
     sealed class NativeDnsSystem : IDnsSystem, IDnsBindingSystem
     {
@@ -194,12 +194,13 @@ namespace HbAi.XboxDns
         public void Set(Guid id, FamilyBackup settings)
         {
             ValidateFamily(settings);
+            DiagnosticReport.Record("Native DNS write","adapter="+id+"; family="+settings.Family+"; manual="+settings.Manual+"; servers="+string.Join(",",settings.Servers)+"; encrypted-metadata-captured="+settings.DohCaptured);
             if (settings.DohCaptured)
             {
                 EncryptedDns.Write(id, settings);
                 var verified = Read(id, settings.Family);
                 if (verified.Manual != settings.Manual || !verified.Servers.SequenceEqual(settings.Servers)) throw new IOException("Windows не подтвердила DNS-адреса.");
-                return;
+                DiagnosticReport.Record("Native DNS verified","adapter="+id+"; family="+settings.Family);return;
             }
             // An empty static server list restores automatic DNS for this family.
             var native = new Settings { Version = 1, Flags = 2UL | (settings.Family == "IPv6" ? 1UL : 0UL),
@@ -213,10 +214,12 @@ namespace HbAi.XboxDns
             var actual = Read(id, settings.Family);
             if (actual.Manual != settings.Manual || !actual.Servers.Select(IPAddress.Parse).SequenceEqual(settings.Servers.Select(IPAddress.Parse)))
                 throw new IOException("Windows не подтвердила настройки DNS: " + id + ", " + settings.Family);
+            DiagnosticReport.Record("Native DNS verified","adapter="+id+"; family="+settings.Family);
         }
         public void Flush()
         {
             if (!DnsFlushResolverCache()) throw new IOException("DNS изменён, но очистить кэш не удалось.");
+            DiagnosticReport.Record("DNS cache","flushed");
         }
     }
     sealed class DnsSettingsEngine
@@ -225,8 +228,9 @@ namespace HbAi.XboxDns
         readonly IDnsBackupStore store;
         internal readonly List<string> DeferredAdapters = new List<string>();
         internal DnsSettingsEngine(IDnsSystem system, IDnsBackupStore store) { this.system = system; this.store = store; }
-        internal void Change(bool enable, string[] servers, string dohTemplate = null)
+        internal void Change(bool enable, string[] servers, string dohTemplate = null, bool tls = false)
         {
+            DiagnosticReport.Record("DNS transaction","enable="+enable+"; servers="+string.Join(",",servers)+"; template="+DiagnosticReport.TemplateLabel(dohTemplate)+"; TLS="+tls);
             DeferredAdapters.Clear();
             system.EnsureSupported();
             var records = store.Load();
@@ -285,7 +289,7 @@ namespace HbAi.XboxDns
                             var selected = servers.Where(s => IPAddress.Parse(s).AddressFamily ==
                                 (family.Family == "IPv4" ? AddressFamily.InterNetwork : AddressFamily.InterNetworkV6)).ToArray();
                             if (selected.Length > 0) system.Set(adapter.Id, new FamilyBackup { Family = family.Family, Manual = true, Servers = selected,
-                                DohCaptured = family.DohCaptured || dohTemplate != null, Doh = dohTemplate == null ? new DohConfig[0] : EncryptedDns.Strict(selected.Length, dohTemplate) });
+                                DohCaptured = family.DohCaptured || dohTemplate != null, Doh = dohTemplate == null ? new DohConfig[0] : EncryptedDns.Strict(selected.Length, dohTemplate, tls) });
                             else if (family.Family == "IPv6")
                             {
                                 // Remove only the app's previous Xbox IPv6 DNS when moving to a v4-only provider.
@@ -308,47 +312,66 @@ namespace HbAi.XboxDns
         }
         internal void ResetKnown(string[] knownServers)
         {
+            DeferredAdapters.Clear();
             system.EnsureSupported();
             var existing = store.Load();
             RegistryDnsBackupStore.Validate(existing);
-            // A backup created since the UI check takes priority over automatic mode.
-            if (existing.Count > 0) { Restore(existing); system.Flush(); return; }
+            var records = UnbackedKnown(knownServers, existing);
+            if (records.Count == 0 && existing.Count == 0)
+                throw new InvalidOperationException("Не найдены ручные настройки только с DNS из списка программы. Проверьте DNS в настройках Windows; смешанные и сторонние адреса не изменены.");
+            // Keep every old backup and capture the uncovered adapters before any write.
+            // A backup for another GUID must not mask an active adapter without a copy.
+            if (records.Count > 0) store.Save(existing.Concat(records).ToList());
+            if (existing.Count > 0) Restore(existing, true, records);
+            var resetting = new HashSet<Guid>(records.Select(r => new Guid(r.Guid)));
+            var pending = store.Load().Where(r => !resetting.Contains(new Guid(r.Guid))).ToList();
+            try
+            {
+                foreach (var record in records)
+                    foreach (var family in record.Families)
+                        system.Set(new Guid(record.Guid), new FamilyBackup { Family = family.Family, Manual = false, Servers = new string[0],
+                            DohCaptured = family.DohCaptured, Doh = family.DohCaptured ? new DohConfig[0] : null });
+            }
+            catch (Exception applyError)
+            {
+                try { Restore(records, true, pending); }
+                catch (Exception restoreError) { throw new IOException(applyError.Message + "; восстановление не завершено: " + restoreError.Message); }
+                throw new IOException(applyError.Message + "; прежние настройки восстановлены.");
+            }
+            store.Save(pending);
+            system.Flush();
+        }
+        internal bool NeedsKnownReset(string[] knownServers)
+        {
+            var existing = store.Load(); RegistryDnsBackupStore.Validate(existing);
+            return UnbackedKnown(knownServers, existing).Count > 0;
+        }
+        List<AdapterBackup> UnbackedKnown(string[] knownServers, List<AdapterBackup> existing)
+        {
             var known = new HashSet<IPAddress>(knownServers.Select(IPAddress.Parse));
+            var covered = new HashSet<Guid>(existing.Select(r => new Guid(r.Guid)));
             var records = new List<AdapterBackup>();
             foreach (var adapter in system.Adapters(true))
             {
+                if (covered.Contains(adapter.Id)) continue;
                 var families = new List<FamilyBackup>();
                 foreach (string family in new[] { "IPv4", "IPv6" })
                 {
                     if (family == "IPv4" ? !adapter.V4 : !adapter.V6) continue;
                     var current = system.Read(adapter.Id, family);
-                    if (current.Manual && current.Servers.Length > 0 && current.Servers.All(s => known.Contains(IPAddress.Parse(s))))
+                    NativeDnsSystem.ValidateFamily(current);
+                    if (!current.ProfilePresent && current.Manual && current.Servers.Length > 0 && current.Servers.All(s => known.Contains(IPAddress.Parse(s))) &&
+                        (current.Doh == null || current.Doh.All(d => d.Template == null || (d.Kind == 2 ? ProviderCatalog.All.Any(p => p.dot == d.Template) : EncryptedDns.Templates.Contains(d.Template)))))
                         families.Add(current);
                 }
                 if (families.Count > 0) records.Add(new AdapterBackup { Guid = adapter.Id.ToString("B"), Families = families.ToArray() });
             }
-            if (records.Count == 0)
-                throw new InvalidOperationException("Не найдены ручные настройки только с DNS из списка программы. Проверьте DNS в настройках Windows; смешанные и сторонние адреса не изменены.");
-            store.Save(records);
-            try
-            {
-                foreach (var record in records)
-                    foreach (var family in record.Families)
-                        system.Set(new Guid(record.Guid), new FamilyBackup { Family = family.Family, Manual = false, Servers = new string[0] });
-            }
-            catch (Exception applyError)
-            {
-                try { Restore(records); }
-                catch (Exception restoreError) { throw new IOException(applyError.Message + "; восстановление не завершено: " + restoreError.Message); }
-                throw new IOException(applyError.Message + "; прежние настройки восстановлены.");
-            }
-            store.Save(new List<AdapterBackup>());
-            system.Flush();
+            return records;
         }
-        void Restore(List<AdapterBackup> records, bool deferUnavailable = false)
+        void Restore(List<AdapterBackup> records, bool deferUnavailable = false, IEnumerable<AdapterBackup> retained = null)
         {
             var available = system.Adapters(false);
-            var pending = new List<AdapterBackup>();
+            var pending = new List<AdapterBackup>(retained ?? Enumerable.Empty<AdapterBackup>());
             var errors = new List<string>();
             foreach (var record in records)
             {
@@ -380,7 +403,17 @@ namespace HbAi.XboxDns
             store.Save(pending);
             if (errors.Count > 0) throw new IOException(string.Join("; ", errors));
         }
-        internal static string Run(bool enable, string[] servers, bool resetKnown = false, string dohTemplate = null)
+        internal void ChangeVerified(string[] servers, string template, bool tls, Action verify)
+        {
+            Change(true, servers, template, tls);
+            try { verify(); }
+            catch (Exception failure) {
+                try { Change(false, new string[0]); }
+                catch (Exception rollback) { throw new IOException(failure.Message + "; восстановление не завершено: " + rollback.Message); }
+                throw new IOException(failure.Message + "; прежние настройки восстановлены.");
+            }
+        }
+        internal static string Run(bool enable, string[] servers, bool resetKnown = false, string dohTemplate = null, bool tls = false)
         {
             using (var mutex = new Mutex(false, @"Global\HbAi.SmartDns.Settings"))
             {
@@ -391,8 +424,28 @@ namespace HbAi.XboxDns
                     catch (AbandonedMutexException) { locked = true; }
                     if (!locked) return "Другая операция DNS ещё выполняется.";
                     var engine = new DnsSettingsEngine(new NativeDnsSystem(), new RegistryDnsBackupStore());
-                    if (resetKnown) engine.ResetKnown(servers);
-                    else engine.Change(enable, servers, dohTemplate);
+                    var policy = new DotPolicyTransaction(new WindowsDotPolicy());
+                    bool applied = false;
+                    try {
+                        if (tls) policy.Enable();
+                        if (resetKnown) engine.ResetKnown(servers);
+                        else if (enable) engine.ChangeVerified(servers, dohTemplate, tls, SystemDnsVerification.Verify);
+                        else if (new RegistryDnsBackupStore().Load().Count>0) engine.Change(false, servers);
+                        else if (!new WindowsDotPolicy().Backup().HasValue) engine.Change(false, servers);
+                        applied = true;
+                        if (!enable || !tls) policy.Restore();
+                    } catch (Exception operationError) {
+                        // Change already rolls back partial writes. After a successful apply,
+                        // a failed fresh system query must also restore the durable snapshot.
+                        if (applied && enable) {
+                            try { engine.Change(false, new string[0]); }
+                            catch (Exception restoreError) { throw new IOException(operationError.Message + "; восстановление не завершено: " + restoreError.Message); }
+                        }
+                        // Keep the global bit and its snapshot if a failed rollback might
+                        // still leave an adapter using TLS, including an unavailable adapter.
+                        if (!DotDns.InUse()) policy.Restore();
+                        throw;
+                    }
                     if (engine.DeferredAdapters.Count > 0) return "[DNS-DEFERRED]Доступные адаптеры восстановлены. Настройки недоступного адаптера сохранены. После его подключения нажмите выключение DNS ещё раз, чтобы завершить восстановление.";
                     return null;
                 }

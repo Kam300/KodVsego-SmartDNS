@@ -79,8 +79,12 @@ public class AndroidLifecycleTest {
         blockedService(true);MainActivity app=screen();assertFalse(app.findViewById(R.id.dns_provider).isEnabled());
     }
     @Test public void unsupportedEncryptionIsExplicitAndMagicDnsRemainsSelectable() {
+        Provider saved=Provider.ALL[4];
+        // Exercise missing-transport UI using an enabled provider.
+        Provider.ALL[4]=new Provider(saved.name,saved.servers,null,saved.encryptedOnly,saved.services,saved.testHosts());
+        try {
         MainActivity app=screen();
-        for(int provider:new int[]{3,6}){
+        for(int provider:new int[]{4,6}){
             app.findViewById(R.id.dns_provider).performClick();android.app.Dialog dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog();
             dialog.findViewById(R.id.provider_sheet).findViewWithTag("provider-"+provider).performClick();
             android.widget.Switch encryption=app.findViewById(R.id.encrypted_dns_switch);
@@ -88,6 +92,7 @@ public class AndroidLifecycleTest {
             assertEquals(provider!=6,encryption.getText().toString().contains("недоступен"));
             assertFalse(encryption.isChecked());
         }
+        } finally {Provider.ALL[4]=saved;}
     }
     @Test @Config(sdk=35) public void contentStaysOutsideSystemBarsWhenScrolled() {
         MainActivity app=screen();ScrollView scroll=(ScrollView)((FrameLayout)app.findViewById(android.R.id.content)).getChildAt(0);
@@ -98,13 +103,14 @@ public class AndroidLifecycleTest {
     }
     @Test public void disabledProvidersHiddenAndSavedChoiceFallsBack() {
         android.content.Context context=RuntimeEnvironment.getApplication();
-        context.getSharedPreferences("smartdns",0).edit().putInt("provider",1).commit();
+        context.getSharedPreferences("smartdns",0).edit().putInt("provider",3).commit();
         MainActivity app=screen();
         assertEquals(0,context.getSharedPreferences("smartdns",0).getInt("provider",-1));
         app.findViewById(R.id.dns_provider).performClick();
         android.app.Dialog dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog();
         assertNull(dialog.findViewById(R.id.provider_sheet).findViewWithTag("provider-1"));
         assertNull(dialog.findViewById(R.id.provider_sheet).findViewWithTag("provider-2"));
+        assertNull(dialog.findViewById(R.id.provider_sheet).findViewWithTag("provider-3"));
         assertNotNull(dialog.findViewById(R.id.provider_sheet).findViewWithTag("provider-6"));
         dialog.dismiss();
     }

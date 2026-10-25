@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -22,25 +22,26 @@ namespace HbAi.XboxDns
     sealed class AutoDnsResult
     {
         internal int Provider, Milliseconds;
-        internal bool Encrypted, NeedsBrowser;
+        internal bool Encrypted, NeedsBrowser, Tls;
         internal string Error;
         internal string Trace;
+        internal ServiceAvailabilityResult Availability;
+        internal string Summary {get{return Availability==null?(NeedsBrowser?"HTTPS есть · проверка в браузере":"HTTPS отвечает"):Availability.EndpointSummary;}}
         internal bool Ok { get { return Error == null; } }
     }
     sealed class BrowserChallengeException : IOException
     {
         internal BrowserChallengeException() : base("Сайт требует проверку в браузере (Cloudflare)") { }
     }
-    interface IAutoDnsProbe
+    interface IAutoDnsProbe : IServiceAvailabilityProbe
     {
-        string[] Resolve(int provider, bool encrypted, string host, CancellationToken cancel);
         void Https(string host, string address, bool api, CancellationToken cancel);
     }
     static class AutoDns
     {
         internal static int GoalIndex(string name)
         {return Array.FindIndex(Goals,goal=>string.Equals(goal.Name,name,StringComparison.OrdinalIgnoreCase));}
-        internal static readonly AutoGoal[] Goals = {
+        internal static readonly AutoGoal[] Goals = new[] {
             new AutoGoal {Name="Gemini", Hosts=new[]{"gemini.google.com"}},
             new AutoGoal {Name="ChatGPT", Hosts=new[]{"chatgpt.com"}},
             new AutoGoal {Name="Claude", Hosts=new[]{"claude.ai"}},
@@ -48,27 +49,38 @@ namespace HbAi.XboxDns
             new AutoGoal {Name="Spotify", Hosts=new[]{"open.spotify.com"}},
             new AutoGoal {Name="Xbox", Hosts=new[]{"xbox.com"}},
             new AutoGoal {Name="Antigravity", Hosts=new[]{"cloudcode-pa.googleapis.com","daily-cloudcode-pa.googleapis.com"}, Api=true}
-        };
-        internal static int[] Candidates(int goal, bool encrypted)
+        }.Where(goal=>ProviderCatalog.All.Any(provider=>Dns.IsAvailable(provider.id)&&provider.autoGoals.Contains(goal.Name))).ToArray();
+        internal static int[] Candidates(int goal, bool encrypted, bool tls = false)
         {
             if(goal<0 || goal>=Goals.Length) throw new ArgumentOutOfRangeException("goal");
-            return Enumerable.Range(0,ProviderCatalog.All.Length).Where(p=>ProviderCatalog.All[p].autoGoals.Contains(Goals[goal].Name)&&Dns.IsAvailable(p)&&(!encrypted || EncryptedDns.Templates[p]!=null)).ToArray();
+            return Enumerable.Range(0,ProviderCatalog.All.Length).Where(p=>ProviderCatalog.All[p].autoGoals.Contains(Goals[goal].Name)&&Dns.IsAvailable(p)&&(!encrypted || (tls ? DotDns.Available(p) : EncryptedDns.Templates[p]!=null))).ToArray();
         }
-        internal static AutoDnsResult[] Search(int goal, bool encrypted, IAutoDnsProbe probe, CancellationToken cancel, Action<AutoDnsResult> progress=null, int? onlyProvider=null)
+        internal static AutoDnsResult[] Search(int goal, bool encrypted, IAutoDnsProbe probe, CancellationToken cancel, Action<AutoDnsResult> progress=null, int? onlyProvider=null, bool tls=false)
         {
-            var providers=Candidates(goal,encrypted);
+            var providers=Candidates(goal,encrypted,tls);
             if(onlyProvider.HasValue) providers=providers.Where(p=>p==onlyProvider.Value).ToArray();
             var results=new AutoDnsResult[providers.Length];
             // At most two providers at once; never a task for every host/server.
             Parallel.For(0,providers.Length,new ParallelOptions {MaxDegreeOfParallelism=2,CancellationToken=cancel},i=> {
                 int provider=providers[i];
-                var result=new AutoDnsResult {Provider=provider,Encrypted=encrypted||Dns.EncryptedOnly(provider)};
+                var result=new AutoDnsResult {Provider=provider,Encrypted=encrypted||Dns.EncryptedOnly(provider),Tls=tls};
                 var watch=Stopwatch.StartNew();
-                var trace=new StringBuilder();trace.AppendLine("Provider="+Dns.Name[provider]+"; DoH="+result.Encrypted+"; UTC="+DateTime.UtcNow.ToString("O"));
+                var trace=new StringBuilder();trace.AppendLine("Provider="+Dns.Name[provider]+"; protocol="+(result.Encrypted?(tls?"TLS":"HTTPS"):"DNS")+"; UTC="+DateTime.UtcNow.ToString("O"));
+                trace.AppendLine("Mode=AvailabilityOnly; authentication and generation not attempted");
                 try {
+                    int service=Array.FindIndex(ServiceAvailability.Targets,t=>t.Name==Goals[goal].Name);
+                    if(service>=0) {
+                        trace.AppendLine("DNS servers="+(result.Encrypted?(tls?DotDns.Host(provider):EncryptedDns.Templates[provider]):string.Join(",",Dns.V4[provider])));
+                        // Two providers in parallel, with sequential endpoints within each provider.
+                        result.Availability=ServiceAvailability.Check(service,provider,result.Encrypted,probe,cancel,1);
+                        trace.AppendLine(result.Availability.Diagnostic);
+                        result.NeedsBrowser=result.Availability.Endpoints.Any(e=>e.Reply==ServiceReply.BrowserCheck);
+                        if(!result.Availability.CanRecommend)result.Error=result.Availability.EndpointSummary;
+                    }
+                    else {
                     foreach(string host in Goals[goal].Hosts) {
                         cancel.ThrowIfCancellationRequested();
-                        trace.AppendLine(watch.ElapsedMilliseconds+" ms DNS query "+host+"; servers="+(result.Encrypted?EncryptedDns.Templates[provider]:string.Join(",",Dns.V4[provider]))+"; timeout="+(result.Encrypted?DohHttp2.RequestTimeoutMilliseconds:2000)+" ms");
+                        trace.AppendLine(watch.ElapsedMilliseconds+" ms DNS query "+host+"; servers="+(result.Encrypted?(tls?DotDns.Host(provider):EncryptedDns.Templates[provider]):string.Join(",",Dns.V4[provider]))+"; timeout="+(result.Encrypted?DohHttp2.RequestTimeoutMilliseconds:2000)+" ms");
                         var addresses=probe.Resolve(provider,result.Encrypted,host,cancel);
                         trace.AppendLine(watch.ElapsedMilliseconds+" ms DNS "+host+" -> "+string.Join(", ",addresses));
                         bool reachable=false, challenged=false; string error="DNS не вернул IPv4-адрес";
@@ -83,6 +95,7 @@ namespace HbAi.XboxDns
                         if(!reachable && challenged) { reachable=true;result.NeedsBrowser=true; }
                         if(!reachable)throw new IOException(host+": "+error);
                     }
+                    }
                 }
                 catch(OperationCanceledException){throw;}
                 catch(Exception ex){result.Error=ex.Message;trace.AppendLine(ex.ToString());}
@@ -95,17 +108,22 @@ namespace HbAi.XboxDns
         internal static AutoDnsResult Best(IEnumerable<AutoDnsResult> results)
         { return results.Where(r=>r.Ok).OrderBy(r=>r.NeedsBrowser).ThenBy(r=>r.Milliseconds).ThenBy(r=>r.Provider).FirstOrDefault(); }
         internal static string Diagnostic(int goal,IEnumerable<AutoDnsResult> results)
-        {return "Auto goal="+Goals[goal].Name+"\n"+string.Join("\n\n",results.Select(r=>(r.Trace??"")+"\nTotal="+r.Milliseconds+" ms; error="+r.Error+"; browser challenge="+r.NeedsBrowser));}
+        {return DiagnosticReport.Scrub("Auto goal="+Goals[goal].Name+"\n"+string.Join("\n\n",results.Select(r=>(r.Trace??"")+"\nTotal="+r.Milliseconds+" ms; error="+r.Error+"; browser challenge="+r.NeedsBrowser)));}
         internal static string Report(int goal, IEnumerable<AutoDnsResult> results)
         {
-            return "Цель: "+Goals[goal].Name+"\n\n"+string.Join("\n",results.OrderBy(r=>r.Provider).Select(r=>Dns.Name[r.Provider]+(r.Encrypted?" · DoH":" · DNS")+": "+(r.Ok?(r.NeedsBrowser?"HTTPS есть · проверка в браузере":"HTTPS отвечает")+" · "+r.Milliseconds+" мс":r.Error)))+
+            return "Цель: "+Goals[goal].Name+"\n\n"+string.Join("\n",results.OrderBy(r=>r.Provider).Select(r=>Dns.Name[r.Provider]+(r.Encrypted?(r.Tls?" · DoT":" · DoH"):" · DNS")+": "+(r.Ok?r.Summary+" · "+r.Milliseconds+" мс":r.Error)))+
                 "\n\nПроверено соединение с адресом от выбранного DNS. Вход в аккаунт и работа модели не проверялись. Применяется общий DNS компьютера.";
         }
     }
     sealed class AutoDnsProbe : IAutoDnsProbe
     {
+        readonly bool tls;
+        internal AutoDnsProbe(bool tls = false) { this.tls = tls; }
+        public ServiceHttpReply Request(ServiceEndpoint endpoint,string address,CancellationToken cancel)
+        {return new ServiceAvailabilityProbe(tls).Request(endpoint,address,cancel);}
         public string[] Resolve(int provider, bool encrypted, string host, CancellationToken cancel)
         {
+            if (encrypted && tls) { cancel.ThrowIfCancellationRequested(); var answer=DotDns.Resolve(provider,host); cancel.ThrowIfCancellationRequested(); return answer; }
             var request=DnsProbe.Query(host); Exception last=null;var addresses=new List<string>();
             foreach(string server in encrypted?new[]{EncryptedDns.Templates[provider]}:Dns.V4[provider]) {
                 cancel.ThrowIfCancellationRequested();

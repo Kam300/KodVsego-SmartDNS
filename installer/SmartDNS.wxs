@@ -59,6 +59,10 @@
                 <File Source="$(var.ProjectRoot)\res\OFL-Manrope.txt" />
                 <RegistryValue Root="HKCU" Key="$(var.RegistryBase)" Name="FontLicenses" Value="1" Type="integer" KeyPath="yes" />
               </Component>
+              <Component Id="WintunLicense" Guid="$(var.WintunLicenseGuid)">
+                <File Source="$(var.ProjectRoot)\res\wintun\LICENSE.txt" Name="Wintun-LICENSE.txt" />
+                <RegistryValue Root="HKCU" Key="$(var.RegistryBase)" Name="WintunLicense" Value="1" Type="integer" KeyPath="yes" />
+              </Component>
             </Directory>
             <Directory Id="DocsDir" Name="docs">
               <Directory Id="LicensesDir" Name="licenses">
@@ -82,7 +86,7 @@
     <Feature Id="MainFeature" Title="Smart DNS" Level="1">
       <ComponentRef Id="Application" /><ComponentRef Id="MsiMarker" /><ComponentRef Id="LicenseMIT" />
       <ComponentRef Id="LicenseRussian" /><ComponentRef Id="Readme" /><ComponentRef Id="FontLicenses" />
-      <ComponentRef Id="UpstreamLicense" /><ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="UpstreamLicense" /><ComponentRef Id="StartMenuShortcut" /><ComponentRef Id="WintunLicense" />
     </Feature>
 
     <!-- A prerequisite outside the file-removal transaction: restoration must

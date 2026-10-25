@@ -33,7 +33,7 @@ $exeHash=(Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant()
 $portable=Join-Path $work 'portable'
 New-Item -ItemType Directory -Path $portable | Out-Null
 Copy-Item -LiteralPath $exe -Destination (Join-Path $portable $name)
-foreach($relative in @('LICENSE','LICENSE.ru.md','res\OFL-Unbounded.txt','res\OFL-Manrope.txt','docs\licenses\HB-AI-LICENSE.ru.md')) {
+foreach($relative in @('LICENSE','LICENSE.ru.md','res\OFL-Unbounded.txt','res\OFL-Manrope.txt','res\wintun\LICENSE.txt','docs\DNS-TUNNEL.md','docs\LOCAL-DNS.md','docs\RESOLVER-CHECK.md','docs\licenses\HB-AI-LICENSE.ru.md')) {
     $destination=Join-Path $portable $relative
     New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $root $relative) -Destination $destination

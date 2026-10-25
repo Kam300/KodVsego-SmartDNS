@@ -19,6 +19,7 @@ namespace HbAi.XboxDns
     {
         public int Code { get; set; }
         public string Error { get; set; }
+        public string Diagnostic {get;set;}
     }
     sealed class DnsRequest
     {
@@ -26,11 +27,20 @@ namespace HbAi.XboxDns
         internal int Set;
         internal Guid Token;
         internal int Parent;
+        internal static bool Supported(bool enable, int set)
+        {
+            if (!enable) return set >= 0 && set <= 4;
+            if (set >= 0 && set < Dns.V4.Length) return true;
+            if (set >= 100 && set < 100 + AntigravityDns.ServerSets.Length * 2) return true;
+            foreach (int offset in new[] { 200, 300, 400, 500 })
+                if (set >= offset && set < offset + Dns.V4.Length) return true;
+            return false;
+        }
         internal string PipeName { get { return "KodVsego.SmartDns." + Token.ToString("N"); } }
         internal string Arguments
         {
-            get { return "--dns-operation " + (Enable ? (Set >= 300 ? "secure-keep-ag " : Set >= 200 ? "secure-enable " : Set >= 100 ? (Set % 2 == 1 ? "ag-force " : "ag-enable ") : "enable ") : Set == 4 ? "uninstall-restore " : Set == 3 ? "ag-cleanup " : Set == 2 ? "ag-disable " : Set == 1 ? "reset-known " : "restore ") +
-                (Enable ? (Set >= 300 ? Set - 300 : Set >= 200 ? Set - 200 : Set >= 100 ? (Set - 100) / 2 : Set) : 0).ToString(CultureInfo.InvariantCulture) + " " + Token.ToString("N") + " " + Parent.ToString(CultureInfo.InvariantCulture); }
+            get { return "--dns-operation " + (Enable ? (Set >= 500 ? "tls-keep-ag " : Set >= 400 ? "tls-enable " : Set >= 300 ? "secure-keep-ag " : Set >= 200 ? "secure-enable " : Set >= 100 ? (Set % 2 == 1 ? "ag-force " : "ag-enable ") : "enable ") : Set == 4 ? "uninstall-restore " : Set == 3 ? "ag-cleanup " : Set == 2 ? "ag-disable " : Set == 1 ? "reset-known " : "restore ") +
+                (Enable ? (Set >= 500 ? Set - 500 : Set >= 400 ? Set - 400 : Set >= 300 ? Set - 300 : Set >= 200 ? Set - 200 : Set >= 100 ? (Set - 100) / 2 : Set) : 0).ToString(CultureInfo.InvariantCulture) + " " + Token.ToString("N") + " " + Parent.ToString(CultureInfo.InvariantCulture); }
         }
         internal static bool TryParse(string[] args, out DnsRequest request)
         {
@@ -38,18 +48,20 @@ namespace HbAi.XboxDns
             int set, parent;
             Guid token;
             if (args == null || args.Length != 5 || args[0] != "--dns-operation" ||
-                (args[1] != "enable" && args[1] != "secure-enable" && args[1] != "secure-keep-ag" && args[1] != "restore" && args[1] != "reset-known" && args[1] != "ag-enable" && args[1] != "ag-disable" && args[1] != "ag-force" && args[1] != "ag-cleanup" && args[1] != "uninstall-restore") ||
+                (args[1] != "tls-enable" && args[1] != "tls-keep-ag" && args[1] != "enable" && args[1] != "secure-enable" && args[1] != "secure-keep-ag" && args[1] != "restore" && args[1] != "reset-known" && args[1] != "ag-enable" && args[1] != "ag-disable" && args[1] != "ag-force" && args[1] != "ag-cleanup" && args[1] != "uninstall-restore") ||
                 !int.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out set) ||
                 !Guid.TryParseExact(args[3], "N", out token) || token == Guid.Empty ||
                 !int.TryParse(args[4], NumberStyles.None, CultureInfo.InvariantCulture, out parent) || parent <= 0 ||
-                (args[1] == "enable" || args[1] == "secure-enable" || args[1] == "secure-keep-ag" ? set < 0 || set >= Dns.V4.Length : args[1] == "ag-enable" || args[1] == "ag-force" ? set < 0 || set >= AntigravityDns.ServerSets.Length : set != 0)) return false;
-            request = new DnsRequest { Enable = args[1] == "enable" || args[1] == "secure-enable" || args[1] == "secure-keep-ag" || args[1] == "ag-enable" || args[1] == "ag-force",
-                Set = args[1] == "uninstall-restore" ? 4 : args[1] == "secure-keep-ag" ? 300 + set : args[1] == "secure-enable" ? 200 + set : args[1] == "ag-force" ? 101 + set * 2 : args[1] == "ag-enable" ? 100 + set * 2 : args[1] == "ag-cleanup" ? 3 : args[1] == "ag-disable" ? 2 : args[1] == "reset-known" ? 1 : set, Token = token, Parent = parent };
+                (args[1] == "tls-enable" || args[1] == "tls-keep-ag" || args[1] == "enable" || args[1] == "secure-enable" || args[1] == "secure-keep-ag" ? set < 0 || set >= Dns.V4.Length : args[1] == "ag-enable" || args[1] == "ag-force" ? set < 0 || set >= AntigravityDns.ServerSets.Length : set != 0)) return false;
+            request = new DnsRequest { Enable = args[1] == "tls-enable" || args[1] == "tls-keep-ag" || args[1] == "enable" || args[1] == "secure-enable" || args[1] == "secure-keep-ag" || args[1] == "ag-enable" || args[1] == "ag-force",
+                Set = args[1] == "tls-keep-ag" ? 500 + set : args[1] == "tls-enable" ? 400 + set : args[1] == "uninstall-restore" ? 4 : args[1] == "secure-keep-ag" ? 300 + set : args[1] == "secure-enable" ? 200 + set : args[1] == "ag-force" ? 101 + set * 2 : args[1] == "ag-enable" ? 100 + set * 2 : args[1] == "ag-cleanup" ? 3 : args[1] == "ag-disable" ? 2 : args[1] == "reset-known" ? 1 : set, Token = token, Parent = parent };
+            if (!Supported(request.Enable, request.Set)) { request = null; return false; }
             return true;
         }
     }
     static class DnsElevation
     {
+        internal const int MaxReplyLength=160000;
         [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -66,9 +78,19 @@ namespace HbAi.XboxDns
         }
         internal static string Run(bool enable, int set)
         {
+            return Route(enable, set, IsAdministrator, Dns.ExecuteDirect, RunElevated);
+        }
+        // Keep the normal-user and administrator entry points on one allowlist.
+        // Delegates let regression tests exercise routing without UAC or DNS writes.
+        internal static string Route(bool enable, int set, Func<bool> administrator,
+            Func<bool, int, string> direct, Func<bool, int, string> elevated)
+        {
+            if (!DnsRequest.Supported(enable, set)) return "Неизвестная операция DNS.";
             // Explicit "Run as administrator" remains supported without a second prompt.
-            if (IsAdministrator()) return Dns.ExecuteDirect(enable, set);
-            if (enable ? set < 0 || (set >= Dns.V4.Length && (set < 100 || set >= 100 + AntigravityDns.ServerSets.Length * 2) && (set < 200 || set >= 200 + Dns.V4.Length) && (set < 300 || set >= 300 + Dns.V4.Length)) : set < 0 || set > 4) return "Неизвестная операция DNS.";
+            return administrator() ? direct(enable, set) : elevated(enable, set);
+        }
+        static string RunElevated(bool enable, int set)
+        {
             var request = new DnsRequest { Enable = enable, Set = set,
                 Token = Guid.NewGuid(), Parent = Process.GetCurrentProcess().Id };
             using (var pipe = CreateResultPipe(request))
@@ -99,8 +121,9 @@ namespace HbAi.XboxDns
                         using (var reader = new StreamReader(pipe, Encoding.UTF8))
                         {
                             string line = reader.ReadLine();
-                            if (line == null || line.Length > 20000) return "Неполный ответ операции DNS.";
+                            if (line == null || line.Length > MaxReplyLength) return "Неполный ответ операции DNS.";
                             var reply = new JavaScriptSerializer().Deserialize<DnsReply>(line);
+                            if(reply!=null&&!string.IsNullOrEmpty(reply.Diagnostic))DiagnosticReport.Record("Операция с правами администратора",reply.Diagnostic);
                             return reply != null && reply.Code == 0 ? null :
                                 (reply == null || string.IsNullOrEmpty(reply.Error) ? "Ошибка операции DNS." : reply.Error);
                         }
@@ -147,13 +170,15 @@ namespace HbAi.XboxDns
                     uint server;
                     if (!GetNamedPipeServerProcessId(pipe.SafePipeHandle, out server) || server != (uint)request.Parent) return 5;
                     string error;
-                    try { error = execute(request.Enable, request.Set); }
-                    catch (Exception failure) { error = failure.Message; }
+                    try {DiagnosticReport.Record("Операция DNS","enable="+request.Enable+"; operation="+request.Set);error = execute(request.Enable, request.Set);DiagnosticReport.Record("Результат DNS",error??"OK");}
+                    catch (Exception failure) { error = failure.Message;DiagnosticReport.Record("Ошибка DNS",failure.ToString()); }
                     var reply = new DnsReply { Code = error == null ? 0 : 1,
-                        Error = error == null ? null : error.Substring(0, Math.Min(error.Length, 4000)) };
+                        Error = error == null ? null : error.Substring(0, Math.Min(error.Length, 4000)), Diagnostic=DiagnosticReport.Recent(60000) };
+                    var serializer=new JavaScriptSerializer();string serialized=serializer.Serialize(reply);
+                    while(serialized.Length>MaxReplyLength&&reply.Diagnostic.Length>100){reply.Diagnostic="[Diagnostic shortened]\n"+reply.Diagnostic.Substring(reply.Diagnostic.Length/2);serialized=serializer.Serialize(reply);}
                     using (var writer = new StreamWriter(pipe, new UTF8Encoding(false)))
                     {
-                        writer.WriteLine(new JavaScriptSerializer().Serialize(reply));
+                        writer.WriteLine(serialized);
                         writer.Flush();
                     }
                     return reply.Code;

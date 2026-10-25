@@ -155,15 +155,16 @@ namespace HbAi.XboxDns
         internal const string Tag = "KodVsego.SmartDNS.Antigravity.v1";
         internal const string Title = "Код Всего · Antigravity DNS";
         internal static readonly string[] Domains = { "cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com" };
-        internal static readonly string[] ProviderNames = { "GeoHide", "Comss.one", "GeoHide EU", "Bezmezhau", "MagicDNS" };
         // Append only: saved rules and elevated operation IDs use this historical order.
-        static readonly int[] MainSets = { 1, 0, 2, 4, 6 };
-        internal static readonly string[][] ServerSets = {
+        static readonly int[] ExtraSets = ProviderCatalog.All.Where(p=>p.id>=7&&!p.encryptedOnly&&p.autoGoals.Contains("Antigravity")).Select(p=>p.id).ToArray();
+        static readonly int[] MainSets = new[]{1,0,2,4,6}.Concat(ExtraSets).ToArray();
+        internal static readonly string[] ProviderNames = new[]{"GeoHide","Comss.one","GeoHide EU","Bezmezhau","MagicDNS"}.Concat(ExtraSets.Select(p=>Dns.Name[p])).ToArray();
+        internal static readonly string[][] ServerSets = new[]{
             new[] { "159.194.200.33", "193.233.112.67" },
             new[] { "83.220.169.155", "212.109.195.93" },
             new[] { "143.20.64.192", "45.13.237.213" },
             new[] { "143.20.64.55", "31.58.216.201" },
-            ProviderCatalog.All[6].ipv4 };
+            ProviderCatalog.All[6].ipv4 }.Concat(ExtraSets.Select(p=>Dns.V4[p])).ToArray();
         [ThreadStatic] static int? selectedProvider;
         internal static string[] Servers { get { return ServerSets[selectedProvider ?? 0]; } }
         sealed class ProviderScope : IDisposable

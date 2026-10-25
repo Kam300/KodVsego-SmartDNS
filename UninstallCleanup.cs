@@ -20,7 +20,7 @@ namespace HbAi.XboxDns
     {
         internal const int RestoreOperation=4;
         internal const string UserKey=@"SOFTWARE\KodVsego\SmartDns";
-        internal static readonly string[] PreferenceValues={"Theme","DefaultService","HideDnsReminder"};
+        internal static readonly string[] PreferenceValues={"Theme","DefaultService","HideDnsReminder","GeminiApiKeyProtected","AutoResolverCheck","GoogleTunnelMode","GoogleTunnelProvider","GoogleTunnelProtocol","LocalResolverMode","LocalResolverProvider","LocalResolverProtocol","LocalAntigravityEnabled","LocalAntigravityProvider"};
 
         internal static string Run(IUninstallCleanup cleanup,bool interactive)
         {
@@ -95,6 +95,8 @@ namespace HbAi.XboxDns
                             RestoreNetwork(new DnsSettingsEngine(new NativeDnsSystem(),dns),dns,ag,rules);
                         }finally{if(agLocked)agMutex.ReleaseMutex();}
                     }
+                    new DotPolicyTransaction(new WindowsDotPolicy()).Restore();
+                    using(var key=Registry.LocalMachine.OpenSubKey(RegistryDnsBackupStore.Key,true))if(key!=null){key.DeleteValue("TunnelPending",false);key.DeleteValue("TunnelAdapters",false);key.DeleteValue("LocalResolverOwner",false);}
                     DeleteEmptyKey(Registry.LocalMachine,RegistryDnsBackupStore.Key);
                     DeleteEmptyKey(Registry.LocalMachine,UserKey);
                     DeleteEmptyKey(Registry.LocalMachine,@"SOFTWARE\HbAi");
@@ -152,7 +154,8 @@ namespace HbAi.XboxDns
     {
         public bool NeedsNetworkCleanup()
         {
-            return UninstallCleanup.NetworkCleanupRequired(new RegistryDnsBackupStore(),new RegistryAgTakeoverStore(),new WindowsAgRules())||
+            return DnsTunnel.Pending||LocalDnsGuardian.MarkerPresent||UninstallCleanup.NetworkCleanupRequired(new RegistryDnsBackupStore(),new RegistryAgTakeoverStore(),new WindowsAgRules())||
+                new WindowsDotPolicy().Backup().HasValue||
                 UninstallCleanup.EmptyKeyExists(Registry.LocalMachine,RegistryDnsBackupStore.Key)||
                 UninstallCleanup.EmptyKeyExists(Registry.LocalMachine,UninstallCleanup.UserKey);
         }

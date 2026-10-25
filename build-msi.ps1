@@ -63,7 +63,7 @@ $readmeText=@"
 [IO.File]::WriteAllText($readme,$readmeText,[Text.UTF8Encoding]::new($true))
 $outputFile=Join-Path $OutputDirectory ('KodVsego_SmartDNS.Setup.'+$version+'.msi')
 $definitions=[ordered]@{ProjectRoot=$root;ProductName=$productName;MsiVersion=$msiVersion;ProductCode=$productCode;UpgradeCode=$upgradeCode;AppVersion=$version;InstallFolderName=$folder;RegistryBase=$registry;ShortcutName=$shortcut;SourceExe=$SourceExe;MarkerFile=$marker;ReadmeFile=$readme;LicenseRtf=$licenseRtf}
-foreach($component in @('Application','MsiMarker','LicenseMIT','LicenseRussian','Readme','FontLicenses','UpstreamLicense')) { $definitions[$component+'Guid']=Get-MsiIdentity ($family+'/component/'+$component) }
+foreach($component in @('Application','MsiMarker','LicenseMIT','LicenseRussian','Readme','FontLicenses','UpstreamLicense','WintunLicense')) { $definitions[$component+'Guid']=Get-MsiIdentity ($family+'/component/'+$component) }
 $arguments=@('build',(Join-Path $root 'installer\SmartDNS.wxs'),'-arch','x64','-out',$outputFile,'-intermediateFolder',(Join-Path $inputs 'obj'))
 foreach($entry in $definitions.GetEnumerator()) { $arguments+=@('-d',($entry.Key+'='+$entry.Value)) }
 & $Wix $arguments

@@ -14,6 +14,8 @@ namespace HbAi.XboxDns
         public uint Index { get; set; }
         public string Template { get; set; }
         public ulong Flags { get; set; }
+        public uint Kind { get; set; } // 0/1: HTTPS (legacy backups), 2: TLS.
+        public ushort Port { get; set; }
     }
     interface IDnsBindingSystem
     {
@@ -22,10 +24,10 @@ namespace HbAi.XboxDns
     }
     static class EncryptedDns
     {
-        internal static string Run(int provider, bool keepAntigravity = false)
+        internal static string Run(int provider, bool keepAntigravity = false, bool tls = false)
         {
             if(provider>=0&&provider<Templates.Length&&!Dns.IsAvailable(provider))return "Провайдер временно недоступен. Выберите другой DNS.";
-            if (provider < 0 || provider >= Templates.Length || Templates[provider] == null) return "Для DoH выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS.";
+            if (provider < 0 || provider >= Templates.Length || (tls ? !DotDns.Available(provider) : Templates[provider] == null)) return "Для DoH выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS.";
             try
             {
                 // Inspect persisted local AND organization policies, without depending on
@@ -33,7 +35,7 @@ namespace HbAi.XboxDns
                 var policies = NrptRegistryReader.Read(true);
                 string conflict = PolicyConflict(policies);
                 if (conflict != null && !(keepAntigravity && CanKeepAntigravity(NrptRegistryReader.Read(false), policies))) return conflict;
-                return DnsSettingsEngine.Run(true, ServersFor(provider), false, Templates[provider]);
+                return DnsSettingsEngine.Run(true, tls ? DotDns.Servers(provider) : ServersFor(provider), false, tls ? DotDns.Host(provider) : Templates[provider], tls);
             }
             catch (Exception error) { return "Не удалось проверить совместимость DoH: " + error.Message; }
         }
@@ -72,14 +74,19 @@ namespace HbAi.XboxDns
         internal static readonly string[] Templates = ProviderCatalog.All.Select(p=>p.doh).ToArray();
         internal static bool ExplicitlyConfigured(FamilyBackup settings, int provider)
         {
+            if (settings.DohCaptured && settings.Servers.Length>0 && settings.Doh!=null && settings.Doh.Length==settings.Servers.Length &&
+                settings.Servers.SequenceEqual(DotDns.Servers(provider)) && settings.Doh.All(d=>d.Kind==2 && IsStrict(d) && d.Template==DotDns.Host(provider)) &&
+                settings.Doh.Select(d=>d.Index).Distinct().Count()==settings.Servers.Length) return true;
             return settings.DohCaptured && settings.Servers.Length > 0 && settings.Doh != null && settings.Doh.Length == settings.Servers.Length &&
-                settings.Doh.All(d => d.Index < settings.Servers.Length && d.Flags == 2 && d.Template == Templates[provider]) &&
+                settings.Doh.All(d => d.Index < settings.Servers.Length && d.Kind != 2 && d.Flags == 2 && d.Template == Templates[provider]) &&
                 settings.Doh.Select(d => d.Index).Distinct().Count() == settings.Servers.Length;
         }
         internal static string[] ServersFor(int provider)
         { return ProviderCatalog.All[provider].windowsDohServers; }
-        internal static DohConfig[] Strict(int count, string template)
-        { return Enumerable.Range(0, count).Select(i => new DohConfig { Index = (uint)i, Template = template, Flags = 2 }).ToArray(); }
+        internal static DohConfig[] Strict(int count, string template, bool tls = false)
+        { return Enumerable.Range(0, count).Select(i => new DohConfig { Index = (uint)i, Template = template, Flags = tls ? 1UL : 2UL, Kind = tls ? 2U : 0U, Port = tls ? (ushort)853 : (ushort)0 }).ToArray(); }
+        internal static bool IsStrict(DohConfig entry)
+        { return entry.Kind == 2 ? entry.Flags == 1 && (entry.Port == 0 || entry.Port == 853) : entry.Flags == 2; }
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct Settings3
@@ -96,6 +103,8 @@ namespace HbAi.XboxDns
         internal struct Property { public uint Version, Index, Type; public IntPtr Value; }
         [StructLayout(LayoutKind.Sequential)]
         internal struct DohSettings { public IntPtr Template; public ulong Flags; }
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct DotSettings { public IntPtr Hostname; public ulong Flags; public ushort Port; }
         [DllImport("iphlpapi.dll", EntryPoint = "GetInterfaceDnsSettings", ExactSpelling = true)]
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         static extern uint Get(Guid id, ref Settings3 settings);
@@ -120,8 +129,13 @@ namespace HbAi.XboxDns
                 for (int i = 0; i < native.Count; i++)
                 {
                     var property = (Property)Marshal.PtrToStructure(IntPtr.Add(native.Properties, i * Marshal.SizeOf(typeof(Property))), typeof(Property));
-                    if (property.Version != 1 || property.Type != 1 || property.Value == IntPtr.Zero || property.Index >= family.Servers.Length)
+                    if (property.Version != 1 || (property.Type != 1 && property.Type != 2) || property.Value == IntPtr.Zero || property.Index >= family.Servers.Length)
                         throw new IOException("Существующие DNS используют неподдерживаемые свойства. Настройки не изменены.");
+                    if (property.Type == 2) {
+                        var dot = (DotSettings)Marshal.PtrToStructure(property.Value, typeof(DotSettings));
+                        if (dot.Flags != 0) entries.Add(new DohConfig { Index = property.Index, Template = Marshal.PtrToStringUni(dot.Hostname), Flags = dot.Flags, Kind = 2, Port = dot.Port });
+                        continue;
+                    }
                     var doh = (DohSettings)Marshal.PtrToStructure(property.Value, typeof(DohSettings));
                     if (doh.Flags == 0) continue; // Windows can enumerate disabled properties for ordinary DNS.
                     entries.Add(new DohConfig { Index = property.Index, Template = Marshal.PtrToStringUni(doh.Template), Flags = doh.Flags });
@@ -133,22 +147,30 @@ namespace HbAi.XboxDns
         internal static void Validate(FamilyBackup family)
         {
             if (!family.DohCaptured) { if (family.Doh != null && family.Doh.Length > 0) throw new InvalidDataException("Некорректная копия DoH."); return; }
-            if (family.Doh == null || family.Doh.Length > family.Servers.Length) throw new InvalidDataException("Некорректная копия DoH.");
-            var indices = new HashSet<uint>();
+            if (family.Doh == null || family.Doh.Length > family.Servers.Length * 2) throw new InvalidDataException("Некорректная копия шифрования DNS.");
+            var indices = new HashSet<string>();
             foreach (var entry in family.Doh)
             {
-                Uri uri;
-                if (entry == null || entry.Index >= family.Servers.Length || !indices.Add(entry.Index) || (entry.Flags & ~15UL) != 0 ||
-                    ((entry.Flags & 3) == 3) || ((entry.Flags & 12) != 0 && (entry.Flags & 3) == 0) || ((entry.Flags & 2) != 0 && (!Uri.TryCreate(entry.Template, UriKind.Absolute, out uri) || uri.Scheme != "https")) ||
-                    ((entry.Flags & 1) != 0 && entry.Template != null)) throw new InvalidDataException("Повреждены параметры DoH.");
+                if (entry == null || entry.Index >= family.Servers.Length || entry.Kind > 2 ||
+                    !indices.Add(entry.Index + "/" + (entry.Kind == 2 ? 2 : 1))) throw new InvalidDataException("Повреждены параметры шифрования DNS.");
+                if (entry.Kind == 2) {
+                    if ((entry.Flags & ~63UL) != 0 || Uri.CheckHostName(entry.Template ?? "") != UriHostNameType.Dns)
+                        throw new InvalidDataException("Повреждены параметры TLS.");
+                } else {
+                    Uri uri;
+                    if ((entry.Flags & ~15UL) != 0 || ((entry.Flags & 3) == 3) || ((entry.Flags & 12) != 0 && (entry.Flags & 3) == 0) ||
+                        ((entry.Flags & 2) != 0 && (!Uri.TryCreate(entry.Template, UriKind.Absolute, out uri) || uri.Scheme != "https")) ||
+                        ((entry.Flags & 1) != 0 && entry.Template != null)) throw new InvalidDataException("Повреждены параметры DoH.");
+                }
             }
         }
+
         internal static void Write(Guid id, FamilyBackup family)
         {
             Validate(family);
             var allocated = new List<IntPtr>();
             Func<string, IntPtr> str = value => { var ptr = Marshal.StringToHGlobalUni(value ?? ""); allocated.Add(ptr); return ptr; };
-            var settings = new Settings3 { Version = 3, Flags = 0x1002UL | (family.Family == "IPv6" ? 1UL : 0UL), NameServer = str(string.Join(",", family.Servers)), Count = (uint)family.Doh.Length };
+            var settings = new Settings3 { Version = 3, Flags = 0x11002UL | (family.Family == "IPv6" ? 1UL : 0UL), NameServer = str(string.Join(",", family.Servers)), Count = (uint)family.Doh.Length };
             try
             {
                 if (settings.Count > 0)
@@ -157,18 +179,20 @@ namespace HbAi.XboxDns
                     for (int i = 0; i < family.Doh.Length; i++)
                     {
                         var entry = family.Doh[i];
-                        var ptr = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(DohSettings))); allocated.Add(ptr);
-                        Marshal.StructureToPtr(new DohSettings { Template = entry.Template == null ? IntPtr.Zero : str(entry.Template), Flags = entry.Flags }, ptr, false);
-                        Marshal.StructureToPtr(new Property { Version = 1, Index = entry.Index, Type = 1, Value = ptr }, IntPtr.Add(settings.Properties, i * Marshal.SizeOf(typeof(Property))), false);
+                        var ptr = Marshal.AllocHGlobal(Marshal.SizeOf(entry.Kind == 2 ? typeof(DotSettings) : typeof(DohSettings))); allocated.Add(ptr);
+                        if (entry.Kind == 2) Marshal.StructureToPtr(new DotSettings { Hostname = str(entry.Template), Flags = entry.Flags, Port = entry.Port }, ptr, false);
+                        else Marshal.StructureToPtr(new DohSettings { Template = entry.Template == null ? IntPtr.Zero : str(entry.Template), Flags = entry.Flags }, ptr, false);
+                        Marshal.StructureToPtr(new Property { Version = 1, Index = entry.Index, Type = entry.Kind == 2 ? 2U : 1U, Value = ptr }, IntPtr.Add(settings.Properties, i * Marshal.SizeOf(typeof(Property))), false);
                     }
                 }
                 uint error = Set(id, ref settings);
+                if ((error == 87 || error == 50) && !family.Doh.Any(e => e.Kind == 2)) { settings.Flags &= ~0x10000UL; error = Set(id, ref settings); }
                 if (error != 0) throw new Win32Exception((int)error, "Windows не применила DoH: " + error);
             }
             finally { foreach (var ptr in allocated) Marshal.FreeHGlobal(ptr); }
             var actual = new FamilyBackup { Family = family.Family, Servers = family.Servers };
             Capture(id, actual);
-            if (!actual.DohCaptured || actual.Doh.Length != family.Doh.Length || !family.Doh.All(e => actual.Doh.Any(a => a.Index == e.Index && a.Flags == e.Flags && a.Template == e.Template)))
+            if (!actual.DohCaptured || actual.Doh.Length != family.Doh.Length || !family.Doh.All(e => actual.Doh.Any(a => a.Index == e.Index && a.Flags == e.Flags && a.Template == e.Template && (a.Kind == 2) == (e.Kind == 2) && a.Port == e.Port)))
                 throw new IOException("Windows не подтвердила параметры шифрования DNS.");
         }
         internal static ManagementObject Binding(Guid id)

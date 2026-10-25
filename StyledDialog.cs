@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -18,6 +18,8 @@ namespace HbAi.XboxDns
         Control dragControl;
         Point dragPointerStart, dragWindowStart;
         ComboBox browserChoice;
+        ComboBox serviceTestChoice;
+        internal int TestService {get{return serviceTestChoice==null?-1:serviceTestChoice.SelectedIndex-1;}}
         Button restartBrowser;
         bool browserBusy;
         int browserRowHeight, maxDialogHeight;
@@ -30,25 +32,33 @@ namespace HbAi.XboxDns
         int supportGrowth;
         Func<string, string, string> makeReport;
         string diagnosticDetails;
-        internal string DiagnosticMessage {get {return DiagnosticReport.Scrub((dnsTestLayout?testFullText??messageText.Text:messageText.Text)+(string.IsNullOrEmpty(diagnosticDetails)?"":"\n\nТехнические сведения:\n"+diagnosticDetails));}}
+        internal string DiagnosticMessage {get {return DiagnosticReport.Scrub((autoLayout?messageText.Text+"\n\n"+autoDetailsText.Text:dnsTestLayout?testFullText??messageText.Text:messageText.Text)+(string.IsNullOrEmpty(diagnosticDetails)?"":"\n\nТехнические сведения:\n"+diagnosticDetails));}}
         internal void SetDiagnosticDetails(string details,bool visible)
-        {diagnosticDetails=details;SetSupportVisible(visible&&!string.IsNullOrEmpty(details));}
+        {diagnosticDetails=details;if(!string.IsNullOrEmpty(details))DiagnosticReport.Record(Text+" · подробности",details);SetSupportVisible(visible&&!string.IsNullOrEmpty(details));UpdateAutoCopy();UpdateDialogLayout();}
         bool autoLayout, autoReady, autoRunning, autoDetailsExpanded, arranging;
         bool settingsLayout, dnsTestLayout, testDetailsExpanded;
         string testFullText, testSummary; LinkLabel testDetailsToggle;
+        Button testCopyResults;
+        bool testResultReady;
         DialogServicePicker settingsGoalChoice;
         DialogModeOption settingsManualMode,settingsAutoMode;
         Label settingsModeHint,settingsBackupHeading,settingsBackupTitle,settingsBackupStatus;
         Rectangle settingsConnectionBounds,settingsBackupBounds;
+        Panel settingsConnectionPanel,settingsBackupPanel;
         Color settingsCardColor;
         Button settingsOpenBackup,settingsGithub,settingsTelegram;
         Label settingsSupportHeading;
         LinkLabel settingsSource;
+        LinkLabel settingsTunnel;
+        CheckBox settingsResolverCheck;
+        internal bool AutoResolverCheck { get { return settingsResolverCheck==null||settingsResolverCheck.Checked; } }
         internal int SettingsGoal {get{return settingsGoalChoice==null||!settingsAutoMode.Checked?-1:settingsGoalChoice.SelectedIndex;}}
         internal void StartAutoDnsSearch(){if(autoLayout&&!autoRunning&&!autoReady)primaryAction.PerformClick();}
+        internal int AutoSelectedGoal {get{return browserChoice.SelectedIndex;}}
         Panel autoDetails;
         Label autoDetailsText, autoScopeNote;
         LinkLabel autoDetailsToggle;
+        Button autoCopyLog;
         Color autoCardColor;
         Rectangle autoCardBounds;
 
@@ -62,6 +72,7 @@ namespace HbAi.XboxDns
             ShowInTaskbar = false;
             Text = title;
             DoubleBuffered = true;
+            SetStyle(ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw,true);
             surface = dark ? Color.FromArgb(8, 8, 13) : Color.FromArgb(250, 249, 255);
             border = dark ? Color.FromArgb(43, 40, 59) : Color.FromArgb(222, 217, 239);
             Color ink = dark ? Color.FromArgb(247, 246, 252) : Color.FromArgb(21, 29, 34);
@@ -240,12 +251,16 @@ namespace HbAi.XboxDns
             testDetailsToggle=new LinkLabel {Text="Подробности",Font=bodyFont,LinkColor=statusAccent,ActiveLinkColor=statusAccent,VisitedLinkColor=statusAccent,Left=px(28),Width=px(220),Height=px(24),Visible=false};
             testDetailsToggle.LinkClicked+=(s,e)=>{testDetailsExpanded=!testDetailsExpanded;messageText.Text=testDetailsExpanded?testFullText:testSummary;UpdateDialogLayout();};
             Controls.Add(testDetailsToggle);
+            testCopyResults=new DialogButton("Копировать",bodyFont,border,ForeColor,border,px(8)){AccessibleName="Скопировать результаты и технические сведения проверки",Visible=false};
+            testCopyResults.Click+=(s,e)=>CopyDnsTestResults(text=>Clipboard.SetText(text,TextDataFormat.UnicodeText));
+            Controls.Add(testCopyResults);
             UpdateDialogLayout();
         }
-        internal void ShowDnsTestStatus(string text, string caption, bool busy, bool warning, string summary=null)
+        internal void ShowDnsTestStatus(string text, string caption, bool busy, bool warning, string summary=null,bool isResult=true)
         {
             testFullText=text;testSummary=summary;testDetailsExpanded=false;
-            if(busy)diagnosticDetails=null;
+            diagnosticDetails=null;testResultReady=!busy&&isResult;
+            testCopyResults.Visible=testResultReady;testCopyResults.Enabled=testResultReady;testCopyResults.Text="Копировать";
             bool details=!busy&&summary!=null;
             testDetailsToggle.Visible=details;
             messageText.Text=details?summary:text; messageBody.AutoScrollPosition = Point.Empty;
@@ -254,11 +269,39 @@ namespace HbAi.XboxDns
             statusMarker.Kind = warning ? DialogStatusKind.Warning : busy ? DialogStatusKind.Search : DialogStatusKind.Success;
             statusMarker.ForeColor = statusCaption.ForeColor;
             browserChoice.Enabled = !busy; restartBrowser.Enabled = !busy;
+            if(serviceTestChoice!=null)serviceTestChoice.Enabled=!busy;
             restartBrowser.Text = busy ? "Проверяем…" : "Проверить";
             SetSupportVisible(warning && !busy && DiagnosticReport.ShouldOffer(Text, text));
             UpdateDialogLayout(); Invalidate(); Update();
         }
+        internal bool CopyDnsTestResults(Action<string> copy)
+        {
+            if(!dnsTestLayout||autoLayout||!testResultReady)return false;
+            string text=DiagnosticReport.Scrub("Код Всего · Smart DNS "+MainForm.VersionLabel+"\nDNS: "+browserChoice.Text+
+                "\nПроверка: "+(serviceTestChoice==null?"Только DNS":serviceTestChoice.Text)+"\n\n"+DiagnosticMessage);
+            if(text.Length>65536)text=text.Substring(0,65536)+"\n[Результат сокращён]";
+            try{copy(text);testCopyResults.Text="Скопировано";return true;}
+            catch(System.Runtime.InteropServices.ExternalException){testCopyResults.Text="Буфер занят";return false;}
+        }
 
+        internal void AddServiceTestControls(int selected)
+        {
+            float scale=actionHeight/42f;
+            Func<int,int> px=n=>(int)Math.Round(n*scale);
+            serviceTestChoice=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Font=bodyFont,BackColor=surface,ForeColor=ForeColor,
+                Left=px(28),Width=ClientSize.Width-px(56),AccessibleName="Сервис для проверки доступности"};
+            serviceTestChoice.Items.Add("Только DNS");
+            serviceTestChoice.Items.AddRange(ServiceAvailability.Targets.Select(t=>t.Name+" · сайт и API (без ключа)").ToArray());
+            serviceTestChoice.Items.Add("Фактический DNS Windows · MangoProxy");
+            serviceTestChoice.SelectedIndex=selected>=0&&selected<ServiceAvailability.Targets.Length?selected+1:0;
+            browserRowHeight=px(96);browserHint.Visible=false;
+            restartBrowser.AccessibleName="Проверить DNS и доступность сервиса";
+            Controls.Add(serviceTestChoice);
+            EventHandler changed=(s,e)=>{SetDiagnosticDetails(null,false);ShowDnsTestStatus(TestService==ResolverCheck.ServiceIndex?"MangoProxy увидит DNS-узлы для уникальных тестовых имён. Сравним системный путь с выбранным провайдером. Настройки не меняются, ключи и журнал не отправляются.":"Нажмите «Проверить» для выбранного DNS и сервиса.","Готово к проверке",false,false,null,false);};
+            serviceTestChoice.SelectedIndexChanged+=changed;browserChoice.SelectedIndexChanged+=changed;
+            UpdateDialogLayout();
+        }
+        internal void SelectResolverTest() { serviceTestChoice.SelectedIndex=ResolverCheck.ServiceIndex+1; }
         internal void AddAutoDnsControls(string[] goals, int selected, Action<int> run, Action selectionChanged = null)
         {
             AddDnsTestControls(goals,selected,run);
@@ -279,13 +322,16 @@ namespace HbAi.XboxDns
                 e.DrawFocusRectangle();
             };
             browserHint.Text="Для какого сервиса?";
-            autoScopeNote=new Label {Text="Нестабильный режим. Меняет DNS компьютера.\nДоступ к аккаунту проверяется в браузере.",Font=bodyFont,ForeColor=messageText.ForeColor,UseMnemonic=false};
+            autoScopeNote=new Label {Text="Нестабильный режим. Меняет DNS компьютера.\nВход и генерация не проверялись.",Font=bodyFont,ForeColor=messageText.ForeColor,UseMnemonic=false};
             autoDetailsToggle=new LinkLabel {Text="Результаты проверки",Font=bodyFont,LinkColor=statusAccent,ActiveLinkColor=statusAccent,UseMnemonic=false,Visible=false};
             autoDetails=new Panel {AutoScroll=true,Visible=false,BackColor=autoCardColor};
             autoDetailsText=new Label {AutoSize=true,Font=bodyFont,ForeColor=messageText.ForeColor,UseMnemonic=false,BackColor=autoCardColor};
             autoDetails.Controls.Add(autoDetailsText);
             autoDetailsToggle.LinkClicked+=(s,e)=>ToggleAutoDetails();
             Controls.Add(autoScopeNote);Controls.Add(autoDetailsToggle);Controls.Add(autoDetails);
+            autoCopyLog=new DialogButton("Копировать лог",bodyFont,border,ForeColor,border,(int)Math.Round(8*actionHeight/42f)){AccessibleName="Скопировать технический лог Авто",Visible=false};
+            autoCopyLog.Click+=(s,e)=>CopyAutoLog(text=>Clipboard.SetText(text,TextDataFormat.UnicodeText));
+            Controls.Add(autoCopyLog);
             primaryAction.Click+=(s,e)=> {if(!autoReady&&!autoRunning)run(browserChoice.SelectedIndex);};
             var close=Controls.OfType<DialogCloseButton>().Single();
             close.DialogResult=DialogResult.Cancel; CancelButton=close;
@@ -305,6 +351,8 @@ namespace HbAi.XboxDns
             if(autoDetailsToggle!=null)autoDetailsToggle.Visible=false;
             SetSupportVisible(false);
             diagnosticDetails=null;
+            if(autoDetailsText!=null)autoDetailsText.Text="";
+            UpdateAutoCopy();
             UpdateDialogLayout();Invalidate();
         }
         internal void ShowAutoDnsResult(string caption,string summary,string details,string connectLabel=null)
@@ -319,21 +367,39 @@ namespace HbAi.XboxDns
         }
         internal void ToggleAutoDetails()
         {autoDetailsExpanded=!autoDetailsExpanded;UpdateDialogLayout();Invalidate();}
+        void UpdateAutoCopy()
+        {
+            if(autoCopyLog==null)return;
+            bool available=autoLayout&&!autoRunning&&!string.IsNullOrEmpty(diagnosticDetails);
+            autoCopyLog.Visible=available;autoCopyLog.Enabled=available;autoCopyLog.Text="Копировать лог";
+        }
+        internal bool CopyAutoLog(Action<string> copy)
+        {
+            if(!autoLayout||autoRunning||string.IsNullOrEmpty(diagnosticDetails))return false;
+            string text=DiagnosticReport.Scrub("Код Всего · Smart DNS "+MainForm.VersionLabel+"\nАвто · "+browserChoice.Text+"\n\n"+DiagnosticMessage);
+            if(text.Length>65536)text=text.Substring(0,65536)+"\n[Лог сокращён]";
+            try {copy(text);autoCopyLog.Text="Скопировано";return true;}
+            catch(System.Runtime.InteropServices.ExternalException){autoCopyLog.Text="Буфер занят";return false;}
+        }
         void LayoutAutoDns()
         {
             float scale=actionHeight/42f;Func<int,int> px=n=>(int)Math.Round(n*scale);
-            var wantedSize=new Size(px(440),Math.Min(maxDialogHeight,px((autoDetailsExpanded?602:452)+(supportShown?92:0))));
+            int bodyHeight=Math.Max(px(60),Math.Min(px(104),messageText.GetPreferredSize(new Size(px(352),0)).Height));
+            int extra=bodyHeight-px(60);
+            var wantedSize=new Size(px(440),Math.Min(maxDialogHeight,px((autoDetailsExpanded?602:452)+(supportShown?92:0))+extra));
             if(ClientSize!=wantedSize)ClientSize=wantedSize;
             var heading=Controls.OfType<Label>().First(label=>label.Font==titleFont);
             heading.Bounds=new Rectangle(px(28),px(24),ClientSize.Width-px(92),px(32));
             browserHint.Bounds=new Rectangle(px(28),px(72),ClientSize.Width-px(56),px(24));
             browserChoice.Left=px(28);browserChoice.Top=px(102);browserChoice.Width=ClientSize.Width-px(56);
-            autoCardBounds=new Rectangle(px(28),px(156),ClientSize.Width-px(56),px(112));
+            autoCardBounds=new Rectangle(px(28),px(156),ClientSize.Width-px(56),px(112)+extra);
             statusCaption.Bounds=new Rectangle(px(44),px(170),ClientSize.Width-px(88),px(26));
-            messageBody.Bounds=new Rectangle(px(44),px(202),ClientSize.Width-px(88),px(60));
+            messageBody.Bounds=new Rectangle(px(44),px(202),ClientSize.Width-px(88),bodyHeight);
+            messageBody.AutoScroll=messageText.GetPreferredSize(new Size(messageBody.Width,0)).Height>bodyHeight;
             messageText.MaximumSize=new Size(messageBody.Width,0);
-            autoScopeNote.Bounds=new Rectangle(px(28),px(286),ClientSize.Width-px(56),px(44));
-            autoDetailsToggle.Bounds=new Rectangle(px(28),px(336),ClientSize.Width-px(56),px(26));
+            autoScopeNote.Bounds=new Rectangle(px(28),px(286)+extra,ClientSize.Width-px(56),px(44));
+            autoDetailsToggle.Bounds=new Rectangle(px(28),px(336)+extra,ClientSize.Width-px(56)-px(174),px(26));
+            autoCopyLog.Bounds=new Rectangle(ClientSize.Width-px(188),px(334)+extra,px(160),px(30));
             autoDetailsToggle.Text=autoDetailsExpanded?"Скрыть результаты":"Результаты проверки";
             primaryAction.Bounds=new Rectangle(px(28),ClientSize.Height-footerGap-actionHeight,ClientSize.Width-px(56),actionHeight);
             int detailsBottom=primaryAction.Top;
@@ -344,7 +410,7 @@ namespace HbAi.XboxDns
                 detailsBottom=supportPanel.Top;
             }
             autoDetails.Visible=autoDetailsExpanded;
-            autoDetails.Bounds=new Rectangle(px(28),px(370),ClientSize.Width-px(56),Math.Max(0,detailsBottom-px(386)));
+            autoDetails.Bounds=new Rectangle(px(28),px(370)+extra,ClientSize.Width-px(56),Math.Max(0,detailsBottom-px(386)-extra));
             autoDetailsText.MaximumSize=new Size(autoDetails.Width-px(24),0);
             autoDetailsText.Location=new Point(px(8),px(8));
         }
@@ -372,20 +438,23 @@ namespace HbAi.XboxDns
             float scale=actionHeight/42f;Func<int,int> px=n=>(int)Math.Round(n*scale);
             messageBody.Visible=false;statusMarker.Visible=false;statusCaption.Visible=false;
             settingsCardColor=surface.R<100?Color.FromArgb(18,18,27):Color.FromArgb(241,239,250);
-            Controls.Add(new Label{Text="Подключение",Font=buttonFont,ForeColor=ForeColor,Bounds=new Rectangle(px(28),px(72),ClientSize.Width-px(56),px(24))});
+            settingsConnectionPanel=new DialogSettingsCard(settingsCardColor,border,px(12));
+            settingsBackupPanel=new DialogSettingsCard(settingsCardColor,border,px(12));
+            Controls.Add(settingsConnectionPanel);Controls.Add(settingsBackupPanel);
+            Controls.Add(new Label{Text="Выбор DNS",Font=buttonFont,ForeColor=ForeColor,Bounds=new Rectangle(px(28),px(72),ClientSize.Width-px(56),px(24))});
             settingsManualMode=new DialogModeOption("Вручную",buttonFont,settingsCardColor,ForeColor,statusAccent,border,px(10));
             settingsAutoMode=new DialogModeOption("Авто · beta",buttonFont,settingsCardColor,ForeColor,statusAccent,border,px(10));
             settingsManualMode.AccessibleName="Ручной выбор DNS";settingsAutoMode.AccessibleName="Автоматический подбор DNS для сервиса — beta, нестабильный режим";
-            Controls.Add(settingsManualMode);Controls.Add(settingsAutoMode);
+            settingsConnectionPanel.Controls.Add(settingsManualMode);settingsConnectionPanel.Controls.Add(settingsAutoMode);
             settingsGoalChoice=new DialogServicePicker(goals,bodyFont,settingsCardColor,ForeColor,statusAccent,border,px(10)){AccessibleName="Сервис по умолчанию"};
-            settingsGoalChoice.SelectedIndex=selectedGoal>=0&&selectedGoal<goals.Length?selectedGoal:0;Controls.Add(settingsGoalChoice);
-            settingsModeHint=new Label{Font=bodyFont,ForeColor=messageText.ForeColor,BackColor=settingsCardColor,UseMnemonic=false};Controls.Add(settingsModeHint);
+            settingsGoalChoice.SelectedIndex=selectedGoal>=0&&selectedGoal<goals.Length?selectedGoal:0;settingsConnectionPanel.Controls.Add(settingsGoalChoice);
+            settingsModeHint=new Label{Font=bodyFont,ForeColor=messageText.ForeColor,BackColor=settingsCardColor,UseMnemonic=false};settingsConnectionPanel.Controls.Add(settingsModeHint);
             settingsBackupHeading=new Label{Text="Резервные копии",Font=buttonFont,ForeColor=ForeColor};Controls.Add(settingsBackupHeading);
-            settingsBackupTitle=new Label{Text="Правила Antigravity",Font=bodyFont,ForeColor=ForeColor,BackColor=settingsCardColor};Controls.Add(settingsBackupTitle);
-            settingsBackupStatus=new Label{Text=backupAvailable?"Сохранены на компьютере":"Пока нет копий",Font=bodyFont,ForeColor=messageText.ForeColor,BackColor=settingsCardColor};Controls.Add(settingsBackupStatus);
+            settingsBackupTitle=new Label{Text="Правила Antigravity",Font=bodyFont,ForeColor=ForeColor,BackColor=settingsCardColor};settingsBackupPanel.Controls.Add(settingsBackupTitle);
+            settingsBackupStatus=new Label{Text=backupAvailable?"Сохранены на компьютере":"Пока нет копий",Font=bodyFont,ForeColor=messageText.ForeColor,BackColor=settingsCardColor};settingsBackupPanel.Controls.Add(settingsBackupStatus);
             settingsOpenBackup=new DialogButton("Открыть",buttonFont,border,ForeColor,border,px(10)){Enabled=backupAvailable,AccessibleName="Открыть папку копий правил Antigravity"};
             ((DialogButton)settingsOpenBackup).SurfaceColor=settingsCardColor;
-            settingsOpenBackup.Click+=(s,e)=>openBackup();Controls.Add(settingsOpenBackup);
+            settingsOpenBackup.Click+=(s,e)=>openBackup();settingsBackupPanel.Controls.Add(settingsOpenBackup);
             settingsSupportHeading=new Label{Text="Сообщить об ошибке",Font=buttonFont,ForeColor=ForeColor};Controls.Add(settingsSupportHeading);
             settingsGithub=new DialogButton("GitHub Issues",buttonFont,settingsCardColor,ForeColor,border,px(10)){AccessibleName="Сообщить об ошибке в GitHub Issues"};
             settingsTelegram=new DialogButton("Написать в Telegram",buttonFont,settingsCardColor,ForeColor,border,px(10)){AccessibleName="Написать разработчику @TotalCodeAdmin"};
@@ -402,28 +471,50 @@ namespace HbAi.XboxDns
             settingsLayout=true;
             UpdateDialogLayout();
         }
+        internal void AddTunnelSettingsAction(Action open)
+        {
+            settingsTunnel=new LinkLabel{Text="DNS-туннель · beta",Font=bodyFont,LinkColor=statusAccent,ActiveLinkColor=statusAccent,UseMnemonic=false,AccessibleName="Открыть тестовый DNS-туннель"};
+            settingsTunnel.LinkClicked+=(s,e)=>open();Controls.Add(settingsTunnel);UpdateDialogLayout();
+        }
+        internal void AddLogSettingsAction(Action<Action<string>> save)
+        {
+            settingsTunnel=new LinkLabel{Text="Скачать журнал всей программы (.txt)",Font=bodyFont,LinkColor=statusAccent,ActiveLinkColor=statusAccent,UseMnemonic=false,AccessibleName="Сохранить подробный журнал текущего запуска программы"};
+            settingsTunnel.LinkClicked+=(s,e)=>save(text=>{if(!IsDisposed)settingsTunnel.Text=text;});Controls.Add(settingsTunnel);UpdateDialogLayout();
+        }
+        internal void AddResolverSettingsAction(bool enabled)
+        {
+            settingsResolverCheck=new CheckBox{Text="Автопроверка DNS · MangoProxy",Checked=enabled,Font=bodyFont,ForeColor=ForeColor,BackColor=surface,UseVisualStyleBackColor=false,AccessibleName="После включения проверять фактический DNS через MangoProxy; отправляются только тестовые имена"};
+            Controls.Add(settingsResolverCheck);UpdateDialogLayout();
+        }
         void LayoutSettings()
         {
+            SuspendLayout();settingsConnectionPanel.SuspendLayout();settingsBackupPanel.SuspendLayout();
+            try {
             float scale=actionHeight/42f;Func<int,int> px=n=>(int)Math.Round(n*scale);bool automatic=settingsAutoMode.Checked;
-            int height=Math.Min(maxDialogHeight,px(automatic?574:518));if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
+            int height=Math.Min(maxDialogHeight,px((automatic?574:518)+(settingsTunnel==null?0:32)+(settingsResolverCheck==null?0:30)));if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
             int innerWidth=ClientSize.Width-px(88),half=(innerWidth-px(8))/2;
             settingsConnectionBounds=new Rectangle(px(28),px(100),ClientSize.Width-px(56),px(automatic?148:92));
-            settingsManualMode.Bounds=new Rectangle(px(44),px(116),half,px(34));settingsAutoMode.Bounds=new Rectangle(px(44)+half+px(8),px(116),half,px(34));
+            settingsConnectionPanel.Bounds=settingsConnectionBounds;
+            settingsManualMode.Bounds=new Rectangle(px(16),px(16),half,px(34));settingsAutoMode.Bounds=new Rectangle(px(16)+half+px(8),px(16),half,px(34));
             settingsModeHint.Text=automatic?"Подключать выбранный сервис одной кнопкой.":"Выбирайте DNS на главном экране.";
-            settingsModeHint.Bounds=new Rectangle(px(44),px(160),innerWidth,px(24));
-            settingsGoalChoice.Visible=automatic;settingsGoalChoice.Enabled=automatic;settingsGoalChoice.Bounds=new Rectangle(px(44),px(196),innerWidth,px(36));
+            settingsModeHint.Bounds=new Rectangle(px(16),px(60),innerWidth,px(24));
+            settingsGoalChoice.Visible=automatic;settingsGoalChoice.Enabled=automatic;settingsGoalChoice.Bounds=new Rectangle(px(16),px(96),innerWidth,px(36));
             settingsBackupHeading.Bounds=new Rectangle(px(28),settingsConnectionBounds.Bottom+px(20),ClientSize.Width-px(56),px(24));
             settingsBackupBounds=new Rectangle(px(28),settingsBackupHeading.Bottom+px(8),ClientSize.Width-px(56),px(64));
-            settingsBackupTitle.Bounds=new Rectangle(px(44),settingsBackupBounds.Top+px(9),ClientSize.Width-px(232),px(24));
-            settingsBackupStatus.Bounds=new Rectangle(px(44),settingsBackupBounds.Top+px(34),ClientSize.Width-px(232),px(22));
-            settingsOpenBackup.Bounds=new Rectangle(ClientSize.Width-px(156),settingsBackupBounds.Top+px(14),px(112),px(36));
+            settingsBackupPanel.Bounds=settingsBackupBounds;
+            settingsBackupTitle.Bounds=new Rectangle(px(16),px(9),ClientSize.Width-px(232),px(24));
+            settingsBackupStatus.Bounds=new Rectangle(px(16),px(34),ClientSize.Width-px(232),px(22));
+            settingsOpenBackup.Bounds=new Rectangle(settingsBackupPanel.Width-px(128),px(14),px(112),px(36));
             settingsSupportHeading.Bounds=new Rectangle(px(28),settingsBackupBounds.Bottom+px(16),ClientSize.Width-px(56),px(24));
             int supportWidth=(ClientSize.Width-px(64))/2;
             settingsGithub.Bounds=new Rectangle(px(28),settingsSupportHeading.Bottom+px(8),supportWidth,px(36));
             settingsTelegram.Bounds=new Rectangle(px(36)+supportWidth,settingsGithub.Top,supportWidth,px(36));
             settingsSource.Bounds=new Rectangle(px(28),settingsGithub.Bottom+px(12),ClientSize.Width-px(56),px(24));
+            if(settingsTunnel!=null)settingsTunnel.Bounds=new Rectangle(px(28),settingsSource.Bottom+px(6),ClientSize.Width-px(56),px(24));
+            if(settingsResolverCheck!=null)settingsResolverCheck.Bounds=new Rectangle(px(28),(settingsTunnel!=null?settingsTunnel.Bottom:settingsSource.Bottom)+px(6),ClientSize.Width-px(56),px(24));
             primaryAction.Bounds=new Rectangle(ClientSize.Width-px(178),ClientSize.Height-footerGap-actionHeight,px(150),actionHeight);
             cancelAction.Bounds=new Rectangle(px(28),primaryAction.Top,px(112),actionHeight);
+            }finally{settingsBackupPanel.ResumeLayout(false);settingsConnectionPanel.ResumeLayout(false);ResumeLayout(false);}
         }
         internal void ShowUpdateStatus(string text,string caption,string action,bool enabled)
         {
@@ -582,8 +673,21 @@ namespace HbAi.XboxDns
             {
                 float unit=actionHeight/42f;
                 if(dnsTestLayout) {
+                    int pad=(int)Math.Round(28*unit);
+                    primaryAction.Left=ClientSize.Width-pad-primaryAction.Width;
+                    messageBody.Width=Math.Max(1,ClientSize.Width-2*pad);
+                    messageText.MaximumSize=new Size(Math.Max(1,messageBody.Width-(int)Math.Round(20*unit)),0);
+                    statusCaption.Width=Math.Max(1,ClientSize.Width-pad-statusCaption.Left);
+                    restartBrowser.Left=ClientSize.Width-pad-restartBrowser.Width;
+                    browserChoice.Width=Math.Max(1,restartBrowser.Left-browserChoice.Left-(int)Math.Round(12*unit));
+                    if(serviceTestChoice!=null)serviceTestChoice.Width=Math.Max(1,ClientSize.Width-2*pad);
+                    if(supportPanel!=null) {
+                        supportPanel.Width=Math.Max(1,ClientSize.Width-2*pad);
+                        foreach(Control control in supportPanel.Controls)
+                            if(control is Label)control.Width=Math.Max(1,supportPanel.Width-control.Left);
+                    }
                     int preferred=messageText.GetPreferredSize(new Size(messageText.MaximumSize.Width,0)).Height+(int)Math.Round(8*unit);
-                    int detailHeight=testDetailsToggle.Visible?(int)Math.Round(30*unit):0;
+                    int detailHeight=testDetailsToggle.Visible||testResultReady?(int)Math.Round(34*unit):0;
                     int extras=footerGap+actionHeight+bodyGap+browserRowHeight+detailHeight+(supportShown&&supportPanel!=null?supportPanel.Height+bodyGap:0);
                     int height=Math.Min(maxDialogHeight,messageBody.Top+Math.Min(preferred,(int)Math.Round(190*unit))+extras);
                     if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
@@ -603,9 +707,18 @@ namespace HbAi.XboxDns
                     restartBrowser.Top = contentBottom - (int)Math.Round(62 * actionHeight / 42f);
                     browserChoice.Top = restartBrowser.Top + (restartBrowser.Height - browserChoice.Height) / 2;
                     browserHint.Top = contentBottom - browserRowHeight;
+                    if(serviceTestChoice!=null) {
+                        serviceTestChoice.Top=contentBottom-(int)Math.Round(92*unit);
+                    }
                     bodyBottom = browserHint.Top - bodyGap;
                 }
-                if(dnsTestLayout&&testDetailsToggle.Visible){testDetailsToggle.Top=bodyBottom-(int)Math.Round(24*unit);bodyBottom=testDetailsToggle.Top-(int)Math.Round(6*unit);}
+                if(dnsTestLayout&&(testDetailsToggle.Visible||testResultReady)) {
+                    int rowTop=bodyBottom-(int)Math.Round(30*unit);
+                    testCopyResults.Bounds=new Rectangle(ClientSize.Width-(int)Math.Round(188*unit),rowTop,(int)Math.Round(160*unit),(int)Math.Round(30*unit));
+                    testDetailsToggle.Top=rowTop+(int)Math.Round(3*unit);
+                    testDetailsToggle.Width=Math.Max(1,testCopyResults.Left-testDetailsToggle.Left-(int)Math.Round(12*unit));
+                    bodyBottom=rowTop-(int)Math.Round(6*unit);
+                }
                 messageBody.Height = Math.Max(0, bodyBottom - messageBody.Top);
             }
             if (IsHandleCreated && ClientSize.Width > 0 && ClientSize.Height > 0 && radius > 0)
@@ -616,13 +729,12 @@ namespace HbAi.XboxDns
             }
             }
             finally {arranging=false;}
+            if(settingsLayout)Invalidate(true);
         }
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            if(settingsLayout)foreach(var bounds in new[]{settingsConnectionBounds,settingsBackupBounds})
-                using(var path=Rounded(bounds,radius/2f))using(var fill=new SolidBrush(settingsCardColor))using(var line=new Pen(border)){e.Graphics.FillPath(fill,path);e.Graphics.DrawPath(line,path);}
             if(autoLayout)using(var path=Rounded(autoCardBounds,radius/2f))
             using(var fill=new SolidBrush(autoCardColor))
             using(var line=new Pen(border)){e.Graphics.FillPath(fill,path);e.Graphics.DrawPath(line,path);}
@@ -634,6 +746,19 @@ namespace HbAi.XboxDns
             base.Dispose(disposing);
             if (disposing) { titleFont.Dispose(); bodyFont.Dispose(); buttonFont.Dispose(); }
         }
+    }
+
+    sealed class DialogSettingsCard : Panel
+    {
+        readonly Color border;readonly int radius;
+        internal DialogSettingsCard(Color fill,Color border,int radius)
+        {BackColor=fill;this.border=border;this.radius=radius;SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw,true);}
+        protected override void OnSizeChanged(EventArgs e)
+        {base.OnSizeChanged(e);if(Width>0&&Height>0&&radius>0){var previous=Region;using(var path=StyledDialog.Rounded(ClientRectangle,radius))Region=new Region(path);if(previous!=null)previous.Dispose();}Invalidate(true);}
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {e.Graphics.Clear(Parent==null?BackColor:Parent.BackColor);e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;using(var path=StyledDialog.Rounded(ClientRectangle,radius))using(var fill=new SolidBrush(BackColor))e.Graphics.FillPath(fill,path);}
+        protected override void OnPaint(PaintEventArgs e)
+        {base.OnPaint(e);e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;using(var path=StyledDialog.Rounded(new RectangleF(.5f,.5f,Width-1,Height-1),radius))using(var pen=new Pen(border))e.Graphics.DrawPath(pen,path);}
     }
 
     static class WindowGlyph

@@ -18,6 +18,8 @@ namespace HbAi.XboxDns
         }
         static readonly object gate = new object();
         static readonly Queue<string> events = new Queue<string>();
+        static readonly Queue<string> journal = new Queue<string>();
+        static int journalBytes;static long removed;
         internal static string Scrub(string value)
         {
             string text = value ?? "";
@@ -25,23 +27,36 @@ namespace HbAi.XboxDns
             if (!string.IsNullOrEmpty(home)) text = Regex.Replace(text, Regex.Escape(home), "%USERPROFILE%", RegexOptions.IgnoreCase);
             text = Regex.Replace(text, @"(?i)(bearer\s+)[^\s,;""']+", "$1<hidden>");
             text = Regex.Replace(text, @"(?i)((?:access[_-]?token|refresh[_-]?token|api[_-]?key|password|secret|authorization|token)[""']?\s*[:=]\s*[""']?)[^\s,;""'}]+", "$1<hidden>");
+            text = Regex.Replace(text,@"(?im)^(\s*(?:set-cookie|cookie)\s*:)[^\r\n]*","$1 <hidden>");
             return text;
         }
         internal static string TemplateLabel(string template)
         {
             if (template == null) return "(automatic)";
-            if (EncryptedDns.Templates.Contains(template)) return template;
+            if (EncryptedDns.Templates.Contains(template) || ProviderCatalog.All.Any(p => p.dot == template)) return template;
             Uri uri;
             return Uri.TryCreate(template,UriKind.Absolute,out uri) ? uri.Scheme+"://"+uri.Host+(uri.IsDefaultPort ? "" : ":"+uri.Port)+"/<custom-template>" : "<custom-template>";
         }
         internal static void Record(string operation, string detail)
         {
             string text = Scrub(operation + ": " + detail);
+            string full=text.Length>32768?text.Substring(0,32768)+" [entry shortened]":text;
+            string stamp=DateTime.UtcNow.ToString("O")+" ";
             if (text.Length > 1400) text = text.Substring(0, 1400);
             lock (gate) {
-                events.Enqueue(DateTime.UtcNow.ToString("O") + " " + text);
+                events.Enqueue(stamp+text);
                 while (events.Count > 24) events.Dequeue();
+                journal.Enqueue(stamp+full);journalBytes+=Encoding.UTF8.GetByteCount(stamp+full)+2;
+                while(journalBytes>2*1024*1024||journal.Count>4096){journalBytes-=Encoding.UTF8.GetByteCount(journal.Dequeue())+2;removed++;}
             }
+        }
+        internal static string Recent(int maximum=10000)
+        {lock(gate){string text=string.Join("\r\n",journal);return text.Length<=maximum?text:"[Older entries omitted]\r\n"+text.Substring(text.Length-maximum);}}
+        internal static string Export(string context,Func<string> snapshot=null)
+        {
+            string header=Create("Общий журнал программы","Текущий запуск; сеть не изменяется при сохранении журнала.",context,snapshot);
+            string all;long dropped;lock(gate){all=string.Join("\r\n",journal);dropped=removed;}
+            return Scrub(header+"\r\n\r\nПодробный журнал всех операций текущего запуска (UTC):\r\n"+(dropped>0?"[Удалено старых записей: "+dropped+"; предел 2 МиБ / 4096 записей]\r\n":"")+all+"\r\n");
         }
         internal static string Create(string title, string error, string context, Func<string> snapshot = null)
         {
@@ -69,7 +84,7 @@ namespace HbAi.XboxDns
                 if (key != null) text.AppendLine("Windows build: " + key.GetValue("CurrentBuildNumber") + "." + key.GetValue("UBR") + "; release: " + key.GetValue("DisplayVersion"));
             text.AppendLine("OS x64: " + Environment.Is64BitOperatingSystem + "; process x64: " + Environment.Is64BitProcess + "; .NET: " + Environment.Version);
             text.AppendLine("Сетевое подключение: " + NetworkCheck.HasConnection());
-            var vpn = VpnCheck.Scan(); text.AppendLine("VPN detected: " + vpn.NeedsAttention + "; scan failed: " + vpn.Failed);
+            var vpn = VpnCheck.Scan(); text.AppendLine("Other VPN detected: " + (vpn.Failed||vpn.Connections.Any(n=>n!=DnsTunnelNative.Name)) + "; scan failed: " + vpn.Failed);
             var system = new NativeDnsSystem();
             int index = 0;
             foreach (var adapter in system.Adapters(true).Take(16))
@@ -86,7 +101,7 @@ namespace HbAi.XboxDns
                         var settings = system.Read(adapter.Id, family);
                         text.AppendLine("Адаптер " + index + " " + family + ": manual=" + settings.Manual + "; DNS=" + string.Join(",", settings.Servers));
                         foreach (var entry in settings.Doh ?? new DohConfig[0])
-                            text.AppendLine("  DoH: index=" + entry.Index + "; flags=" + entry.Flags + "; template=" + TemplateLabel(entry.Template));
+                            text.AppendLine("  " + (entry.Kind == 2 ? "DoT" : "DoH") + ": index=" + entry.Index + "; flags=" + entry.Flags + "; port=" + entry.Port + "; template=" + TemplateLabel(entry.Template));
                     }
                     catch (Exception ex) { text.AppendLine("Адаптер " + index + " " + family + ": " + ex.GetType().Name + ": " + ex.Message); }
                 }

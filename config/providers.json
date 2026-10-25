@@ -37,7 +37,12 @@
     ],
     "description": "ChatGPT, Claude, Gemini, ElevenLabs",
     "site": "comss.ru",
-    "url": "https://www.comss.ru/"
+    "url": "https://www.comss.ru/",
+    "dot": "dns.comss.one",
+    "windowsDotServers": [
+      "83.220.169.155",
+      "212.109.195.93"
+    ]
   },
   {
     "id": 1,
@@ -79,7 +84,12 @@
     ],
     "description": "ChatGPT, Claude, Gemini, ElevenLabs",
     "site": "geohide.ru",
-    "url": "https://geohide.ru/"
+    "url": "https://geohide.ru/",
+    "dot": "geohide.ru",
+    "windowsDotServers": [
+      "159.194.200.33",
+      "193.233.112.67"
+    ]
   },
   {
     "id": 2,
@@ -121,13 +131,15 @@
     ],
     "description": "ChatGPT, Claude, Gemini, ElevenLabs",
     "site": "geohide.ru",
-    "url": "https://geohide.ru/"
+    "url": "https://geohide.ru/",
+    "dot": null,
+    "windowsDotServers": []
   },
   {
     "id": 3,
     "key": "xbox",
     "name": "Xbox DNS",
-    "enabled": true,
+    "enabled": false,
     "ipv4": [
       "111.88.96.54",
       "111.88.96.55"
@@ -136,7 +148,7 @@
       "2a00:ab00:1233:26::50",
       "2a00:ab00:1233:26::51"
     ],
-    "doh": null,
+    "doh": "https://xbox-dns.ru/dns-query",
     "windowsDohServers": [
       "111.88.96.54",
       "111.88.96.55"
@@ -156,7 +168,12 @@
     ],
     "description": "только Xbox Live, нейросети — нет",
     "site": "xbox-dns.ru",
-    "url": "https://xbox-dns.ru/"
+    "url": "https://xbox-dns.ru/",
+    "dot": "xbox-dns.ru",
+    "windowsDotServers": [
+      "111.88.96.54",
+      "111.88.96.55"
+    ]
   },
   {
     "id": 4,
@@ -164,13 +181,13 @@
     "name": "Bezmezhau",
     "enabled": true,
     "ipv4": [
-      "143.20.64.55",
+      "181.215.40.49",
       "31.58.216.201"
     ],
     "ipv6": [],
     "doh": "https://dns.bezmezhau.com/dns-query",
     "windowsDohServers": [
-      "143.20.64.55",
+      "181.215.40.49",
       "31.58.216.201"
     ],
     "encryptedOnly": false,
@@ -195,7 +212,18 @@
     ],
     "description": "ChatGPT, Gemini, Spotify",
     "site": "bezmezhau.com",
-    "url": "https://bezmezhau.com/"
+    "url": "https://bezmezhau.com/",
+    "dot": "dns.bezmezhau.com",
+    "windowsDotServers": [
+      "181.215.40.49",
+      "31.58.216.201"
+    ],
+    "legacyIpv4": [
+      [
+        "143.20.64.55",
+        "31.58.216.201"
+      ]
+    ]
   },
   {
     "id": 5,
@@ -206,7 +234,12 @@
       "194.87.196.13",
       "45.151.102.219"
     ],
-    "legacyIpv4": [["194.87.196.13", "186.246.49.127"]],
+    "legacyIpv4": [
+      [
+        "194.87.196.13",
+        "186.246.49.127"
+      ]
+    ],
     "ipv6": [],
     "doh": "https://dns.dns-ai.ru/dns-query",
     "windowsDohServers": [
@@ -237,9 +270,14 @@
       "cloudcode-pa.googleapis.com",
       "daily-cloudcode-pa.googleapis.com"
     ],
-    "description": "AI-сервисы · только DoH",
+    "description": "AI-сервисы · только с шифрованием",
     "site": "dns-ai.ru",
-    "url": "https://dns-ai.ru/#setup"
+    "url": "https://dns-ai.ru/#setup",
+    "dot": "dns.dns-ai.ru",
+    "windowsDotServers": [
+      "194.87.196.13",
+      "45.151.102.219"
+    ]
   },
   {
     "id": 6,
@@ -282,6 +320,322 @@
     ],
     "description": "ChatGPT, Claude, Gemini, ElevenLabs, Antigravity",
     "site": "magicdns.ru",
-    "url": "https://magicdns.ru/"
+    "url": "https://magicdns.ru/",
+    "dot": "dns.magicdns.ru",
+    "windowsDotServers": [
+      "109.120.132.43",
+      "94.249.177.102"
+    ]
+  },
+  {
+    "id": 7,
+    "key": "zapret",
+    "name": "Zapret DNS",
+    "enabled": true,
+    "ipv4": [
+      "83.217.211.149"
+    ],
+    "ipv6": [
+      "2a03:afc0:9::235d"
+    ],
+    "doh": "https://dns.zapret.moe/dns-query",
+    "windowsDohServers": [
+      "83.217.211.149"
+    ],
+    "encryptedOnly": false,
+    "services": [
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "ElevenLabs",
+      "Spotify"
+    ],
+    "autoGoals": [
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "ElevenLabs",
+      "Spotify"
+    ],
+    "testHosts": [
+      "example.com",
+      "chatgpt.com",
+      "claude.ai",
+      "gemini.google.com",
+      "generativelanguage.googleapis.com",
+      "api.elevenlabs.io",
+      "open.spotify.com"
+    ],
+    "description": "ChatGPT, Claude, Gemini, ElevenLabs",
+    "site": "dns.zapret.moe",
+    "url": "https://dns.zapret.moe/",
+    "dot": "dns.zapret.moe",
+    "windowsDotServers": [
+      "83.217.211.149"
+    ]
+  },
+  {
+    "id": 8,
+    "key": "geohide-us",
+    "name": "GeoHide US",
+    "enabled": true,
+    "ipv4": [
+      "192.255.159.240",
+      "192.255.159.241",
+      "192.3.233.253",
+      "107.175.76.134"
+    ],
+    "ipv6": [],
+    "doh": "https://us.geohide.ru/dns-query",
+    "windowsDohServers": [
+      "192.255.159.240",
+      "192.255.159.241",
+      "192.3.233.253",
+      "107.175.76.134"
+    ],
+    "encryptedOnly": false,
+    "services": [
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "ElevenLabs",
+      "Spotify"
+    ],
+    "autoGoals": [
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "ElevenLabs",
+      "Spotify"
+    ],
+    "testHosts": [
+      "example.com",
+      "chatgpt.com",
+      "claude.ai",
+      "gemini.google.com",
+      "generativelanguage.googleapis.com",
+      "api.elevenlabs.io",
+      "open.spotify.com"
+    ],
+    "description": "ChatGPT, Claude, Gemini, ElevenLabs",
+    "site": "us.geohide.ru",
+    "url": "https://geohide.ru/",
+    "dot": "us.geohide.ru",
+    "windowsDotServers": [
+      "192.255.159.240",
+      "192.255.159.241",
+      "192.3.233.253",
+      "107.175.76.134"
+    ]
+  },
+  {
+    "id": 9,
+    "key": "malw",
+    "name": "Malw DNS",
+    "enabled": true,
+    "ipv4": [
+      "179.254.166.171",
+      "164.5.224.81"
+    ],
+    "ipv6": [
+      "2a12:bec4:1bb0:27dd::2",
+      "2a13:82c0:0:d::3"
+    ],
+    "doh": "https://dns.malw.link/dns-query",
+    "windowsDohServers": [
+      "179.254.166.171",
+      "164.5.224.81"
+    ],
+    "encryptedOnly": false,
+    "services": [
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "ElevenLabs",
+      "Spotify",
+      "Antigravity"
+    ],
+    "autoGoals": [
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "ElevenLabs",
+      "Spotify",
+      "Antigravity"
+    ],
+    "testHosts": [
+      "example.com",
+      "chatgpt.com",
+      "claude.ai",
+      "gemini.google.com",
+      "generativelanguage.googleapis.com",
+      "api.elevenlabs.io",
+      "open.spotify.com",
+      "cloudcode-pa.googleapis.com",
+      "daily-cloudcode-pa.googleapis.com"
+    ],
+    "description": "ChatGPT, Claude, Gemini, ElevenLabs",
+    "site": "dns.malw.link",
+    "url": "https://info.dns.malw.link/setup",
+    "dot": "dns.malw.link",
+    "windowsDotServers": [
+      "179.254.166.171",
+      "164.5.224.81"
+    ]
+  },
+  {
+    "id": 10,
+    "key": "wlrus",
+    "name": "WLrus DNS",
+    "enabled": true,
+    "ipv4": [
+      "95.85.240.254",
+      "138.124.254.134"
+    ],
+    "ipv6": [],
+    "doh": "https://dns.wlrus.cfd/dns-query",
+    "windowsDohServers": [
+      "95.85.240.254",
+      "138.124.254.134"
+    ],
+    "encryptedOnly": false,
+    "services": [
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "Spotify"
+    ],
+    "autoGoals": [
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "Spotify"
+    ],
+    "testHosts": [
+      "example.com",
+      "chatgpt.com",
+      "claude.ai",
+      "gemini.google.com",
+      "generativelanguage.googleapis.com",
+      "open.spotify.com"
+    ],
+    "description": "ChatGPT, Claude, Gemini, Spotify",
+    "site": "dns.wlrus.cfd",
+    "url": "https://site.dns.wlrus.cfd/",
+    "dot": "dns.wlrus.cfd",
+    "windowsDotServers": [
+      "95.85.240.254",
+      "138.124.254.134"
+    ]
+  },
+  {
+    "id": 11,
+    "key": "webshift",
+    "name": "Webshift",
+    "enabled": true,
+    "ipv4": [
+      "31.31.207.68"
+    ],
+    "ipv6": [],
+    "doh": "https://d.webshiftvpn.ru/dns-query",
+    "windowsDohServers": [
+      "31.31.207.68"
+    ],
+    "encryptedOnly": true,
+    "services": [],
+    "autoGoals": [],
+    "testHosts": [
+      "example.com"
+    ],
+    "description": "Зашифрованный DNS · DoH",
+    "site": "d.webshiftvpn.ru",
+    "url": "https://d.webshiftvpn.ru/dns-query",
+    "dot": null,
+    "windowsDotServers": []
+  },
+  {
+    "id": 12,
+    "key": "adguard",
+    "name": "AdGuard DNS",
+    "enabled": true,
+    "ipv4": [
+      "94.140.14.14",
+      "94.140.15.15"
+    ],
+    "ipv6": [
+      "2a10:50c0::ad1:ff",
+      "2a10:50c0::ad2:ff"
+    ],
+    "doh": "https://dns.adguard-dns.com/dns-query",
+    "windowsDohServers": [
+      "94.140.14.14",
+      "94.140.15.15"
+    ],
+    "encryptedOnly": false,
+    "services": [],
+    "autoGoals": [],
+    "testHosts": [
+      "example.com"
+    ],
+    "description": "Фильтрация рекламы и трекеров",
+    "site": "adguard-dns.io",
+    "url": "https://adguard-dns.io/en/public-dns.html",
+    "dot": "dns.adguard-dns.com",
+    "windowsDotServers": [
+      "94.140.14.14",
+      "94.140.15.15"
+    ]
+  },
+  {
+    "id": 13,
+    "key": "malw-cf",
+    "name": "Malw · CF",
+    "enabled": true,
+    "ipv4": [
+      "162.159.36.20",
+      "162.159.36.5"
+    ],
+    "ipv6": [],
+    "doh": "https://5u35p8m9i7.cloudflare-gateway.com/dns-query",
+    "windowsDohServers": [
+      "162.159.36.20",
+      "162.159.36.5"
+    ],
+    "encryptedOnly": true,
+    "services": [
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "ElevenLabs",
+      "Spotify",
+      "Antigravity"
+    ],
+    "autoGoals": [
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "ElevenLabs",
+      "Spotify",
+      "Antigravity"
+    ],
+    "testHosts": [
+      "example.com",
+      "chatgpt.com",
+      "claude.ai",
+      "gemini.google.com",
+      "generativelanguage.googleapis.com",
+      "api.elevenlabs.io",
+      "open.spotify.com",
+      "cloudcode-pa.googleapis.com",
+      "daily-cloudcode-pa.googleapis.com"
+    ],
+    "description": "ChatGPT, Claude, Gemini, ElevenLabs",
+    "site": "info.dns.malw.link",
+    "url": "https://info.dns.malw.link/",
+    "dot": "5u35p8m9i7.cloudflare-gateway.com",
+    "windowsDotServers": [
+      "162.159.36.20",
+      "162.159.36.5"
+    ]
   }
 ]

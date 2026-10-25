@@ -24,7 +24,7 @@ sealed class MemoryStore : IDnsBackupStore
 }
 sealed class FakeSystem : IDnsSystem, IDnsBindingSystem
 {
-    public bool CaptureDoh, Ipv6Enabled = true;
+    public bool CaptureDoh, Ipv6Enabled = true, ProfilePresent;
     public int BindingWrites;
     public bool FailBinding;
     public Dictionary<string, DohConfig[]> Encryption = new Dictionary<string, DohConfig[]>();
@@ -48,7 +48,7 @@ sealed class FakeSystem : IDnsSystem, IDnsBindingSystem
     public FamilyBackup Read(Guid id, string family)
     {
         var values = Values[id + "/" + family];
-        return new FamilyBackup { Family = family, Manual = values.Length > 0, Servers = values.ToArray(), DohCaptured = CaptureDoh,
+        return new FamilyBackup { Family = family, Manual = values.Length > 0, Servers = values.ToArray(), DohCaptured = CaptureDoh, ProfilePresent = ProfilePresent,
             Doh = CaptureDoh ? (Encryption.ContainsKey(id + "/" + family) ? Encryption[id + "/" + family] : new DohConfig[0]) : null };
     }
     public void Set(Guid id, FamilyBackup settings)
@@ -290,6 +290,57 @@ static class NativeDnsTests
         Test("Reset storage failure prevents DNS writes", () => {
             system.Values[system.Id + "/IPv4"] = Smart; store.FailSave = true;
             Fail(() => engine.ResetKnown(Smart)); Assert(system.Writes == 0, "Reset before durable backup");
+        });
+        Test("Missing old adapter backups cannot mask unbacked active Comss", () => {
+            var old1=Guid.NewGuid();var old2=Guid.NewGuid();
+            store.Save(new List<AdapterBackup>{
+                new AdapterBackup{Guid=old1.ToString("B"),Ipv6Binding=true,Families=new[]{new FamilyBackup{Family="IPv4",Servers=new string[0]}}},
+                new AdapterBackup{Guid=old2.ToString("B"),Ipv6Binding=true,Families=new[]{new FamilyBackup{Family="IPv4",Servers=new string[0]}}}
+            });
+            string saved=store.Json;system.Values[system.Id+"/IPv4"]=Smart;system.Values[system.Id+"/IPv6"]=new[]{"2001:db8::53"};
+            Assert(engine.NeedsKnownReset(Smart)&&system.Writes==0,"Unbacked active adapter was hidden by unrelated copies");
+            engine.ResetKnown(Smart);
+            Assert(system.Values[system.Id+"/IPv4"].Length==0,"Current Comss remained set");
+            Assert(system.Values[system.Id+"/IPv6"].SequenceEqual(new[]{"2001:db8::53"})&&system.BindingWrites==0,"Unrelated IPv6 or its binding changed");
+            Assert(store.Json==saved&&engine.DeferredAdapters.Count==2,"Missing adapter copies were deleted or changed");
+            Assert(!engine.NeedsKnownReset(Smart),"Completed reset still requests another reset");
+        });
+        Test("Mixed backed and unbacked adapters restore or reset independently", () => {
+            engine.Change(true,Smart);var fresh=Guid.NewGuid();system.Add(fresh);system.Values[fresh+"/IPv4"]=Smart;
+            Assert(engine.NeedsKnownReset(Smart),"New adapter incorrectly covered by another GUID");
+            engine.ResetKnown(Smart);Original();
+            Assert(system.Values[fresh+"/IPv4"].Length==0&&store.Json==null,"Unbacked adapter not reset or covered original not restored");
+        });
+        Test("Known-reset failure preserves old missing copies while rolling back current DNS", () => {
+            var missing=Guid.NewGuid();store.Save(new List<AdapterBackup>{new AdapterBackup{Guid=missing.ToString("B"),Families=new[]{new FamilyBackup{Family="IPv4",Servers=new string[0]}}}});
+            string saved=store.Json;system.Values[system.Id+"/IPv4"]=Smart;system.FailWrites.Add(1);
+            Fail(()=>engine.ResetKnown(Smart));
+            Assert(system.Values[system.Id+"/IPv4"].SequenceEqual(Smart)&&store.Json==saved,"Rollback lost current DNS or an unrelated old copy");
+        });
+        Test("Reset and rollback failure keep both old and current recovery data", () => {
+            var missing=Guid.NewGuid();store.Save(new List<AdapterBackup>{new AdapterBackup{Guid=missing.ToString("B"),Families=new[]{new FamilyBackup{Family="IPv4",Servers=new string[0]}}}});
+            system.Values[system.Id+"/IPv4"]=Smart;system.FailWrites.UnionWith(new[]{1,2});Fail(()=>engine.ResetKnown(Smart));
+            Assert(store.Load().Count==2&&store.Load().Any(r=>new Guid(r.Guid)==missing)&&store.Load().Any(r=>new Guid(r.Guid)==system.Id),"Failure discarded recovery data");
+        });
+        Test("Durable combined snapshot failure blocks writes with old missing copies", () => {
+            var missing=Guid.NewGuid();store.Save(new List<AdapterBackup>{new AdapterBackup{Guid=missing.ToString("B"),Families=new[]{new FamilyBackup{Family="IPv4",Servers=new string[0]}}}});
+            string saved=store.Json;system.Values[system.Id+"/IPv4"]=Smart;store.FailSave=true;Fail(()=>engine.ResetKnown(Smart));
+            Assert(system.Writes==0&&store.Json==saved,"DNS changed before the combined recovery snapshot");
+        });
+        Test("Explicit unbacked reset clears known DoH without guessing the IPv6 binding", () => {
+            system.CaptureDoh=true;system.Ipv6Enabled=false;system.Values[system.Id+"/IPv4"]=Dns.V4[5];
+            system.Encryption[system.Id+"/IPv4"]=EncryptedDns.Strict(2,EncryptedDns.Templates[5]);engine.ResetKnown(Dns.KnownServers);
+            Assert(system.Values[system.Id+"/IPv4"].Length==0&&system.Encryption[system.Id+"/IPv4"].Length==0,"Known DoH settings survived explicit reset");
+            Assert(system.BindingWrites==0&&!system.Ipv6Enabled,"An unknown original IPv6 binding was guessed");
+        });
+        Test("Custom encryption on known addresses is not treated as app-owned DNS", () => {
+            system.CaptureDoh=true;system.Values[system.Id+"/IPv4"]=Smart;
+            system.Encryption[system.Id+"/IPv4"]=EncryptedDns.Strict(2,"https://custom.example/dns-query");
+            Assert(!engine.NeedsKnownReset(Smart),"Custom encryption selected for reset");Fail(()=>engine.ResetKnown(Smart));Assert(system.Writes==0,"Custom encryption modified");
+        });
+        Test("Profile DNS is excluded from unbacked reset", () => {
+            system.ProfilePresent=true;system.Values[system.Id+"/IPv4"]=Smart;
+            Assert(!engine.NeedsKnownReset(Smart),"Profile settings selected for reset");Fail(()=>engine.ResetKnown(Smart));Assert(system.Writes==0,"Profile settings modified");
         });
         Test("Partial reset failure rolls back changed adapters", () => {
             var other = Guid.NewGuid(); system.Add(other);
