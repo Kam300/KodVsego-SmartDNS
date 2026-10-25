@@ -81,6 +81,7 @@ namespace HbAi.XboxDns
             if(running)return;int selected=providers[provider.SelectedIndex];bool tls=transport.SelectedIndex==0;
             if(tls?!DotDns.Available(selected):EncryptedDns.Templates[selected]==null){status.Text="У провайдера нет выбранного протокола.";return;}
             if(DnsTunnel.Pending){status.Text="Сначала восстановите DNS от предыдущего запуска.";return;}
+            if(!DnsTunnelNative.IsAvailable()){status.Text="В папке программы нет wintun.dll. Используйте способ 2 в главном окне или скачайте ZIP / MSI.";Append(status.Text);return;}
             stopping=false;connected=false;check.Enabled=false;
             ControlsRunning(true);status.Text="Проверяем сервер и создаём туннель…";Append("Start provider="+Dns.Name[selected]+"; protocol="+(tls?"TLS":"HTTPS"));
             Guid token=Guid.NewGuid();IAsyncResult pending;

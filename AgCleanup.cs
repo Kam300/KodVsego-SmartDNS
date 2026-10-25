@@ -1,8 +1,9 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
+using Microsoft.Win32;
 
 namespace HbAi.XboxDns
 {
@@ -27,6 +28,35 @@ namespace HbAi.XboxDns
         internal static string Root { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), @"KodVsego\SmartDNS\RemovedAntigravityRules"); } }
         readonly string outputRoot;
         internal AgCleanupBackup(string directory = null) { outputRoot = directory ?? Root; }
+        static string EscapeRegString(string value) { return (value ?? "").Replace("\\", "\\\\").Replace("\"", "\\\""); }
+        static string FormatMultiStringHex(string[] values)
+        {
+            using (var memory = new MemoryStream())
+            {
+                foreach (string item in values ?? new string[0])
+                {
+                    byte[] bytes = Encoding.Unicode.GetBytes(item ?? "");
+                    memory.Write(bytes, 0, bytes.Length);
+                    memory.WriteByte(0); memory.WriteByte(0);
+                }
+                memory.WriteByte(0); memory.WriteByte(0);
+                return string.Join(",", memory.ToArray().Select(b => b.ToString("x2")));
+            }
+        }
+        internal static string FormatRuleReg(string id, AgRule rule)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine("Windows Registry Editor Version 5.00");
+            builder.AppendLine();
+            builder.AppendLine(@"[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Dnscache\Parameters\DnsPolicyConfig\" + id + "]");
+            builder.AppendLine("\"Comment\"=\"" + EscapeRegString(rule.Comment) + "\"");
+            builder.AppendLine("\"DisplayName\"=\"" + EscapeRegString(rule.DisplayName) + "\"");
+            builder.AppendLine("\"GenericDNSServers\"=\"" + EscapeRegString(string.Join(";", rule.Servers ?? new string[0])) + "\"");
+            builder.AppendLine("\"Name\"=hex(7):" + FormatMultiStringHex(rule.Names));
+            builder.AppendLine("\"ConfigOptions\"=dword:" + unchecked((uint)(rule.ConfigOptions ?? 8)).ToString("x8"));
+            builder.AppendLine("\"Version\"=dword:" + unchecked((uint)(rule.Version ?? 2)).ToString("x8"));
+            return builder.ToString();
+        }
         public string Save(AgRule[] rules)
         {
             if (rules.Length == 0 || rules.Length > 2 || rules.Any(r => !AgCleanup.IsLegacy(r)))
@@ -40,19 +70,16 @@ namespace HbAi.XboxDns
             {
                 string id = new Guid(rule.Id).ToString("B");
                 string file = Path.Combine(directory, id + ".reg");
-                string key = @"HKLM\SYSTEM\CurrentControlSet\Services\Dnscache\Parameters\DnsPolicyConfig\" + id;
-                var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "reg.exe"),
-                    "export \"" + key + "\" \"" + file + "\" /reg:64") {
-                    UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System)
-                };
-                using (var process = Process.Start(start))
+                string subKey = @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters\DnsPolicyConfig\" + id;
+                using (var machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+                using (var existing = machine.OpenSubKey(subKey, false))
                 {
-                    if (process == null || !process.WaitForExit(15000)) throw new IOException("Не удалось завершить сохранение правил. Удаление отменено.");
-                    if (process.ExitCode != 0) throw new IOException("Windows не сохранила копию правил. Удаление отменено (код " + process.ExitCode + ").");
+                    if (existing == null) throw new IOException("Windows не сохранила копию правил: правило отсутствует в реестре. Удаление отменено.");
                 }
+                File.WriteAllText(file, FormatRuleReg(id, rule), Encoding.Unicode);
                 string exported = File.Exists(file) ? File.ReadAllText(file) : "";
                 if (!exported.StartsWith("Windows Registry Editor Version 5.00", StringComparison.Ordinal) ||
-                    exported.IndexOf("[HKEY_LOCAL_MACHINE\\" + key.Substring(5) + "]", StringComparison.OrdinalIgnoreCase) < 0)
+                    exported.IndexOf("[HKEY_LOCAL_MACHINE\\" + subKey + "]", StringComparison.OrdinalIgnoreCase) < 0)
                     throw new IOException("Копия правила не подтверждена. Удаление отменено.");
                 using (var saved = new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.Read)) saved.Flush(true);
             }

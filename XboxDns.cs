@@ -1,4 +1,4 @@
-﻿// HB AI · Smart DNS — переключатель Smart DNS (Comss.one, GeoHide, xbox-dns.ru) в стиле сообщества «Нейросети и AI на практике».
+// HB AI · Smart DNS — переключатель Smart DNS (Comss.one, GeoHide, xbox-dns.ru) в стиле сообщества «Нейросети и AI на практике».
 // Сборка: build.bat (csc из .NET Framework 4, есть в каждой Windows 10/11).
 using System;
 using System.Collections.Generic;
@@ -356,7 +356,7 @@ namespace HbAi.XboxDns
             if(googleMode){secureDns=true;tlsDns=true;manualSelection=true;try{using(var key=Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KodVsego\SmartDns")){
                 object saved=key==null?null:key.GetValue("GoogleTunnelProvider");if(saved is int&&TunnelSession.GoogleProvider((int)saved))dnsSet=(int)saved;
                 string protocol=key==null?null:key.GetValue("GoogleTunnelProtocol") as string;tlsDns=protocol=="HTTPS"?false:DotDns.Available(dnsSet)&&dnsSet!=6;
-            }}catch(Exception){}}
+            }}catch(Exception){}if(readProfilePreference&&!DnsTunnelNative.IsAvailable())error=MissingWintunInlineError;}
             if(readProfilePreference)try{using(var key=Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KodVsego\SmartDns"))if(key!=null&&object.Equals(key.GetValue("LocalResolverMode"),1)){
                 localMode=true;googleMode=false;secureDns=true;manualSelection=defaultGoal<0;
                 object saved=key.GetValue("LocalResolverProvider");if(saved is int&&TunnelSession.EncryptedProvider((int)saved))dnsSet=(int)saved;
@@ -504,6 +504,18 @@ namespace HbAi.XboxDns
             try{using(var key=Registry.CurrentUser.CreateSubKey(@"SOFTWARE\KodVsego\SmartDns")){key.SetValue("GoogleTunnelMode",googleMode?1:0,RegistryValueKind.DWord);key.SetValue("LocalResolverMode",localMode?1:0,RegistryValueKind.DWord);string prefix=localMode?"LocalResolver":"GoogleTunnel";key.SetValue(prefix+"Provider",dnsSet,RegistryValueKind.DWord);key.SetValue(prefix+"Protocol",tlsDns?"TLS":"HTTPS",RegistryValueKind.String);}}
             catch(Exception problem){DiagnosticReport.Record("Настройки профиля",problem.ToString());}
         }
+        internal const string MissingWintunTitle="Нужен файл wintun.dll (способ 3)";
+        internal const string MissingWintunInlineError="Нет wintun.dll рядом с EXE · выберите способ 2 или скачайте ZIP / MSI";
+        internal const string MissingWintunMessage="Экспериментальный режим «3 · Gemini / NotebookLM · beta» создаёт виртуальный сетевой адаптер и требует библиотеку wintun.dll рядом с программой.\n\nВ одиночный файл EXE эта библиотека не встроена, чтобы избежать ложных срабатываний антивирусов.\n\nКак решить прямо сейчас:\n• Нажмите «Способ 2» ниже — включится режим «2 · Через приложение · beta». Он тоже шифрует DNS (DoH / DoT) для всего ПК и работает из одного файла EXE без драйверов.\n\nКак включить экспериментальный способ 3:\n• Скачайте установщик MSI или архив Portable ZIP со страницы релиза на GitHub (в них wintun.dll уже в комплекте), либо\n• Положите официальный файл wintun.dll (Wintun 0.14.1 x64) в одну папку с этим EXE.";
+        void ShowMissingWintunHelp()
+        {
+            error=MissingWintunInlineError;Invalidate();
+            using(var dialog=CreateDialog(MissingWintunMessage,MissingWintunTitle,MessageBoxButtons.YesNo,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1))
+            {
+                dialog.SetPrimaryText("Способ 2");
+                if(dialog.ShowDialog(this)==DialogResult.Yes)SelectLocalMode(true,true);
+            }
+        }
         internal void SelectGoogleMode(bool enabled,bool persist=false)
         {
             if(initializing||busy||ManagedDns.Running)return;
@@ -512,7 +524,7 @@ namespace HbAi.XboxDns
             if(enabled){if(!TunnelSession.GoogleProvider(dnsSet))dnsSet=0;secureDns=true;tlsDns=dnsSet!=6&&DotDns.Available(dnsSet);active=false;dnsConfirmed=false;}
             if(persist)SaveGooglePreference();
             DiagnosticReport.Record("Профиль подключения","Gemini / NotebookLM="+enabled+"; DNS scope=entire PC");
-            layoutReady=false;UpdateCanvasBounds();Invalidate();
+            layoutReady=false;UpdateCanvasBounds();Invalidate();if(enabled&&persist&&profilePreferences&&!DnsTunnelNative.IsAvailable())ShowMissingWintunHelp();
         }
         internal void SelectLocalMode(bool enabled,bool persist=false)
         {
@@ -546,7 +558,7 @@ namespace HbAi.XboxDns
         void ToggleGoogleTunnel()
         {
             if(ManagedDns.Running){CancelResolverCheck();CancelConnectionLatency();ManagedDns.Stop();return;}
-            if(busy)return;operationRevision++;error=null;busy=true;Invalidate();
+            if(busy)return;if(!localMode&&profilePreferences&&!DnsTunnelNative.IsAvailable()){ShowMissingWintunHelp();return;}operationRevision++;error=null;busy=true;Invalidate();
             try{if(localMode){var config=localSession as ILocalDnsConfiguration;if(config!=null)config.SetAntigravity(localAntigravity?localAntigravityProvider:-1);}ManagedDns.Start(dnsSet,tlsDns);}catch(Exception problem){busy=false;error=TunnelDiagnostics.Error(problem);DiagnosticReport.Record(localMode?"Локальный DNS":"Gemini / NotebookLM",error);Invalidate();}
         }
         internal bool LocalAutoHasSeparateTarget(int goal)

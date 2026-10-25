@@ -48,13 +48,43 @@ namespace HbAi.XboxDns
         string loadedPath;
         T Export<T>(string name) where T:class {var p=GetProcAddress(library,"Wintun"+name);if(p==IntPtr.Zero)throw new IOException("Неполная библиотека Wintun.");return Marshal.GetDelegateForFunctionPointer(p,typeof(T)) as T;}
         internal static string Hash(byte[] bytes){using(var sha=SHA256.Create())return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-","").ToLowerInvariant();}
+        internal static string ExpectedHash{get{return IntPtr.Size==8?X64Hash:X86Hash;}}
+        internal static string[] CandidatePaths(string baseDirectory=null)
+        {
+            string root=string.IsNullOrEmpty(baseDirectory)?AppDomain.CurrentDomain.BaseDirectory:baseDirectory;
+            string architecture=IntPtr.Size==8?"x64":"x86";
+            return new[]{
+                Path.Combine(root,"wintun.dll"),
+                Path.Combine(root,"wintun-"+architecture+".dll"),
+                Path.Combine(root,"res","wintun","wintun-"+architecture+".dll")
+            };
+        }
+        internal static bool IsAvailable(string baseDirectory=null)
+        {
+            string expected=ExpectedHash;
+            foreach(string path in CandidatePaths(baseDirectory))
+                try{if(File.Exists(path)&&Hash(File.ReadAllBytes(path))==expected)return true;}
+                catch(IOException){}catch(UnauthorizedAccessException){}
+            return false;
+        }
+        internal static byte[] ReadVerifiedBytes(string baseDirectory=null)
+        {
+            string expected=ExpectedHash;
+            bool foundAny=false;
+            foreach(string path in CandidatePaths(baseDirectory))
+            {
+                if(!File.Exists(path))continue;
+                foundAny=true;
+                byte[] bytes=File.ReadAllBytes(path);
+                if(Hash(bytes)==expected)return bytes;
+            }
+            if(foundAny)throw new IOException("Файл wintun.dll рядом с программой имеет неподходящую разрядность или контрольную сумму (нужен официальный Wintun 0.14.1 "+(IntPtr.Size==8?"x64":"x86")+"). DNS не изменён.");
+            throw new IOException("В папке программы нет wintun.dll (одиночный EXE). Выберите «Способ подключения → 2 · Через приложение» или скачайте ZIP / MSI со страницы релиза.");
+        }
         internal void Open()
         {
-            string architecture=IntPtr.Size==8?"x64":"x86",expected=IntPtr.Size==8?X64Hash:X86Hash;
-            byte[] bytes;
-            using(var resource=Assembly.GetExecutingAssembly().GetManifestResourceStream("native.wintun."+architecture))
-            using(var memory=new MemoryStream()){if(resource==null)throw new IOException("В сборке отсутствует Wintun.");resource.CopyTo(memory);bytes=memory.ToArray();}
-            if(Hash(bytes)!=expected)throw new IOException("Контрольная сумма Wintun не совпадает.");
+            string expected=ExpectedHash;
+            byte[] bytes=ReadVerifiedBytes();
             string directory=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"KodVsego-SmartDNS-Wintun",expected);
             Directory.CreateDirectory(directory);
             string path=Path.Combine(directory,"wintun.dll");

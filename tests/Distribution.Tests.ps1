@@ -34,8 +34,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip=[IO.Compression.ZipFile]::OpenRead((Join-Path $output $zipName))
 try {
     $files=@($zip.Entries|Where-Object {$_.Name})
-    $expectedZip=@($exeName,'LICENSE','LICENSE.ru.md','res/OFL-Unbounded.txt','res/OFL-Manrope.txt','docs/licenses/HB-AI-LICENSE.ru.md','Прочитайте.txt')
-    Check ($files.Count -eq 7 -and @(Compare-Object ($expectedZip|Sort-Object) (@($files|ForEach-Object {$_.FullName.Replace('\','/')})|Sort-Object)).Count -eq 0) 'ZIP contains the app, five licenses and the readme; no MSI ownership marker'
+    $expectedZip=@($exeName,'wintun.dll','LICENSE','LICENSE.ru.md','res/OFL-Unbounded.txt','res/OFL-Manrope.txt','res/wintun/LICENSE.txt','docs/DNS-TUNNEL.md','docs/LOCAL-DNS.md','docs/RESOLVER-CHECK.md','docs/licenses/HB-AI-LICENSE.ru.md','Прочитайте.txt')
+    Check ($files.Count -eq 12 -and @(Compare-Object ($expectedZip|Sort-Object) (@($files|ForEach-Object {$_.FullName.Replace('\','/')})|Sort-Object)).Count -eq 0) 'ZIP contains the app, wintun.dll, licenses, docs and readme; no MSI ownership marker'
     foreach($entry in $files) {
         $name=$entry.FullName.Replace('\','/')
         if ($name -eq 'Прочитайте.txt') { continue }
@@ -43,6 +43,7 @@ try {
         try { $hash=([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','').ToLowerInvariant() } finally { $stream.Dispose(); $sha.Dispose() }
         $original=Join-Path $root $name
         if ($name -eq $exeName) { $original=$exe }
+        elseif ($name -eq 'wintun.dll') { $original=Join-Path $root 'res\wintun\wintun-x64.dll' }
         Check ($hash -eq (FileHash $original)) ('ZIP bytes match '+$name)
     }
 } finally { $zip.Dispose() }

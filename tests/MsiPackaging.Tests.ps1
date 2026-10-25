@@ -43,7 +43,7 @@ Check ($allUsers.Count -eq 0) 'Package is strictly per-user'
 $registry=@(Read-MsiRows $database 'SELECT `Root` FROM `Registry`' 1)
 Check ($registry.Count -gt 0 -and @($registry|Where-Object {$_.Values[0] -ne '1'}).Count -eq 0) 'All application registry entries are HKCU'
 $files=@(Read-MsiRows $database 'SELECT `FileName` FROM `File`' 1 | ForEach-Object {$_.Values[0]})
-Check ($files.Count -eq 9 -and @($files|Where-Object {$_ -match '(?i)\.exe$'}).Count -eq 1 -and @($files|Where-Object {$_ -match 'SmartDNS.Msi.json$'}).Count -eq 1 -and @($files|Where-Object {$_ -match 'Wintun-LICENSE.txt$'}).Count -eq 1) 'Payload is one application, MSI marker, readme and six license files including Wintun'
+Check ($files.Count -eq 10 -and @($files|Where-Object {$_ -match '(?i)\.exe$'}).Count -eq 1 -and @($files|Where-Object {$_ -match '(?i)wintun\.dll$'}).Count -eq 1 -and @($files|Where-Object {$_ -match 'SmartDNS.Msi.json$'}).Count -eq 1 -and @($files|Where-Object {$_ -match 'Wintun-LICENSE.txt$'}).Count -eq 1) 'Payload is one application, wintun.dll, MSI marker, readme and six license files including Wintun'
 $sequence=@(Read-MsiRows $database 'SELECT `Action`, `Sequence` FROM `InstallExecuteSequence`' 2)
 $cleanup=[int]($sequence|Where-Object {$_.Values[0] -eq 'PrepareCleanUninstall'}).Values[1]
 $validate=[int]($sequence|Where-Object {$_.Values[0] -eq 'InstallValidate'}).Values[1]
@@ -130,7 +130,7 @@ try {
     $null=Run-Installer @('/i',('"'+$packages[0].File+'"'),('INSTALLFOLDER="'+$installFolder+'"')) 'install'
     $installedExe=Join-Path $installFolder 'SmartDNS.exe'
     Check ((Installed $packages[0].ProductCode) -and (Get-FileHash -LiteralPath $installedExe).Hash.ToLowerInvariant() -eq $packages[0].SourceSHA256) 'Real MSI install registers the product and installs exact application bytes'
-    foreach($file in @('SmartDNS.Msi.json','LICENSE','LICENSE.ru.md','Прочитайте.txt','res\OFL-Unbounded.txt','res\OFL-Manrope.txt','res\Wintun-LICENSE.txt','docs\licenses\HB-AI-LICENSE.ru.md')) { Check (Test-Path -LiteralPath (Join-Path $installFolder $file)) ('Installed '+$file) }
+    foreach($file in @('wintun.dll','SmartDNS.Msi.json','LICENSE','LICENSE.ru.md','Прочитайте.txt','res\OFL-Unbounded.txt','res\OFL-Manrope.txt','res\Wintun-LICENSE.txt','docs\licenses\HB-AI-LICENSE.ru.md')) { Check (Test-Path -LiteralPath (Join-Path $installFolder $file)) ('Installed '+$file) }
     $shortcut=Join-Path ([Environment]::GetFolderPath('Programs')) ($packages[0].ShortcutName+'.lnk')
     Check (Test-Path -LiteralPath $shortcut) 'Start menu shortcut is created for this user'
     Check (Test-Path -LiteralPath ('HKCU:\'+$packages[0].RegistryBase)) 'Product metadata is registered only for this user'

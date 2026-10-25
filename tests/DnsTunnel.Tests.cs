@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -78,6 +78,16 @@ static class TunnelTests
             server.Dispose();Check(wait.Wait(3000),"Closing while connecting completes the pending operation without hanging");
         }
         Check(Marshal.SizeOf(typeof(DnsTunnelNative.AddressRow))==80&&Marshal.OffsetOf(typeof(DnsTunnelNative.AddressRow),"InterfaceLuid").ToInt32()==32&&Marshal.OffsetOf(typeof(DnsTunnelNative.AddressRow),"Prefix").ToInt32()==60,"Unicast row matches the Windows ABI");
+        string emptyDir=Path.Combine(Path.GetTempPath(),"SmartDNS-wintun-test-"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(emptyDir);
+        try {
+            Check(!DnsTunnelNative.IsAvailable(emptyDir),"Standalone directory without wintun.dll is reported as unavailable");
+            Reject(()=>DnsTunnelNative.ReadVerifiedBytes(emptyDir),"Missing wintun.dll fails with a clear IOException before driver loading");
+            File.WriteAllText(Path.Combine(emptyDir,"wintun.dll"),"not a valid signed wintun library");
+            Check(!DnsTunnelNative.IsAvailable(emptyDir),"Modified or wrong wintun.dll is rejected by SHA-256 check");
+            Reject(()=>DnsTunnelNative.ReadVerifiedBytes(emptyDir),"Tampered wintun.dll is rejected before copying or loading");
+            Check(MainForm.MissingWintunMessage.Contains("Способ 2")&&MainForm.MissingWintunMessage.Contains("wintun.dll")&&MainForm.MissingWintunMessage.Contains("ZIP"),"Standalone EXE guidance explains both Method 2 and how to add wintun.dll or use ZIP/MSI");
+        } finally { try { Directory.Delete(emptyDir,true); } catch {} }
         var query=DnsProbe.Query("example.com");var answer=TunnelWire.Error(query);
         TunnelWire.Validate(query,answer);Check((answer[3]&15)==2,"SERVFAIL retains the original transaction and question");
         answer[3]=(byte)((answer[3]&240)|3);TunnelWire.Validate(query,answer);Check((answer[3]&15)==3,"NXDOMAIN is preserved as a DNS response, not a transport failure");
