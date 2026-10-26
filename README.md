@@ -27,9 +27,16 @@
 
 ## Проверка VirusTotal
 
-Для Windows 2.23.7 проверка пока не выполнена: 2026-10-26 сайт и API VirusTotal недоступны с компьютера сборки (тайм-аут соединения). Сверяйте SHA-256 с `SHA256SUMS.txt` в релизе. Результаты предыдущей версии не относятся к этим файлам.
+Проверено 2026-10-26 (Windows 2.23.7) и 2026-10-25 (Android 1.5.1). Ссылки ведут на полный отчёт VirusTotal; в знаменателе — движки, которые поддерживают этот тип файла.
 
-[Отчёты предыдущей Windows 2.23.6](https://github.com/Kam300/KodVsego-SmartDNS/blob/v2.23.6/README.md#проверка-virustotal) · [Android APK 1.5.1: 0 / 66, проверено 2026-10-25](https://www.virustotal.com/gui/file/9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6/detection).
+| Платформа | Файл | Срабатывания / движков | Кто сработал | SHA-256 |
+| --- | --- | :---: | --- | --- |
+| Windows | `KodVsego_SmartDNS.Setup.2.23.7.msi` | [0 / 61](https://www.virustotal.com/gui/file/d1cbc382697373f2413f41198d38908e8968f477318f1ebf3c767af612426c00/detection) | — | `d1cbc382697373f2413f41198d38908e8968f477318f1ebf3c767af612426c00` |
+| Windows | `KodVsego_SmartDNS.Portable.2.23.7.zip` | [0 / 65](https://www.virustotal.com/gui/file/cd079f331de97bcce2c57e23ec4fa157217335651698629ad5523a4f77837dcd/detection) | — | `cd079f331de97bcce2c57e23ec4fa157217335651698629ad5523a4f77837dcd` |
+| Windows | `KodVsego_SmartDNS.2.23.7.exe` | [1 / 66](https://www.virustotal.com/gui/file/90a11634a6825f9b31c58f11070b3c06f5e27fa36abad6bbd49d099f0abc2782/detection) | APEX | `90a11634a6825f9b31c58f11070b3c06f5e27fa36abad6bbd49d099f0abc2782` |
+| Android | `KodVsego-SmartDNS-Android-1.5.1.apk` | [0 / 66](https://www.virustotal.com/gui/file/9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6/detection) | — | `9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6` |
+
+Установщик **MSI**, портативный архив **ZIP** и **APK** проходят проверку без срабатываний (**0 / 61**, **0 / 65** и **0 / 66**). Единственное срабатывание на отдельном EXE (`APEX`) — ML-эвристика на неподписанном исполняемом файле. Если сомневаетесь, используйте MSI или ZIP и сверьте SHA-256 с `SHA256SUMS.txt`.
 
 ## Что нового в Windows 2.23.7
 
@@ -42,6 +49,10 @@
 [Полное описание выпуска](docs/releases/2.23.7.md) · [История выпусков](https://github.com/Kam300/KodVsego-SmartDNS/releases)
 
 <img src="docs/ui-dark.png" width="280" alt="Тёмная тема Smart DNS"> <img src="docs/ui-light.png" width="280" alt="Светлая тема Smart DNS">
+
+## Структура исходников
+
+Код Windows находится в `src/windows/`, Android — в `android/`. Скрипты упаковки — в `tools/build/`, тесты — в `tests/`, результаты сборки — в `dist/`. [Карта проекта и команды](docs/PROJECT-STRUCTURE.md).
 
 ## На компьютере — Windows
 
@@ -113,13 +124,13 @@ Android-версия использует **локальный DNS-туннел�
 build.bat
 ```
 
-Результат из текущих исходников: `KodVsego_SmartDNS.2.23.6.exe`. Используется системный компилятор .NET Framework; зависимости не скачиваются. Готовый релиз собирается через `build-distribution.ps1` с проверенным Microsoft Roslyn; [состав пакетов и проверки](docs/DISTRIBUTION.md).
+Результат из текущих исходников: `dist/dev/KodVsego_SmartDNS.2.23.7.exe`. Используется системный компилятор .NET Framework; зависимости не скачиваются. Готовый релиз собирается через `tools/build/build-distribution.ps1` с проверенным Microsoft Roslyn; [состав пакетов и проверки](docs/DISTRIBUTION.md).
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run.ps1
 ```
 
-Отдельные проверки поиска DLL: `tests/ProcessSecurity.Tests.cs`. Превью интерфейса без переключения DNS: `preview.ps1`.
+Отдельные проверки поиска DLL: `tests/ProcessSecurity.Tests.cs`. Превью интерфейса без переключения DNS: `tools/dev/preview.ps1`.
 
 Проверка реальных переходов окна и отключения кадрового таймера: `powershell -NoProfile -ExecutionPolicy Bypass -File tests\UiMotion.Tests.ps1`. Скрипт не вызывает изменение DNS; окно находится за пределами экрана.
 
