@@ -27,18 +27,16 @@
 
 ## Проверка VirusTotal
 
-Для Windows 2.23.8 результаты пока не опубликованы. Таблица ниже относится к предыдущей версии **2.23.7**, а не к новым файлам.
-
-Проверено 2026-10-26 (Windows 2.23.7) и 2026-10-25 (Android 1.5.1). Ссылки ведут на полный отчёт VirusTotal; в знаменателе — движки, которые поддерживают этот тип файла.
+Проверено 2026-10-26 (Windows 2.23.8) и 2026-10-25 (Android 1.5.1). Ссылки ведут на полный отчёт VirusTotal; в знаменателе — движки, которые поддерживают этот тип файла.
 
 | Платформа | Файл | Срабатывания / движков | Кто сработал | SHA-256 |
 | --- | --- | :---: | --- | --- |
-| Windows | `KodVsego_SmartDNS.Setup.2.23.7.msi` | [0 / 61](https://www.virustotal.com/gui/file/d1cbc382697373f2413f41198d38908e8968f477318f1ebf3c767af612426c00/detection) | — | `d1cbc382697373f2413f41198d38908e8968f477318f1ebf3c767af612426c00` |
-| Windows | `KodVsego_SmartDNS.Portable.2.23.7.zip` | [0 / 65](https://www.virustotal.com/gui/file/cd079f331de97bcce2c57e23ec4fa157217335651698629ad5523a4f77837dcd/detection) | — | `cd079f331de97bcce2c57e23ec4fa157217335651698629ad5523a4f77837dcd` |
-| Windows | `KodVsego_SmartDNS.2.23.7.exe` | [1 / 66](https://www.virustotal.com/gui/file/90a11634a6825f9b31c58f11070b3c06f5e27fa36abad6bbd49d099f0abc2782/detection) | APEX | `90a11634a6825f9b31c58f11070b3c06f5e27fa36abad6bbd49d099f0abc2782` |
-| Android | `KodVsego-SmartDNS-Android-1.5.1.apk` | [0 / 66](https://www.virustotal.com/gui/file/9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6/detection) | — | `9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6` |
+| Windows | KodVsego_SmartDNS.Setup.2.23.8.msi | [0 / 61](https://www.virustotal.com/gui/file/2d56fbae81e9b7e7cc9486525a4abf1723021434584260c095d26fbb4db347be/detection) | — | 2d56fbae81e9b7e7cc9486525a4abf1723021434584260c095d26fbb4db347be |
+| Windows | KodVsego_SmartDNS.Portable.2.23.8.zip | [0 / 67](https://www.virustotal.com/gui/file/9d97b2f09352e7d59bbd215d7a10cdda38a1a93692c177e4ec717a0e7bd74461/detection) | — | 9d97b2f09352e7d59bbd215d7a10cdda38a1a93692c177e4ec717a0e7bd74461 |
+| Windows | KodVsego_SmartDNS.2.23.8.exe | [1 / 69](https://www.virustotal.com/gui/file/c60d23caf85e866dc818bf83861ca3015b2b9fbadea6b0002c95020e62d0cd42/detection) | CrowdStrike | c60d23caf85e866dc818bf83861ca3015b2b9fbadea6b0002c95020e62d0cd42 |
+| Android | KodVsego-SmartDNS-Android-1.5.1.apk | [0 / 66](https://www.virustotal.com/gui/file/9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6/detection) | — | 9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6 |
 
-Установщик **MSI**, портативный архив **ZIP** и **APK** проходят проверку без срабатываний (**0 / 61**, **0 / 65** и **0 / 66**). Единственное срабатывание на отдельном EXE (`APEX`) — ML-эвристика на неподписанном исполняемом файле. Если сомневаетесь, используйте MSI или ZIP и сверьте SHA-256 с `SHA256SUMS.txt`.
+Установщик **MSI**, портативный архив **ZIP** и **APK** проходят проверку без срабатываний (**0 / 61**, **0 / 67** и **0 / 66**). Единственное срабатывание на отдельном EXE (CrowdStrike win/malicious_confidence_60%) — ML-эвристика на неподписанном исполняемом файле. Если сомневаетесь, используйте MSI или ZIP и сверьте SHA-256 с SHA256SUMS.txt.
 
 ## Что нового в Windows 2.23.8
 
