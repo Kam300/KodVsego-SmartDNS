@@ -918,8 +918,9 @@ namespace HbAi.XboxDns
     {
         readonly Color fill,ink,accent,border;readonly int radius;int selected;
         readonly ContextMenuStrip menu=new ContextMenuStrip();
+        internal string Prefix="Сервис: ";
         internal string[] Items {get;private set;}
-        internal int SelectedIndex {get{return selected;}set{if(value<0||value>=Items.Length)throw new ArgumentOutOfRangeException("value");selected=value;Text="Сервис: "+Items[value];Invalidate();}}
+        internal int SelectedIndex {get{return selected;}set{if(value<0||value>=Items.Length)throw new ArgumentOutOfRangeException("value");selected=value;Text=Prefix+Items[value];Invalidate();}}
         internal DialogServicePicker(string[] items,Font font,Color fill,Color ink,Color accent,Color border,int radius)
         {Items=items;Font=font;this.fill=fill;this.ink=ink;this.accent=accent;this.border=border;this.radius=radius;FlatStyle=FlatStyle.Flat;Cursor=Cursors.Hand;SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer,true);menu.BackColor=fill;menu.ForeColor=ink;menu.Font=font;menu.ShowImageMargin=false;AccessibleRole=AccessibleRole.ComboBox;}
         protected override void OnClick(EventArgs e)
@@ -948,6 +949,7 @@ namespace HbAi.XboxDns
     sealed class DialogButton : Button
     {
         internal Color? SurfaceColor;
+        internal Color? SelectionAccent;
         readonly Color fill, ink, border;
         readonly int radius;
         bool hovered;
@@ -965,14 +967,15 @@ namespace HbAi.XboxDns
             var g = e.Graphics;
             g.Clear(SurfaceColor??Parent.BackColor);
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            Color buttonFill=SelectionAccent.HasValue?Color.FromArgb((3*fill.R+SelectionAccent.Value.R)/4,(3*fill.G+SelectionAccent.Value.G)/4,(3*fill.B+SelectionAccent.Value.B)/4):fill;
             using (var path = StyledDialog.Rounded(new RectangleF(1, 1, Width - 2, Height - 2), radius))
-            using (var brush = new SolidBrush(fill))
-            using (var line = new Pen(border))
+            using (var brush = new SolidBrush(buttonFill))
+            using (var line = new Pen(SelectionAccent??border))
             {
                 g.FillPath(brush, path); g.DrawPath(line, path);
                 if (hovered) using (var overlay = new SolidBrush(Color.FromArgb(22, ink))) g.FillPath(overlay, path);
             }
-            TextRenderer.DrawText(g, Text, Font, ClientRectangle, ink,
+            TextRenderer.DrawText(g, Text, Font, ClientRectangle, SelectionAccent??ink,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
             if (Focused && ShowFocusCues)
             {

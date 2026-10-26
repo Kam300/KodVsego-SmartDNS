@@ -146,7 +146,7 @@ namespace HbAi.XboxDns
         }
     }
 
-    class MainForm : Form
+    partial class MainForm : Form
     {
         const int CanvasWidth = 440, CanvasHeight = 878;
         internal static string VersionLabel { get {
@@ -196,7 +196,7 @@ namespace HbAi.XboxDns
             if(!active&&!ManagedDns.Running&&hiddenProviders.Contains(dnsSet)){dnsSet=UiProviders.First();if(!DotDns.Available(dnsSet))tlsDns=false;if(Dns.EncryptedOnly(dnsSet))secureDns=true;}
             EnsureProviderVisible();Invalidate();
         }
-        bool localAntigravity;int localAntigravityProvider=5,pendingAntigravityProvider=-1;
+        bool localAntigravity,localAntigravityTls,pendingAntigravityTls;int localAntigravityProvider=5,pendingAntigravityProvider=-1;
         bool HasLegacyAntigravityState {get{return !ManagedMode&&(agStatus.Checked||agStatus.External||agStatus.RecoveryNeeded||agStatus.Error!=null);}}
         internal bool LocalAntigravity {get{return localAntigravity;}}
         internal int LocalAntigravityProvider {get{return localAntigravityProvider;}}
@@ -381,7 +381,7 @@ namespace HbAi.XboxDns
                 object saved=key.GetValue("LocalResolverProvider");if(saved is int&&TunnelSession.EncryptedProvider((int)saved))dnsSet=(int)saved;
                 tlsDns=key.GetValue("LocalResolverProtocol") as string=="TLS"&&DotDns.Available(dnsSet);
             }}catch(Exception){}
-            if(readProfilePreference)try{using(var key=Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KodVsego\SmartDns"))if(key!=null){localAntigravity=object.Equals(key.GetValue("LocalAntigravityEnabled"),1);object provider=key.GetValue("LocalAntigravityProvider");if(provider is int&&LocalDnsRouting.Supports((int)provider))localAntigravityProvider=(int)provider;else if(provider!=null)localAntigravity=false;}}catch(Exception){}
+            if(readProfilePreference)try{using(var key=Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KodVsego\SmartDns"))if(key!=null){localAntigravity=object.Equals(key.GetValue("LocalAntigravityEnabled"),1);localAntigravityTls=object.Equals(key.GetValue("LocalAntigravityTls"),1);object provider=key.GetValue("LocalAntigravityProvider");if(provider is int&&LocalDnsRouting.Supports((int)provider))localAntigravityProvider=(int)provider;else if(provider!=null)localAntigravity=false;}}catch(Exception){}
             if(hiddenProviders.Contains(dnsSet))dnsSet=UiProviders.First();
             if(!LocalDnsRouting.Supports(localAntigravityProvider)){localAntigravityProvider=LocalDnsRouting.Supports(5)?5:LocalDnsRouting.Providers.DefaultIfEmpty(-1).First();if(localAntigravityProvider<0)localAntigravity=false;}
             themeMix = darkTheme ? 1 : 0;
@@ -416,7 +416,7 @@ namespace HbAi.XboxDns
             MouseWheel += (s, e) => { if (ProviderBar.Contains(CanvasPoint(e.Location))) ScrollProviderPage(e.Delta > 0 ? -1 : 1); };
             EnsureProviderVisible();
             networkMonitor.Interval = 3000;
-            networkMonitor.Tick += (s, e) => {RefreshConnectionLatency();RefreshNetworkStatus();if(profilePreferences)startupRecovery.Tick(startupRecoveryEnabled);};
+            networkMonitor.Tick += (s, e) => {RefreshConnectionLatency();RefreshNetworkStatus();if(profilePreferences){startupRecovery.Tick(startupRecoveryEnabled);TickAntigravityHealth();}};
             Shown += (s, e) => { RefreshNetworkStatus(); networkMonitor.Start(); };
             Shown += (s, e) => { if(checkUpdateAtStartup)CheckUpdatesQuietly(); };
             motionReady = true;
@@ -504,10 +504,12 @@ namespace HbAi.XboxDns
             dialog.AddStartupRecoveryControl(startupRecoveryEnabled);
             dialog.AddLogSettingsAction(update=>SaveApplicationLog(dialog,update));dialog.AddResolverSettingsAction(autoResolverCheck);
             dialog.AddProviderSettingsControls(hiddenProviders,Transport);
+            dialog.AddAntigravitySettingsControls(localAntigravity,localAntigravityProvider,ManagedDns.Running||busy,localMode&&localAntigravity&&ManagedDns.Connected&&!ManagedDns.Stopping&&!busy);
+            dialog.SetAntigravityAutoDns(agAutoDns);
             dialog.CustomDnsLocked=id=>busy||active&&id==dnsSet||ManagedDns.Running&&localAntigravity&&id==localAntigravityProvider;
             return dialog;
         }
-        string LogContext(){return "Provider="+Dns.Name[dnsSet]+"; transport="+Transport+"; Google profile="+googleMode+"; local resolver="+localMode+"; separate Antigravity="+localAntigravity+"; Antigravity provider="+localAntigravityProvider+"; active="+active+"; worker running="+ManagedDns.Running+"; connected="+ManagedDns.Connected+"; stopping="+ManagedDns.Stopping+"; statistics="+ManagedDns.Statistics+"; startup recovery="+startupRecoveryEnabled+"; startup page="+startupRecovery.Observation;}
+        string LogContext(){return "Provider="+Dns.Name[dnsSet]+"; transport="+Transport+"; Google profile="+googleMode+"; local resolver="+localMode+"; separate Antigravity="+localAntigravity+"; Antigravity transport="+(localAntigravityTls?"DoT":"DoH")+"; Antigravity provider="+localAntigravityProvider+"; active="+active+"; worker running="+ManagedDns.Running+"; connected="+ManagedDns.Connected+"; stopping="+ManagedDns.Stopping+"; statistics="+ManagedDns.Statistics+"; startup recovery="+startupRecoveryEnabled+"; startup page="+startupRecovery.Observation+"; Antigravity auto DNS="+agAutoDns+"; auto status="+agAutoStatus;}
         void SaveApplicationLog(Form owner,Action<string> update)
         {
             using(var save=new SaveFileDialog{Filter="Журнал (*.txt)|*.txt",FileName="SmartDNS-"+VersionLabel+"-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".txt"}) {
@@ -581,27 +583,37 @@ namespace HbAi.XboxDns
             if(ManagedDns.Running){if(enabled&&localAntigravity)SwitchLocalAntigravity(provider);return;}
             SaveLocalAntigravity(enabled,provider);
         }
-        internal bool SwitchLocalAntigravity(int provider)
+        internal bool SwitchLocalAntigravity(int provider,bool tls=false)
         {
             var session=localSession as ILocalAntigravitySwitchSession;
             if(!localMode||busy||!ManagedDns.Connected||ManagedDns.Stopping||session==null||!UiProviders.Contains(provider)||!LocalDnsRouting.Supports(provider))return false;
+            ResetAgHealthWatch();
             error=null;
-            try{session.SwitchAntigravity(provider);pendingAntigravityProvider=provider;busy=true;}
+            try{var protocolSession=session as ILocalAntigravityTransportSession;if(tls&&(protocolSession==null||!DotDns.Available(provider)))return false;if(protocolSession!=null)protocolSession.SwitchAntigravity(provider,tls);else session.SwitchAntigravity(provider);pendingAntigravityProvider=provider;pendingAntigravityTls=tls;busy=true;}
             catch(Exception problem){error=TunnelDiagnostics.Error(problem);Invalidate();return false;}
             DiagnosticReport.Record("Смена Antigravity","Requested="+Dns.Name[provider]+"; previous="+Dns.Name[localAntigravityProvider]+"; common DNS unchanged; awaiting worker acknowledgement");Invalidate();return true;
         }
-        void SaveLocalAntigravity(bool enabled,int provider)
+        void SaveLocalAntigravity(bool enabled,int provider,bool tls=false)
         {
-            localAntigravity=enabled;localAntigravityProvider=provider;
-            if(profilePreferences)try{using(var key=Registry.CurrentUser.CreateSubKey(@"SOFTWARE\KodVsego\SmartDns")){key.SetValue("LocalAntigravityEnabled",enabled?1:0,RegistryValueKind.DWord);key.SetValue("LocalAntigravityProvider",provider,RegistryValueKind.DWord);}}catch(Exception problem){DiagnosticReport.Record("Настройки Antigravity",problem.ToString());}
-            DiagnosticReport.Record("Локальный Antigravity","enabled="+enabled+"; provider="+Dns.Name[provider]+"; DoH; worker connected="+ManagedDns.Connected+"; model NOT verified");Invalidate();
+            localAntigravity=enabled;localAntigravityProvider=provider;localAntigravityTls=tls;
+            if(profilePreferences)try{using(var key=Registry.CurrentUser.CreateSubKey(@"SOFTWARE\KodVsego\SmartDns")){key.SetValue("LocalAntigravityTls",tls?1:0,RegistryValueKind.DWord);key.SetValue("LocalAntigravityEnabled",enabled?1:0,RegistryValueKind.DWord);key.SetValue("LocalAntigravityProvider",provider,RegistryValueKind.DWord);}}catch(Exception problem){DiagnosticReport.Record("Настройки Antigravity",problem.ToString());}
+            DiagnosticReport.Record("Локальный Antigravity","enabled="+enabled+"; provider="+Dns.Name[provider]+"; protocol="+(tls?"DoT":"DoH")+"; worker connected="+ManagedDns.Connected+"; model NOT verified");Invalidate();
         }
-        internal bool ShouldOfferLocalAntigravityRestart(bool antigravityRunning)
+        internal void ApplyAntigravitySettings(bool enabled,int provider)
         {
-            return !hideAntigravityRestart&&localMode&&localAntigravity&&antigravityRunning;
+            if(enabled==localAntigravity&&provider==localAntigravityProvider)return;
+            if(!LocalDnsRouting.Supports(provider))throw new IOException("Выбранный DNS не поддерживает отдельный маршрут Antigravity.");
+            if(ManagedDns.Running){
+                if(!enabled||!localAntigravity||!localMode||!SwitchLocalAntigravity(provider))throw new IOException("Сначала выключите DNS для изменения этой настройки Antigravity.");
+            }else{if(busy)throw new IOException("Дождитесь завершения изменения DNS.");SaveLocalAntigravity(enabled,provider);}
         }
-        void OfferLocalAntigravityRestart()
+        internal bool ShouldOfferLocalAntigravityRestart(bool antigravityRunning,bool automatic=false)
         {
+            return !automatic&&!hideAntigravityRestart&&localMode&&localAntigravity&&antigravityRunning;
+        }
+        void OfferLocalAntigravityRestart(bool automatic=false)
+        {
+            if(automatic){DiagnosticReport.Record("Перезапуск Antigravity","Авто: DNS применён без диалога и без перезапуска клиента. При необходимости перезапустите Antigravity вручную.");return;}
             if(!profilePreferences||!ShouldOfferLocalAntigravityRestart(AntigravityRestart.IsRunning()))return;
             string providerName=LocalDnsRouting.Supports(localAntigravityProvider)?Dns.Name[localAntigravityProvider]:"DNS";
             using(var dialog=CreateDialog("Локальный DNS и маршрут Antigravity ("+providerName+") включены.\n\nПерезапустить запущенный Antigravity сейчас, чтобы он сразу переключился на новый DNS? Сохраните изменения перед продолжением.","Перезапустить Antigravity?",MessageBoxButtons.YesNo,MessageBoxIcon.Information,MessageBoxDefaultButton.Button1))
@@ -625,21 +637,25 @@ namespace HbAi.XboxDns
                 bool justConnected=active&&!wasConnected;
                 if(active&&changing!=null&&!changing.Switching&&Dns.IsAvailable(changing.CurrentProvider)&&(dnsSet!=changing.CurrentProvider||tlsDns!=changing.CurrentTls)){dnsSet=changing.CurrentProvider;tlsDns=changing.CurrentTls;SaveGooglePreference();EnsureProviderVisible();}
                 CompleteLocalAutoSwitch(changing);
+                CompleteAgCommon(changing);
                 if(pendingAntigravityProvider>=0&&(!busy||!active)){
                     var special=localSession as ILocalAntigravitySwitchSession;int requested=pendingAntigravityProvider;pendingAntigravityProvider=-1;
-                    if(active&&special!=null&&special.CurrentAntigravity==requested&&error==null){SaveLocalAntigravity(true,requested);OfferLocalAntigravityRestart();}
+                    bool automatic=agAutomaticPending==requested;
+                    bool success=active&&special!=null&&special.CurrentAntigravity==requested&&(!(special is ILocalAntigravityTransportSession)||((ILocalAntigravityTransportSession)special).CurrentAntigravityTls==pendingAntigravityTls)&&error==null;CompleteAgFailover(requested,success);
+                    if(success){SaveLocalAntigravity(true,requested,pendingAntigravityTls);OfferLocalAntigravityRestart(automatic);}
                 }
                 if(active&&(!wasConnected||previousProvider!=dnsSet||wasBusy&&!busy))StartResolverCheck();else if(!active){CancelResolverCheck();CancelConnectionLatency();}
                 if(!ManagedDns.Running&&googleCheck!=null)googleCheck.Cancel();Invalidate();
-                if(justConnected&&localMode&&profilePreferences){OfferLocalAntigravityRestart();ShowDnsReminder();}
+                if(justConnected&&localMode&&profilePreferences){OfferLocalAntigravityRestart(autoGoal>=0);ShowDnsReminder();}
                 if(googleClosing&&!ManagedDns.Running){googleClosing=false;Close();}
             }));}catch(InvalidOperationException){}
         }
         void ToggleGoogleTunnel()
         {
+            ResetAgHealthWatch();
             if(ManagedDns.Running){CancelResolverCheck();CancelConnectionLatency();ManagedDns.Stop();return;}
             if(busy)return;if(!localMode&&profilePreferences&&!DnsTunnelNative.IsAvailable()){ShowMissingWintunHelp();return;}operationRevision++;error=null;busy=true;Invalidate();
-            try{if(localMode){var config=localSession as ILocalDnsConfiguration;if(config!=null)config.SetAntigravity(localAntigravity?localAntigravityProvider:-1);}ManagedDns.Start(dnsSet,tlsDns);}catch(Exception problem){busy=false;error=TunnelDiagnostics.Error(problem);DiagnosticReport.Record(localMode?"Локальный DNS":"Gemini / NotebookLM",error);Invalidate();}
+            try{if(localMode){var config=localSession as ILocalDnsConfiguration;if(config is ILocalAntigravityTransportSession)((ILocalAntigravityTransportSession)config).SetAntigravity(localAntigravity?localAntigravityProvider:-1,localAntigravityTls&&DotDns.Available(localAntigravityProvider));else if(config!=null)config.SetAntigravity(localAntigravity?localAntigravityProvider:-1);}ManagedDns.Start(dnsSet,tlsDns);}catch(Exception problem){busy=false;error=TunnelDiagnostics.Error(problem);DiagnosticReport.Record(localMode?"Локальный DNS":"Gemini / NotebookLM",error);Invalidate();}
         }
         sealed class PendingLocalAuto
         {
@@ -668,7 +684,7 @@ namespace HbAi.XboxDns
             bool success=active&&ManagedDns.Connected&&!ManagedDns.Stopping&&string.IsNullOrEmpty(ManagedDns.LastError)&&(pending.Antigravity?special!=null&&special.CurrentAntigravity==pending.Provider:session.CurrentProvider==pending.Provider&&session.CurrentTls==pending.Tls);
             autoGoal=success?pending.Goal:pending.PreviousGoal;manualSelection=success?false:pending.PreviousManual;autoNeedsRetry=success?false:pending.PreviousRetry;
             if(success)lastAutoCheck=frameClock.ElapsedMilliseconds;
-            if(success&&pending.Antigravity){SaveLocalAntigravity(true,pending.Provider);OfferLocalAntigravityRestart();}
+            if(success&&pending.Antigravity){SaveLocalAntigravity(true,pending.Provider);OfferLocalAntigravityRestart(true);}
             EnsureProviderVisible();DiagnosticReport.Record("Авто · смена локального DNS",success?"Worker confirmed the Auto provider":"Auto selection reverted; previous mode and provider retained");
         }
         internal bool StartLocalAuto(AutoDnsResult result,int goal)
@@ -719,6 +735,8 @@ namespace HbAi.XboxDns
                     hideDnsReminder=!dialog.ShowBrowserRestartPrompt;hideAntigravityRestart=!dialog.ShowAntigravityRestartPrompt;
                     autoResolverCheck=dialog.AutoResolverCheck;if(!autoResolverCheck)CancelResolverCheck();else if(active&&!busy)StartResolverCheck();
                     defaultGoal=selected;manualSelection=false;if(selected<0)autoGoal=-1;EnsureProviderVisible();Invalidate();
+                    ApplyAntigravitySettings(dialog.AntigravityRouteEnabled,dialog.AntigravityRouteProvider);
+                    SaveAgAutoPreference(dialog.AntigravityAutoDnsEnabled);
                 }catch(Exception error){ShowMessage("Не удалось сохранить настройки.\n\n"+error.Message,"Настройки",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
             }
         }
@@ -832,6 +850,7 @@ namespace HbAi.XboxDns
         {
             if (disposing && !resourcesDisposed) {
                 resourcesDisposed = true;
+                ResetAgHealthWatch();agLogs.Dispose();
                 startupRecovery.Dispose();
                 if(connectionMenu!=null)connectionMenu.Dispose();if(connectionProtocolMenu!=null)connectionProtocolMenu.Dispose();
                 CancelResolverCheck();CancelConnectionLatency();googleTunnel.Changed-=GoogleTunnelChanged;localSession.Changed-=GoogleTunnelChanged;googleTunnel.Dispose();localSession.Dispose();if(googleCheck!=null)googleCheck.Cancel();
@@ -1472,7 +1491,7 @@ namespace HbAi.XboxDns
                 using(var path=RoundPath(LocalAntigravityProviderButton,7))using(var fill=new SolidBrush(CardLine))g.FillPath(fill,path);
                 using(var font=UiFont(fMed,8.5f))using(var ink=new SolidBrush(busy?Muted:Soft))using(var format=new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center})g.DrawString((LocalDnsRouting.Supports(localAntigravityProvider)?Dns.Name[localAntigravityProvider]:"Недоступен")+" ›",font,ink,LocalAntigravityProviderButton,format);
                 string agProviderName=LocalDnsRouting.Supports(localAntigravityProvider)?Dns.Name[localAntigravityProvider]:"DNS-AI";
-                string agNote=pendingAntigravityProvider>=0?"Проверяем "+Dns.Name[pendingAntigravityProvider]+" · прежний DNS продолжает работать":!localMode?(active?"Сначала выключите DNS, чтобы включить маршрут "+agProviderName:"Включит способ 2 (DoH) · маршрут через "+agProviderName):(localAntigravity?(active?"Работает через "+agProviderName+" (DoH) · основной: "+Dns.Name[dnsSet]:"Готово ("+agProviderName+") · нажмите большую кнопку ВКЛ"):"Выключено · нажмите галочку для маршрута "+agProviderName);
+                string agNote=agAutoDns&&localMode&&localAntigravity?agAutoStatus:pendingAntigravityProvider>=0?"Проверяем "+Dns.Name[pendingAntigravityProvider]+" · прежний DNS продолжает работать":!localMode?(active?"Сначала выключите DNS, чтобы включить маршрут "+agProviderName:"Включит способ 2 (DoH) · маршрут через "+agProviderName):(localAntigravity?(active?"Работает через "+agProviderName+" ("+(localAntigravityTls?"DoT":"DoH")+") · основной: "+Dns.Name[dnsSet]:"Готово ("+agProviderName+") · нажмите большую кнопку ВКЛ"):"Выключено · нажмите галочку для маршрута "+agProviderName);
                 using(var font=UiFont(fMed,8f))using(var ink=new SolidBrush(Muted))using(var format=new StringFormat{FormatFlags=StringFormatFlags.NoWrap,Trimming=StringTrimming.EllipsisCharacter})g.DrawString(agNote,font,ink,new RectangleF(76,LowerY(789),W-104,20),format);
             }else{
                 using(var path=RoundPath(rAgOption,16))using(var fill=new SolidBrush(CardBg))using(var border=new Pen(CardLine)){g.FillPath(fill,path);g.DrawPath(border,path);}
@@ -2042,6 +2061,7 @@ namespace HbAi.XboxDns
             var session=localSession as ILocalDnsSwitchSession;
             if(!localMode||busy||!ManagedDns.Connected||ManagedDns.Stopping||!UiProviders.Contains(provider)||!TunnelSession.EncryptedProvider(provider)||session==null)return false;
             if(provider==dnsSet){manualSelection=true;autoGoal=-1;Invalidate();return true;}
+            ResetAgHealthWatch();
             CancelResolverCheck();CancelConnectionLatency();error=null;manualSelection=true;autoGoal=-1;
             try{session.SwitchProvider(provider,tlsDns&&DotDns.Available(provider));busy=true;DiagnosticReport.Record("Смена локального DNS","Requested="+Dns.Name[provider]+"; previous="+Dns.Name[dnsSet]+"; backup unchanged; separate Antigravity unchanged");}
             catch(Exception problem){error=TunnelDiagnostics.Error(problem);busy=false;Invalidate();return false;}

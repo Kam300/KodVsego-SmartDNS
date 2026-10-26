@@ -41,11 +41,11 @@ $mi=Join-Path $env:WINDIR 'Microsoft.NET\assembly\GAC_MSIL\Microsoft.Management.
 $refs=@('/r:System.Core.dll','/r:System.Windows.Forms.dll','/r:System.Drawing.dll','/r:System.Web.Extensions.dll','/r:System.Management.dll',"/r:$mi")
 # A simulated stable update must stay stable even when the application is currently a prerelease.
 $stableInfo=Join-Path $testDirectory 'StableAssemblyInfo.cs'
-$info=[IO.File]::ReadAllText((Join-Path $root 'AssemblyInfo.cs'))
+$info=[IO.File]::ReadAllText((Join-Path $root 'src\windows\Properties\AssemblyInfo.cs'))
 $info=[regex]::Replace($info,'AssemblyInformationalVersion\("[^"]+"\)','AssemblyInformationalVersion("99.0.0")')
 $info=[regex]::Replace($info,'Assembly(?:File)?Version\("[^"]+"\)',{param($match) $match.Value.Substring(0,$match.Value.IndexOf('("'))+'("99.0.0.0")'})
 [IO.File]::WriteAllText($stableInfo,$info,[Text.UTF8Encoding]::new($true))
-$sources=@(Get-ChildItem $root -Filter '*.cs' | Where-Object Name -ne 'AssemblyInfo.cs' | ForEach-Object FullName)+@($stableInfo)
+$sources=@(& (Join-Path $root 'tools\Read-WindowsSources.ps1') -Root $root | Where-Object {$_ -notlike '*/AssemblyInfo.cs'} | ForEach-Object {Join-Path $root $_})+@($stableInfo)
 foreach($targetName in @('KodVsego_SmartDNS.smoke.exe','SmartDNS.exe')) {
     $phase=Join-Path $testDirectory ([IO.Path]::GetFileNameWithoutExtension($targetName));New-Item -ItemType Directory -Path $phase | Out-Null
     $target=Join-Path $phase $targetName

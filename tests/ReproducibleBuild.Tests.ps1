@@ -19,7 +19,7 @@ if(!$manifest.Deterministic -or $manifest.DefaultResponseFile -or $manifest.Comp
 Write-Output 'PASS same compiler and explicit references recorded; default response file disabled'
 & (Join-Path $root 'tools/Test-WindowsArtifact.ps1') -File (Join-Path $first $manifest.Output.Name) -OutputPath (Join-Path $first 'artifact-policy.json')
 if($LASTEXITCODE -ne 0){throw 'Verified artifact policy failed'}
-$p=Join-Path $copied 'AssemblyInfo.cs';$s=[IO.File]::ReadAllText($p).Replace('persistent per-adapter backup','audited per-adapter backup')
+$p=Join-Path $copied 'src\windows\Properties\AssemblyInfo.cs';$s=[IO.File]::ReadAllText($p).Replace('persistent per-adapter backup','audited per-adapter backup')
 [IO.File]::WriteAllText($p,$s,[Text.UTF8Encoding]::new($true))
 & (Join-Path $copied 'tools/Build-VerifiedWindows.ps1') -Compiler $Compiler -OutputDirectory $second
 $changed=Get-Content -LiteralPath (Join-Path $second 'build-manifest.json') -Raw | ConvertFrom-Json

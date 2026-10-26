@@ -30,7 +30,7 @@ function Read-MsiRows($Database,[string]$Sql,[int]$Columns) {
     } finally { $null=$view.Close() }
 }
 if (!$MsiPath) {
-    $version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value
+    $version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'src\windows\Properties\AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value
     $MsiPath=Join-Path $root ('dist\'+$version+'\KodVsego_SmartDNS.Setup.'+$version+'.msi')
 }
 $MsiPath=(Resolve-Path -LiteralPath $MsiPath).Path
@@ -123,7 +123,7 @@ try {
         [IO.File]::WriteAllText($source,$sourceText,[Text.Encoding]::ASCII)
         & $compiler /nologo /target:winexe ("/out:"+$exe) $source
         if ($LASTEXITCODE -ne 0) { throw 'MSI fixture compilation failed' }
-        & (Join-Path $root 'build-msi.ps1') -SourceExe $exe -OutputDirectory $directory -TestId $testId
+        & (Join-Path $root 'tools\build\build-msi.ps1') -SourceExe $exe -OutputDirectory $directory -TestId $testId
         $packages+=([IO.File]::ReadAllText((Join-Path $directory 'msi-build.json'))|ConvertFrom-Json)
     }
     Check ($packages[0].UpgradeCode -eq $packages[1].UpgradeCode -and $packages[0].ProductCode -ne $packages[1].ProductCode -and $packages[0].UpgradeCode -ne (Get-MsiIdentity 'production')) 'Fixture upgrade family is isolated from the actual product'

@@ -28,10 +28,10 @@ MSI содержит один EXE приложения, признак MSI-ус�
 
 ```powershell
 dotnet tool install wix --version 5.0.2 --tool-path "$env:LOCALAPPDATA\KodVsego\BuildTools\wix-5.0.2" --allow-roll-forward --source https://api.nuget.org/v3/index.json
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-msi.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build\build-msi.ps1
 ```
 
-Отдельная команда `build-msi.ps1` создаёт только MSI и материалы сборки в `dist/<версия>/`. Для стандартного набора используйте `build-distribution.ps1`: он создаёт MSI, ZIP и EXE в `dist/<версия>/release` и проверяет состав приложения. В обоих случаях файлы не загружаются на внешние сервисы. Для проверки упаковки можно передать готовый EXE через `-SourceExe`; отдельный `build-msi.ps1` в этом режиме повторно не проверяет состав приложения.
+Отдельная команда `tools/build/build-msi.ps1` создаёт только MSI и материалы сборки в `dist/<версия>/`. Для стандартного набора используйте `tools/build/build-distribution.ps1`: он создаёт MSI, ZIP и EXE в `dist/<версия>/release` и проверяет состав приложения. В обоих случаях файлы не загружаются на внешние сервисы. Для проверки упаковки можно передать готовый EXE через `-SourceExe`; отдельный `tools/build/build-msi.ps1` в этом режиме повторно не проверяет состав приложения.
 
 Windows Installer сравнивает только три числовые части версии. Отображаемая версия приложения остаётся обычной; внутренняя версия MSI преобразуется так:
 

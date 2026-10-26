@@ -29,6 +29,13 @@ public class ProviderAvailabilityTest {
         DnsConfig config=new DnsConfig(6,true);
         assertTrue(config.encrypted);assertEquals("https://dns.magicdns.ru/dns-query",magic.doh);
     }
+    @Test public void malwCloudflareRemainsAvailableWithoutAntigravity() {
+        Provider cf=Provider.at(13);
+        assertTrue(Provider.isAvailable(13));
+        assertTrue(java.util.Arrays.asList(cf.services).contains("Gemini"));
+        assertFalse(java.util.Arrays.asList(cf.services).contains("Antigravity"));
+        assertTrue(java.util.Arrays.asList(Provider.at(9).services).contains("Antigravity"));
+    }
     @Test public void disabledProviderChoiceFallsBackWithoutRenumbering() throws Exception {
         Field field=ProviderAvailability.class.getDeclaredField("ENABLED");field.setAccessible(true);
         boolean[] flags=(boolean[])field.get(null),saved=flags.clone();

@@ -31,6 +31,8 @@ static class SessionPipeTests
                             writer.WriteLine("SWITCH_FAILED Simulated failed provider");
                             change=reader.ReadLineAsync();if(!change.Wait(5000)||change.Result!="AGSWITCH 5 https")return 8;
                             writer.WriteLine("AGSWITCHED 5 https");
+                            change=reader.ReadLineAsync();if(!change.Wait(5000)||change.Result!="AGSWITCH 5 tls")return 8;
+                            writer.WriteLine("AGSWITCHED 5 tls");
                             change=reader.ReadLineAsync();if(!change.Wait(5000)||change.Result!="AGSWITCH 6 https")return 8;
                             writer.WriteLine("SWITCH_FAILED Simulated failed Antigravity provider");
                             change=reader.ReadLineAsync();if(!change.Wait(5000)||change.Result!="STOP")return 8;
@@ -77,8 +79,10 @@ static class SessionPipeTests
                     Check(SpinWait.SpinUntil(()=>!session.Switching&&session.LastError!=null,5000)&&session.CurrentProvider==7&&!session.CurrentTls&&session.Connected,"A failed live candidate preserves the previous provider over the real private pipe");
                     session.SwitchAntigravity(5);
                     Check(SpinWait.SpinUntil(()=>!session.Switching&&session.CurrentAntigravity==5,5000)&&session.CurrentProvider==7&&session.Connected,"Real pipe acknowledgement changes only Antigravity and preserves the common provider");
+                    session.SwitchAntigravity(5,true);
+                    Check(SpinWait.SpinUntil(()=>!session.Switching&&session.CurrentAntigravityTls,5000)&&session.CurrentAntigravity==5&&session.CurrentProvider==7&&!session.CurrentTls&&session.Connected,"Real pipe ACK commits Antigravity DoT independently of the common DoH route");
                     session.SwitchAntigravity(6);
-                    Check(SpinWait.SpinUntil(()=>!session.Switching&&session.LastError!=null,5000)&&session.CurrentAntigravity==5&&session.CurrentProvider==7&&session.Connected,"Failed Antigravity switch preserves both routes over the private pipe");
+                    Check(SpinWait.SpinUntil(()=>!session.Switching&&session.LastError!=null,5000)&&session.CurrentAntigravity==5&&session.CurrentAntigravityTls&&session.CurrentProvider==7&&session.Connected,"Failed Antigravity switch preserves both routes and DoT over the private pipe");
                     Check(launches==1,"Live provider switching never launches another privileged worker");session.Stop();
                 }
                 if(mode=="delayed-error"){

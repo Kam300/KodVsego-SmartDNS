@@ -63,7 +63,7 @@ final class ProviderAvailability {
     static Provider[] create() {return new Provider[]{ $rows };}
 }
 "@
-foreach($entry in @(@('ProviderAvailability.cs',$cs),@('android\app\src\main\java\ru\kodvsego\smartdns\ProviderAvailability.java',$java))){
+foreach($entry in @(@('src\windows\Providers\ProviderAvailability.cs',$cs),@('android\app\src\main\java\ru\kodvsego\smartdns\ProviderAvailability.java',$java))){
     $path=Join-Path $OutputRoot $entry[0]
     New-Item -ItemType Directory -Path (Split-Path $path -Parent) -Force | Out-Null
     if(!(Test-Path -LiteralPath $path) -or [IO.File]::ReadAllText($path) -ne $entry[1]){[IO.File]::WriteAllText($path,$entry[1],[Text.UTF8Encoding]::new($false))}

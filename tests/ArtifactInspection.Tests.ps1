@@ -6,7 +6,7 @@ $compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $inspector=Join-Path $dir 'Inspector.exe'
 & $compiler /noconfig /nologo /target:exe /r:System.dll /r:System.Core.dll /r:System.Web.Extensions.dll /r:System.Xml.dll ("/out:"+$inspector) (Join-Path $root 'tools/ArtifactInspection.cs')
 if($LASTEXITCODE -ne 0){throw 'Inspector compilation failed'}
-$manifest=Join-Path $root 'app.manifest'
+$manifest=Join-Path $root 'src\windows\Properties\app.manifest'
 $script:passed=0
 function Fixture([string]$name,[string]$source,[string[]]$options=@()){
     $cs=Join-Path $dir ($name+'.cs');$exe=Join-Path $dir ($name+'.exe')
@@ -49,7 +49,7 @@ $highManifest=Join-Path $dir 'elevated.manifest'
 $manifest=$highManifest
 $elevated=Fixture 'elevated-at-startup' 'class Program {static void Main(){}}'
 Inspect $elevated $false 'Manifest must use asInvoker'
-$manifest=Join-Path $root 'app.manifest'
+$manifest=Join-Path $root 'src\windows\Properties\app.manifest'
 $dependency=Join-Path $dir 'dependency.cs';[IO.File]::WriteAllText($dependency,'public class ExternalDependency {public static void Call(){}}')
 $fake=Join-Path $dir 'System.Management.dll'
 & $compiler /noconfig /nologo /target:library ("/out:"+$fake) $dependency

@@ -86,7 +86,7 @@ namespace HbAi.XboxDns
                         bool reachable=false, challenged=false; string error="DNS не вернул IPv4-адрес";
                         foreach(string address in addresses.Distinct().Take(3)) {
                             cancel.ThrowIfCancellationRequested();
-                            trace.AppendLine(watch.ElapsedMilliseconds+" ms HTTPS "+host+" @ "+address+"; connect/TLS timeout=3500 ms");
+                            trace.AppendLine(watch.ElapsedMilliseconds+" ms HTTPS "+host+" @ "+address+"; connect/TLS timeout="+(probe is AutoDnsProbe?((AutoDnsProbe)probe).HttpsTimeout:3500)+" ms");
                             try {probe.Https(host,address,Goals[goal].Api,cancel);trace.AppendLine(watch.ElapsedMilliseconds+" ms HTTPS OK");reachable=true;break;}
                             catch(OperationCanceledException){throw;}
                             catch(BrowserChallengeException ex){challenged=true;trace.AppendLine(watch.ElapsedMilliseconds+" ms "+ex.Message);}
@@ -118,11 +118,13 @@ namespace HbAi.XboxDns
     sealed class AutoDnsProbe : IAutoDnsProbe
     {
         readonly bool tls;
-        internal AutoDnsProbe(bool tls = false) { this.tls = tls; }
+        readonly bool pinned;internal readonly int HttpsTimeout;
+        internal AutoDnsProbe(bool tls = false,int httpsTimeout=3500,bool pinned=false) { this.tls = tls;HttpsTimeout=httpsTimeout;this.pinned=pinned; }
         public ServiceHttpReply Request(ServiceEndpoint endpoint,string address,CancellationToken cancel)
         {return new ServiceAvailabilityProbe(tls).Request(endpoint,address,cancel);}
         public string[] Resolve(int provider, bool encrypted, string host, CancellationToken cancel)
         {
+            if(encrypted&&pinned){cancel.ThrowIfCancellationRequested();var query=DnsProbe.Query(host);var response=new TunnelUpstream(provider,tls).Query(query);cancel.ThrowIfCancellationRequested();DnsProbe.Validate(query,response);return DnsProbe.Addresses(query,response);}
             if (encrypted && tls) { cancel.ThrowIfCancellationRequested(); var answer=DotDns.Resolve(provider,host); cancel.ThrowIfCancellationRequested(); return answer; }
             var request=DnsProbe.Query(host); Exception last=null;var addresses=new List<string>();
             foreach(string server in encrypted?new[]{EncryptedDns.Templates[provider]}:Dns.V4[provider]) {
@@ -175,21 +177,21 @@ namespace HbAi.XboxDns
             using(var tcp=new TcpClient(AddressFamily.InterNetwork))
             using(cancel.Register(()=>tcp.Close())) {
                 var connect=tcp.BeginConnect(ip,443,null,null);
-                using(var wait=connect.AsyncWaitHandle)if(!wait.WaitOne(3500))throw new IOException("HTTPS: нет соединения (3,5 с)");
+                using(var wait=connect.AsyncWaitHandle)if(!wait.WaitOne(HttpsTimeout))throw new IOException("HTTPS: нет соединения ("+HttpsTimeout+" мс)");
                 tcp.EndConnect(connect);cancel.ThrowIfCancellationRequested();
                 using(var ssl=new SslStream(tcp.GetStream(),false)) {
-                    ssl.ReadTimeout=3500;ssl.WriteTimeout=3500;
+                    ssl.ReadTimeout=HttpsTimeout;ssl.WriteTimeout=HttpsTimeout;
                     // Connect to the candidate IP, but validate the original host's certificate and SNI.
                     var auth=ssl.BeginAuthenticateAsClient(host,null,SslProtocols.Tls12,true,null,null);
-                    using(var wait=auth.AsyncWaitHandle)if(!wait.WaitOne(3500))throw new IOException("HTTPS: TLS не ответил");
+                    using(var wait=auth.AsyncWaitHandle)if(!wait.WaitOne(HttpsTimeout))throw new IOException("HTTPS: TLS не ответил");
                     ssl.EndAuthenticateAsClient(auth);cancel.ThrowIfCancellationRequested();
                     var request=Encoding.ASCII.GetBytes("GET / HTTP/1.1\r\nHost: "+host+"\r\nUser-Agent: KodVsego-SmartDNS\r\nAccept: text/html,application/json\r\nConnection: close\r\n\r\n");
                     ssl.Write(request,0,request.Length);
                     var header=new StringBuilder();
                     var reading=Stopwatch.StartNew();
                     while(header.Length<8192) {
-                        if(reading.ElapsedMilliseconds>=3500)throw new IOException("HTTPS: время ожидания ответа истекло");
-                        ssl.ReadTimeout=Math.Max(1,3500-(int)reading.ElapsedMilliseconds);
+                        if(reading.ElapsedMilliseconds>=HttpsTimeout)throw new IOException("HTTPS: время ожидания ответа истекло");
+                        ssl.ReadTimeout=Math.Max(1,HttpsTimeout-(int)reading.ElapsedMilliseconds);
                         cancel.ThrowIfCancellationRequested();int c=ssl.ReadByte();if(c<0)break;
                         header.Append((char)c);int n=header.Length;
                         if(n>=4&&header[n-4]=='\r'&&header[n-3]=='\n'&&header[n-2]=='\r'&&header[n-1]=='\n')break;

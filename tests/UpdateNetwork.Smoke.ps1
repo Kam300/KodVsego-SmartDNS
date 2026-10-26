@@ -36,7 +36,7 @@ $sourcePath=Join-Path $folder 'Smoke.cs'
 $compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $mi=Join-Path $env:WINDIR 'Microsoft.NET\assembly\GAC_MSIL\Microsoft.Management.Infrastructure\v4.0_1.0.0.0__31bf3856ad364e35\Microsoft.Management.Infrastructure.dll'
 $refs=@('/r:System.Core.dll','/r:System.Windows.Forms.dll','/r:System.Drawing.dll','/r:System.Web.Extensions.dll','/r:System.Management.dll',"/r:$mi")
-$sources=@(Get-ChildItem $root -Filter '*.cs' | ForEach-Object FullName)
+$sources=@(& (Join-Path $root 'tools\Read-WindowsSources.ps1') -Root $root | ForEach-Object {Join-Path $root $_})
 $exe=Join-Path $folder 'Smoke.exe'
 & $compiler /nologo /target:exe /main:UpdateNetworkSmoke "/out:$exe" $refs $sources $sourcePath
 if($LASTEXITCODE -ne 0){throw 'Network harness compilation failed'}

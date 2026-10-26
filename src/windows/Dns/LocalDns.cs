@@ -185,15 +185,21 @@ namespace HbAi.XboxDns
         internal static bool TryArgs(string[] args,out int parent,out Guid token,out int provider,out bool tls)
         {int antigravity;return TryArgs(args,out parent,out token,out provider,out tls,out antigravity);}
         internal static bool TryArgs(string[] args,out int parent,out Guid token,out int provider,out bool tls,out int antigravity)
+        {bool specialTls;return TryArgs(args,out parent,out token,out provider,out tls,out antigravity,out specialTls);}
+        internal static bool TryArgs(string[] args,out int parent,out Guid token,out int provider,out bool tls,out int antigravity,out bool specialTls)
         {
-            antigravity=-1;
-            bool valid=DnsTunnel.TryWorkerMode(args!=null&&args.Length==6?args.Take(5).ToArray():args,"--dns-local-worker",out parent,out token,out provider,out tls);
+            antigravity=-1;specialTls=false;
+            bool valid=DnsTunnel.TryWorkerMode(args!=null&&(args.Length==6||args.Length==7)?args.Take(5).ToArray():args,"--dns-local-worker",out parent,out token,out provider,out tls);
             if(!valid)return false;
-            return args.Length==5||(int.TryParse(args[5],out antigravity)&&(antigravity==-1||LocalDnsRouting.Supports(antigravity)));
+            if(args.Length==5)return true;
+            if(!int.TryParse(args[5],out antigravity)||(antigravity!=-1&&!LocalDnsRouting.Supports(antigravity)))return false;
+            if(args.Length==6)return true;
+            specialTls=args[6]=="tls";
+            return (specialTls||args[6]=="https")&&(!specialTls||antigravity==-1||DotDns.Available(antigravity));
         }
         internal static int Run(string[] args)
         {
-            int parent,provider,antigravity;Guid token;bool tls;if(!TryArgs(args,out parent,out token,out provider,out tls,out antigravity)||!DnsElevation.IsAdministrator())return 5;
+            int parent,provider,antigravity;Guid token;bool tls,specialTls;if(!TryArgs(args,out parent,out token,out provider,out tls,out antigravity,out specialTls)||!DnsElevation.IsAdministrator())return 5;
             try{using(var pipe=new NamedPipeClientStream(".",DnsTunnel.PipeName(token),PipeDirection.InOut,PipeOptions.Asynchronous)){
                 pipe.Connect(10000);if(!DnsTunnel.ServerMatches(pipe,parent))return 5;
                 using(var reader=new StreamReader(pipe,Encoding.UTF8,false,4096,true))using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),4096,true){AutoFlush=true}){
@@ -214,9 +220,9 @@ namespace HbAi.XboxDns
                             trace("LOCAL session UTC="+DateTime.UtcNow.ToString("O")+"; provider="+Dns.Name[provider]+"; protocol="+(tls?"DoT":"DoH")+"; adapters="+snapshots.Ids.Length+"; unrelated snapshots="+(new RegistryDnsBackupStore().Load().Count-snapshots.Load().Count));
                             string fingerprint=TunnelDnsSystem.Fingerprint();var engine=new DnsSettingsEngine(system,snapshots);
                             var upstream=new TunnelUpstream(provider,tls,trace);
-                            var special=antigravity>=0?new TunnelUpstream(antigravity,false,s=>trace("ANTIGRAVITY "+s)):null;
+                            var special=antigravity>=0?new TunnelUpstream(antigravity,specialTls,s=>trace("ANTIGRAVITY "+s)):null;
                             var routes=new LocalDnsRouting(upstream.Query,special==null?null:(Func<byte[],byte[]>)special.Query);
-                            trace("ANTIGRAVITY separate="+(special!=null)+(special==null?"":"; provider="+Dns.Name[antigravity]+"; protocol=DoH; exact API domains only")+"; client/account NOT modified or verified");
+                            trace("ANTIGRAVITY separate="+(special!=null)+(special==null?"":"; provider="+Dns.Name[antigravity]+"; protocol="+(specialTls?"DoT":"DoH")+"; exact API domains only")+"; client/account NOT modified or verified");
                             var switching=new LocalDnsSwitchController();
                             using(var proxy=new LocalDnsProxy(routes.Query,trace)){
                                 LocalDnsLifecycle.Run(()=>{phase("start-loopback-listeners");proxy.Start();if(system.Adapters(true).Any(a=>a.V6)&&!proxy.Ipv6)throw new IOException("IPv6 включён у адаптера, но локальный IPv6 DNS недоступен. Настройки не изменены.");},()=>{phase("encrypted-dns-preflight");proxy.Probe();routes.Probe(trace);},()=>command.IsCompleted,

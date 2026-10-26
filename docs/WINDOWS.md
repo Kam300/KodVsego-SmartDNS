@@ -122,7 +122,7 @@ Windows 2.23.3: перезапуск нового Antigravity Desktop ждёт �
 
 Старые EXE без этой защиты могут запускаться повторно сами; новая версия распознаёт уже открытые окна старых версий, но не меняет их поведение при последующем запуске.
 
-Сборка из корня: build.bat. Версия задаётся в AssemblyInfo.cs. Тесты: powershell -NoProfile -ExecutionPolicy Bypass -File tests\run.ps1.
+Сборка из корня: build.bat. Версия задаётся в src/windows/Properties/AssemblyInfo.cs. Тесты: powershell -NoProfile -ExecutionPolicy Bypass -File tests\run.ps1.
 
 В версии 2.22.0 исправлена отзывчивость окна и отрисовка при большом масштабе экрана. Добавлены [режим «Авто»](AUTO.md) и [проверка и установка обновлений](UPDATES.md). История доступна в [коммитах](https://github.com/Kam300/KodVsego-SmartDNS/commits/main/) и [релизах](https://github.com/Kam300/KodVsego-SmartDNS/releases).
 

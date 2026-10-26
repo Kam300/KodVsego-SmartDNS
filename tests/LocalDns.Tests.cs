@@ -61,7 +61,7 @@ static class LocalDnsTests
         var messages=new List<string>();routes.Probe(messages.Add);Check(messages.Count==2&&messages.All(s=>s.Contains("model/account NOT verified")),"Both Antigravity DNS names must pass preflight without claiming account/model availability");
         Reject(()=>new LocalDnsRouting(Reply,q=>TunnelWire.Error(q)).Probe(s=>{}),"Failed Antigravity DNS preflight rejects activation instead of silently using the common provider");
         int normal=0;new LocalDnsRouting(q=>{normal++;return Reply(q);}).Query(DnsProbe.Query(AntigravityDns.Domains[0]));Check(normal==1,"Disabling the special route returns Antigravity names to the common DNS path");
-        Check(LocalDnsRouting.Providers.SequenceEqual(new[]{4,5,6,9,13})&&!LocalDnsRouting.Supports(0)&&!LocalDnsRouting.Supports(1)&&!LocalDnsRouting.Supports(3),"Only enabled catalog providers with declared Antigravity goal and DoH are offered");
+        Check(LocalDnsRouting.Providers.SequenceEqual(new[]{4,5,6,9})&&!LocalDnsRouting.Supports(0)&&!LocalDnsRouting.Supports(1)&&!LocalDnsRouting.Supports(3),"Only enabled catalog providers with declared Antigravity goal and DoH are offered");
         using(var proxy=new LocalDnsProxy(Reply)){
             proxy.Start(0);Check(proxy.Port>0,"Tests bind a free loopback port instead of changing adapter DNS or taking port 53");
             proxy.Probe();Check(proxy.Error==null,"Local UDP/TCP self-check works before DNS is applied");
@@ -134,6 +134,8 @@ static class LocalDnsTests
         int pid,provider;Guid token;bool tls;string id=Guid.NewGuid().ToString("N");
         Check(LocalDnsWorker.TryArgs(new[]{"--dns-local-worker","123",id,"5","https"},out pid,out token,out provider,out tls)&&provider==5&&!tls,"Constrained local worker CLI accepts an enabled encrypted provider");
         int specialProvider;Check(LocalDnsWorker.TryArgs(new[]{"--dns-local-worker","123",id,"5","tls","6"},out pid,out token,out provider,out tls,out specialProvider)&&provider==5&&tls&&specialProvider==6,"Common DNS/TLS and independent Antigravity/DoH provider travel separately to the worker");
+        bool specialTls;Check(LocalDnsWorker.TryArgs(new[]{"--dns-local-worker","123",id,"7","https","5","tls"},out pid,out token,out provider,out tls,out specialProvider,out specialTls)&&specialTls&&!tls&&provider==7&&specialProvider==5,"Restart preserves separate DoT while common DNS remains DoH");
+        Check(!LocalDnsWorker.TryArgs(new[]{"--dns-local-worker","123",id,"7","https","5","plain"},out pid,out token,out provider,out tls,out specialProvider,out specialTls),"Worker rejects plaintext for the separate route");
         Check(!LocalDnsWorker.TryArgs(new[]{"--dns-local-worker","123",id,"5","https","0"},out pid,out token,out provider,out tls,out specialProvider)&&!LocalDnsWorker.TryArgs(new[]{"--dns-local-worker","123",id,"5","https","1"},out pid,out token,out provider,out tls,out specialProvider),"Worker refuses unconfirmed Comss or disabled GeoHide for the special route");
         Check(!LocalDnsWorker.TryArgs(new[]{"--dns-local-worker","123",id,"3","https"},out pid,out token,out provider,out tls)&&!LocalDnsWorker.TryArgs(new[]{"--dns-tunnel-worker","123",id,"5","https"},out pid,out token,out provider,out tls),"Local worker rejects disabled Xbox and another worker mode");
         Check(!LocalDnsGuardian.TryGuard(new[]{"--dns-local-guard","0",id},out pid,out token)&&!LocalDnsGuardian.TryGuard(new[]{"--dns-local-guard","1",Guid.Empty.ToString("N")},out pid,out token),"Guardian rejects missing parent and empty session owner");

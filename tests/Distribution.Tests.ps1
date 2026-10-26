@@ -9,7 +9,7 @@ function Check([bool]$Condition,[string]$Name) {
 function FileHash([string]$Path) { return (Get-FileHash -LiteralPath $Path).Hash.ToLowerInvariant() }
 $testRoot=Join-Path $env:TEMP ('SmartDNS-distribution-test-'+[Guid]::NewGuid().ToString('N'))
 $output=Join-Path $testRoot 'release'
-$build=Join-Path $root 'build-distribution.ps1'
+$build=Join-Path $root 'tools\build\build-distribution.ps1'
 & $build -Wix $Wix -AppCompiler $AppCompiler -OutputDirectory $output
 $manifest=[IO.File]::ReadAllText((Join-Path $output 'release-files.json'))|ConvertFrom-Json
 $version=$manifest.Version

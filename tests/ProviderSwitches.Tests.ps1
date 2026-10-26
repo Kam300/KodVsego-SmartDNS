@@ -11,7 +11,7 @@ $path=Join-Path $fixture 'providers.json'
 $cs='using HbAi.XboxDns; class PolicyTest {static int Main(){return ProviderAvailability.IsEnabled(0)&&!ProviderAvailability.IsEnabled(1)&&!ProviderAvailability.IsEnabled(2)&&!ProviderAvailability.IsEnabled(3)&&ProviderAvailability.IsEnabled(6)&&!ProviderAvailability.IsEnabled(int.MaxValue)&&!ProviderAvailability.IsEnabled(-1)?0:1;}}'
 [IO.File]::WriteAllText((Join-Path $fixture 'PolicyTest.cs'),$cs.Replace('__ID__',[string]$newId).Replace('__COUNT__',[string]($newId+1)),[Text.UTF8Encoding]::new($false))
 $compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-& $compiler /nologo /r:System.Web.Extensions.dll /target:exe ("/out:"+(Join-Path $fixture 'PolicyTest.exe')) (Join-Path $fixture 'ProviderAvailability.cs') (Join-Path $fixture 'PolicyTest.cs')
+& $compiler /nologo /r:System.Web.Extensions.dll /target:exe ("/out:"+(Join-Path $fixture 'PolicyTest.exe')) (Join-Path $fixture 'src\windows\Providers\ProviderAvailability.cs') (Join-Path $fixture 'PolicyTest.cs')
 if($LASTEXITCODE -ne 0){throw 'Generated Windows policy did not compile'}
 & (Join-Path $fixture 'PolicyTest.exe');if($LASTEXITCODE -ne 0){throw 'Windows policy differs from JSON'}
 Write-Output 'PASS shared JSON disables GeoHide and Xbox on Windows without changing IDs'
@@ -24,12 +24,12 @@ if($JavaBin){
     if($LASTEXITCODE -ne 0){throw 'Android policy differs from JSON'}
     Write-Output 'PASS same shared JSON disables GeoHide and Xbox on Android'
 }
-$before=(Get-FileHash (Join-Path $fixture 'ProviderAvailability.cs')).Hash
+$before=(Get-FileHash (Join-Path $fixture 'src\windows\Providers\ProviderAvailability.cs')).Hash
 foreach($provider in $config){$provider.enabled=$false}
 [IO.File]::WriteAllText($path,($config | ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
 $rejected=$false
 try{& (Join-Path $root 'tools\Sync-ProviderAvailability.ps1') -ConfigurationPath $path -OutputRoot $fixture}catch{$rejected=$true}
-if(!$rejected -or (Get-FileHash (Join-Path $fixture 'ProviderAvailability.cs')).Hash -ne $before){throw 'Invalid configuration was accepted or changed output'}
+if(!$rejected -or (Get-FileHash (Join-Path $fixture 'src\windows\Providers\ProviderAvailability.cs')).Hash -ne $before){throw 'Invalid configuration was accepted or changed output'}
 Write-Output 'PASS all-disabled configuration rejected before writing output'
 # Appending a minimal provider must work without editing either platform source.
 $config=Get-Content (Join-Path $root 'config\providers.json') -Raw | ConvertFrom-Json
@@ -39,7 +39,7 @@ $config+= [pscustomobject]@{id=$newId;key='test-provider';name='Test "DNS"';ipv4
 & (Join-Path $root 'tools\Sync-ProviderAvailability.ps1') -ConfigurationPath $path -OutputRoot $fixture
 $cs='using HbAi.XboxDns; class PolicyTest {static int Main(){var p=ProviderCatalog.All[__ID__];return ProviderCatalog.All.Length==__COUNT__&&p.id==__ID__&&p.name=="Test \"DNS\""&&p.ipv4.Length==1&&p.windowsDohServers[0]=="203.0.113.53"&&p.doh=="https://resolver.example/dns-query"&&p.autoGoals[0]=="Gemini"&&p.testHosts[0]=="example.com"&&p.ipv6.Length==0&&ProviderAvailability.IsEnabled(__ID__)?0:1;}}'
 [IO.File]::WriteAllText((Join-Path $fixture 'PolicyTest.cs'),$cs.Replace('__ID__',[string]$newId).Replace('__COUNT__',[string]($newId+1)),[Text.UTF8Encoding]::new($false))
-& $compiler /nologo /r:System.Web.Extensions.dll /target:exe ("/out:"+(Join-Path $fixture 'PolicyTest.exe')) (Join-Path $fixture 'ProviderAvailability.cs') (Join-Path $fixture 'PolicyTest.cs')
+& $compiler /nologo /r:System.Web.Extensions.dll /target:exe ("/out:"+(Join-Path $fixture 'PolicyTest.exe')) (Join-Path $fixture 'src\windows\Providers\ProviderAvailability.cs') (Join-Path $fixture 'PolicyTest.cs')
 if($LASTEXITCODE -ne 0){throw 'Extended Windows catalog did not compile'}
 & (Join-Path $fixture 'PolicyTest.exe');if($LASTEXITCODE -ne 0){throw 'Extended Windows data differs from JSON'}
 Write-Output 'PASS minimal appended provider with one IP and DoH is generated for Windows'
@@ -52,12 +52,12 @@ if($JavaBin){
     if($LASTEXITCODE -ne 0){throw 'Extended Android data differs from JSON'}
     Write-Output 'PASS same appended provider is usable through the Android Provider API'
 }
-$before=(Get-FileHash (Join-Path $fixture 'ProviderAvailability.cs')).Hash
+$before=(Get-FileHash (Join-Path $fixture 'src\windows\Providers\ProviderAvailability.cs')).Hash
 foreach($bad in @(@{field='ipv4';value=@('invalid')},@{field='doh';value='http://resolver.example/query'},@{field='id';value=2},@{field='autoGoals';value=@('Unknown')},@{field='legacyIpv4';value=@('203.0.113.1')},@{field='legacyIpv4';value=@(@('invalid','203.0.113.2'))},@{field='legacyIpv4';value=@(@('::1','203.0.113.2'))})){
     $last=$config[$newId].($bad.field);$config[$newId].($bad.field)=$bad.value
     [IO.File]::WriteAllText($path,($config | ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
     $rejected=$false;try{& (Join-Path $root 'tools\Sync-ProviderAvailability.ps1') -ConfigurationPath $path -OutputRoot $fixture}catch{$rejected=$true}
-    if(!$rejected -or (Get-FileHash (Join-Path $fixture 'ProviderAvailability.cs')).Hash -ne $before){throw 'Invalid catalog changed generated output'}
+    if(!$rejected -or (Get-FileHash (Join-Path $fixture 'src\windows\Providers\ProviderAvailability.cs')).Hash -ne $before){throw 'Invalid catalog changed generated output'}
     $config[$newId].($bad.field)=$last
 }
 Write-Output 'PASS invalid IP, HTTP DoH, duplicate ID, unknown service and invalid legacy sets rejected without output changes'

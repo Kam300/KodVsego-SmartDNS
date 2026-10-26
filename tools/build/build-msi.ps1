@@ -1,12 +1,12 @@
 ﻿param([string]$Wix,[string]$SourceExe,[string]$OutputDirectory,[string]$TestId)
 $ErrorActionPreference='Stop'
-$root=$PSScriptRoot
+$root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 . (Join-Path $root 'installer\MsiHelpers.ps1')
 if (!$Wix) { $Wix=Join-Path $env:LOCALAPPDATA 'KodVsego\BuildTools\wix-5.0.2\wix.exe' }
 $Wix=(Resolve-Path -LiteralPath $Wix).Path
 $toolVersion=(& $Wix --version) -join ''
 if ($LASTEXITCODE -ne 0 -or $toolVersion -notmatch '^5\.0\.2\+') { throw 'This prototype requires WiX CLI 5.0.2.' }
-$version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value
+$version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'src\windows\Properties\AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value
 if (!$OutputDirectory) { $OutputDirectory=Join-Path $root ('dist\'+$version) }
 $OutputDirectory=[IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null

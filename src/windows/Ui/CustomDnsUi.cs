@@ -53,15 +53,17 @@ namespace HbAi.XboxDns
         }
         void RebuildProviderRows(int[] hidden)
         {
-            foreach(Control control in providerRows.Controls.Cast<Control>().ToArray())control.Dispose();providerChecks.Clear();providerPings.Clear();providerEdits.Clear();
+            foreach(Control control in providerRows.Controls.Cast<Control>().ToArray())control.Dispose();providerChecks.Clear();providerPings.Clear();providerEdits.Clear();providerAntigravityBadges.Clear();
             var entries=RuntimeProviders.All.Take(CustomDns.First).Where(p=>Dns.IsAvailable(p.id)).Concat(customDns.Where(p=>p.enabled));
             foreach(var provider in entries){int id=provider.id;
                 var check=new CheckBox{Text=provider.name,Checked=!hidden.Contains(id),Font=bodyFont,ForeColor=ForeColor,BackColor=surface,AutoEllipsis=true,AccessibleName="Показывать DNS-провайдера "+provider.name};
-                check.CheckedChanged+=(s,e)=>{if(providerChecks.Count>0&&!providerChecks.Values.Any(c=>c.Checked))check.Checked=true;};
+                check.CheckedChanged+=(s,e)=>{if(providerChecks.Count>0&&!providerChecks.Values.Any(c=>c.Checked))check.Checked=true;RefreshAntigravitySettingsChoices();UpdateDialogLayout();};
                 var ping=new Label{Text=CustomDns.IsCustom(id)?"Свой DNS":"Не измерено",Font=bodyFont,ForeColor=messageText.ForeColor,TextAlign=ContentAlignment.MiddleRight,AutoEllipsis=true,AccessibleName="Задержка DNS "+provider.name};
                 providerChecks.Add(id,check);providerPings.Add(id,ping);providerRows.Controls.Add(check);providerRows.Controls.Add(ping);
+                if(provider.doh!=null&&provider.autoGoals.Contains("Antigravity")){var badge=new Label{Text="AG",Font=bodyFont,ForeColor=statusAccent,BackColor=surface,TextAlign=ContentAlignment.MiddleCenter,AccessibleName="Antigravity · отдельный DNS · доступ не проверен"};providerAntigravityBadges.Add(id,badge);providerRows.Controls.Add(badge);}
                 if(CustomDns.IsCustom(id)){var edit=new Button{Text="…",Font=bodyFont,AccessibleName="Изменить "+provider.name};edit.Click+=(s,e)=>EditCustomProvider(id);providerEdits.Add(id,edit);providerRows.Controls.Add(edit);}
             }
+            RefreshAntigravitySettingsChoices();
         }
     }
 }

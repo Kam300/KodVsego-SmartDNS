@@ -607,16 +607,14 @@
       "Claude",
       "Gemini",
       "ElevenLabs",
-      "Spotify",
-      "Antigravity"
+      "Spotify"
     ],
     "autoGoals": [
       "ChatGPT",
       "Claude",
       "Gemini",
       "ElevenLabs",
-      "Spotify",
-      "Antigravity"
+      "Spotify"
     ],
     "testHosts": [
       "example.com",

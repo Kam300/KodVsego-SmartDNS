@@ -3,8 +3,8 @@
 param([string]$AssemblyPath)
 if(!$AssemblyPath){
     $root=Split-Path $PSScriptRoot -Parent
-    $version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value
-    $AssemblyPath=Join-Path $root ('KodVsego_SmartDNS.'+$version+'.exe')
+    $version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'src\windows\Properties\AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value
+    $AssemblyPath=Join-Path $root ('dist\dev\KodVsego_SmartDNS.'+$version+'.exe')
 }
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing

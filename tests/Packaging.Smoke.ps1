@@ -1,7 +1,7 @@
 ﻿param([Parameter(Mandatory=$true)][string]$Compiler,[string]$SourceExe)
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
-if(!$SourceExe){$version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value;$SourceExe=Join-Path $root "KodVsego_SmartDNS.$version.exe"}
+if(!$SourceExe){$version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'src\windows\Properties\AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value;$SourceExe=Join-Path $root "dist\dev\KodVsego_SmartDNS.$version.exe"}
 $version=[Diagnostics.FileVersionInfo]::GetVersionInfo($SourceExe).ProductVersion
 $id=[Guid]::NewGuid().ToString('N')
 $dir=Join-Path $env:TEMP "SmartDNS-packaging-$id"

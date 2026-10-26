@@ -1,7 +1,7 @@
 ﻿param([string]$Wix,[string]$AppCompiler,[string]$SourceExe,[switch]$SkipAppBuild,[string]$OutputDirectory)
 $ErrorActionPreference='Stop'
-$root=$PSScriptRoot
-$version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value
+$root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'src\windows\Properties\AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value
 if ($version -notmatch '^\d+\.\d+\.\d+(?:-test\.\d+)?$') { throw 'Invalid distribution version.' }
 if (!$OutputDirectory) { $OutputDirectory=Join-Path $root ('dist\'+$version+'\release') }
 $OutputDirectory=[IO.Path]::GetFullPath($OutputDirectory)
@@ -18,7 +18,7 @@ New-Item -ItemType Directory -Path $appDirectory -Force | Out-Null
 $name='KodVsego_SmartDNS.'+$version+'.exe'
 $exe=Join-Path $appDirectory $name
 if ($SourceExe -or $SkipAppBuild) {
-    if (!$SourceExe) { $SourceExe=Join-Path $root $name }
+    if (!$SourceExe) { $SourceExe=Join-Path $root ('dist\dev\'+$name) }
     $SourceExe=(Resolve-Path -LiteralPath $SourceExe).Path
     [IO.File]::Copy($SourceExe,$exe,$false)
 } else {
@@ -56,7 +56,7 @@ $zipName='KodVsego_SmartDNS.Portable.'+$version+'.zip'
 $zip=Join-Path $work $zipName
 Compress-Archive -Path (Join-Path $portable '*') -DestinationPath $zip
 $msiDirectory=Join-Path $work 'msi'
-& (Join-Path $root 'build-msi.ps1') -Wix $Wix -SourceExe $exe -OutputDirectory $msiDirectory
+& (Join-Path $root 'tools\build\build-msi.ps1') -Wix $Wix -SourceExe $exe -OutputDirectory $msiDirectory
 $msiName='KodVsego_SmartDNS.Setup.'+$version+'.msi'
 $msi=Join-Path $msiDirectory $msiName
 $msiBuild=[IO.File]::ReadAllText((Join-Path $msiDirectory 'msi-build.json'))|ConvertFrom-Json

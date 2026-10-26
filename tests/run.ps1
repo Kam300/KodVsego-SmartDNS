@@ -4,7 +4,7 @@ $root = Split-Path $PSScriptRoot -Parent
 & (Join-Path $root 'tools\Sync-ProviderAvailability.ps1')
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $compiler = if($Compiler){(Resolve-Path -LiteralPath $Compiler).Path}else{Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'}
-$sources = @('XboxDns.cs','AntigravityStartup.cs','CustomDns.cs','CustomDnsUi.cs','ProviderAvailability.cs','SingleInstance.cs','AppUpdate.cs','AutoDns.cs','ServiceAvailability.cs','ResolverCheck.cs','ProviderCheck.cs','DnsTunnel.cs','LocalDns.cs','ProviderPreferences.cs','LocalDnsSwitch.cs','ProviderSettingsUi.cs','DnsTunnelNative.cs','DnsTunnelPackets.cs','DnsTunnelWindow.cs','NrptCimReader.cs','EncryptedDns.cs','DotDns.cs','DohHttp2.cs','NetworkCheck.cs','DnsProbe.cs','NativeDns.cs','DnsElevation.cs','UninstallCleanup.cs','ProcessSecurity.cs','VpnCheck.cs','StyledDialog.cs','ConnectionUi.cs','AntigravityDns.cs','AgTakeover.cs','AgCleanup.cs','DiagnosticReport.cs','BrowserRestart.cs','BrowserProfiles.cs') | ForEach-Object { Join-Path $root $_ }
+$sources = @(& (Join-Path $root 'tools\Read-WindowsSources.ps1') -Root $root) | Where-Object {$_ -notlike '*/AssemblyInfo.cs'} | ForEach-Object { Join-Path $root $_ }
 $miAssembly = Join-Path $env:WINDIR 'Microsoft.NET\assembly\GAC_MSIL\Microsoft.Management.Infrastructure\v4.0_1.0.0.0__31bf3856ad364e35\Microsoft.Management.Infrastructure.dll'
 $framework=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
 $refs=@('mscorlib.dll','System.dll','System.Xml.dll','System.Core.dll','System.Management.dll','System.Web.Extensions.dll','System.Security.dll','System.Windows.Forms.dll','System.Drawing.dll') | ForEach-Object {'/r:'+(Join-Path $framework $_)}
@@ -24,11 +24,12 @@ $cases+=,@('LatencyLinksTests','LatencyLinks.Tests.cs')
 $cases+=,@('LiveLocalAutoTests','LiveLocalAuto.Tests.cs')
 $cases+=,@('CustomDnsTests','CustomDns.Tests.cs')
 $cases+=,@('AntigravityStartupTests','AntigravityStartup.Tests.cs')
+$cases+=,@('AntigravityHealthTests','AntigravityHealth.Tests.cs')
 foreach ($case in $cases) {
     if ($Only.Count -gt 0 -and $case[0] -notin $Only) { continue }
     $exe = Join-Path $OutputDirectory ($case[0] + '.exe')
     $tests = @((Join-Path $PSScriptRoot $case[1]))
-    $dpiManifest=if($case[0] -eq 'ConnectionMenuTests'){@('/win32manifest:'+(Join-Path $root 'app.manifest'))}else{@()}
+    $dpiManifest=if($case[0] -eq 'ConnectionMenuTests'){@('/win32manifest:'+(Join-Path $root 'src\windows\Properties\app.manifest'))}else{@()}
     if ($case[0] -eq 'LocalDnsTests') { $tests += Join-Path $PSScriptRoot 'NativeDns.Tests.cs' }
     if ($case[0] -eq 'TunnelTests') { $tests += Join-Path $PSScriptRoot 'NativeDns.Tests.cs' }
     if ($case[0] -eq 'DotDnsTests') { $tests += Join-Path $PSScriptRoot 'NativeDns.Tests.cs' }
@@ -36,7 +37,7 @@ foreach ($case in $cases) {
     if ($case[0] -eq 'UninstallTests') { $tests += @('NativeDns.Tests.cs','AgTakeover.Tests.cs','AntigravityDns.Tests.cs') | ForEach-Object {Join-Path $PSScriptRoot $_} }
     & $compiler /noconfig /nostdlib+ /langversion:5 /codepage:65001 /nologo /target:exe "/out:$exe" "/main:$($case[0])" $dpiManifest $refs $sources $tests
     if ($LASTEXITCODE -ne 0) { throw "Compilation failed: $($case[0])" }
-    if ($case[0] -eq 'ElevationTests') { & $exe (Join-Path $root 'app.manifest') }
+    if ($case[0] -eq 'ElevationTests') { & $exe (Join-Path $root 'src\windows\Properties\app.manifest') }
     elseif ($case[0] -eq 'ProbeTests' -and $LiveHttps) { & $exe --https }
     else { & $exe }
     if ($LASTEXITCODE -ne 0) { throw "Tests failed: $($case[0])" }

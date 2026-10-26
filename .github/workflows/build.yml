@@ -50,13 +50,13 @@ jobs:
         shell: powershell
         run: |
           $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-          & $compiler /nologo /target:exe /out:ProcessSecurityTests.exe ProcessSecurity.cs tests\ProcessSecurity.Tests.cs
+          & $compiler /nologo /target:exe /out:dist\dev\ProcessSecurityTests.exe src\windows\Platform\ProcessSecurity.cs tests\ProcessSecurity.Tests.cs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./ProcessSecurityTests.exe
+          ./dist/dev/ProcessSecurityTests.exe
       - name: Test UI motion and idle timer
         shell: powershell
         run: ./tests/UiMotion.Tests.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: SmartDNS-Windows
-          path: KodVsego_SmartDNS.*.exe
+          path: dist/dev/KodVsego_SmartDNS.*.exe

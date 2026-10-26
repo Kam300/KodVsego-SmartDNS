@@ -31,7 +31,7 @@ MSI 2.23.2 при окончательном удалении автоматич
 Нужны подписанный Microsoft Roslyn из Visual Studio / Build Tools, .NET SDK и WiX CLI 5.0.2. Inno Setup для стандартной сборки не нужен. [Подготовка WiX](MSI.md#сборка).
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-distribution.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build\build-distribution.ps1
 ```
 
 Результат находится в `dist/<версия>/release`:

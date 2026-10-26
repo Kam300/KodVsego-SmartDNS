@@ -28,15 +28,18 @@ namespace HbAi.XboxDns
         event Action Changed;
         void Start(int provider,bool tls);void Stop();
     }
-    sealed class TunnelSession : ITunnelSession,ILocalDnsConfiguration,ILocalDnsSwitchSession,ILocalAntigravitySwitchSession
+    sealed class TunnelSession : ITunnelSession,ILocalDnsConfiguration,ILocalDnsSwitchSession,ILocalAntigravityTransportSession
     {
         readonly Func<ProcessStartInfo,Process> launch;
         readonly bool local;
         readonly Func<bool> recoveryPending;
         volatile int localAntigravity=-1;
+        volatile bool localAntigravityTls;
+        public bool CurrentAntigravityTls {get{return localAntigravityTls;}}
         volatile bool switching,currentTls;volatile int currentProvider=-1;int pendingProvider=-1;bool pendingTls,pendingAntigravity;
         public int CurrentAntigravity{get{return localAntigravity;}}
-        public void SwitchAntigravity(int provider){SendSwitch(LocalDnsSwitchCommand.Parse("AGSWITCH "+provider+" https"));}
+        public void SwitchAntigravity(int provider){SwitchAntigravity(provider,false);}
+        public void SwitchAntigravity(int provider,bool tls){SendSwitch(LocalDnsSwitchCommand.Parse("AGSWITCH "+provider+" "+(tls?"tls":"https")));}
         public bool Switching{get{return switching;}}public int CurrentProvider{get{return currentProvider;}}public bool CurrentTls{get{return currentTls;}}
         public void SwitchProvider(int provider,bool tls)
         {
@@ -53,7 +56,7 @@ namespace HbAi.XboxDns
         internal void AcceptSwitchStatus(string line)
         {
             lock(gate){if(!local||!switching||stopping)return;
-                if(line==(pendingAntigravity?"AGSWITCHED ":"SWITCHED ")+pendingProvider+" "+(pendingTls?"tls":"https")){if(pendingAntigravity)localAntigravity=pendingProvider;else{currentProvider=pendingProvider;currentTls=pendingTls;}switching=false;failure=null;}
+                if(line==(pendingAntigravity?"AGSWITCHED ":"SWITCHED ")+pendingProvider+" "+(pendingTls?"tls":"https")){if(pendingAntigravity){localAntigravity=pendingProvider;localAntigravityTls=pendingTls;}else{currentProvider=pendingProvider;currentTls=pendingTls;}switching=false;failure=null;}
                 else if(line.StartsWith("SWITCH_FAILED ",StringComparison.Ordinal)){switching=false;failure=line.Substring(14);}
                 else throw new IOException("Неожиданный ответ смены DNS.");}
             Notify();
@@ -66,7 +69,8 @@ namespace HbAi.XboxDns
         public event Action Changed;
         void Notify(){var handler=Changed;if(handler!=null)handler();}
         void Log(string line){DiagnosticReport.Record(local?"Локальный DNS":"Gemini / NotebookLM",TunnelDiagnostics.Line(line));}
-        public void SetAntigravity(int provider){if(!local||running)throw new IOException("Сначала остановите локальный DNS.");if(provider!=-1&&!LocalDnsRouting.Supports(provider))throw new IOException("Провайдер Antigravity недоступен.");localAntigravity=provider;}
+        public void SetAntigravity(int provider){if(!local||running)throw new IOException("Сначала остановите локальный DNS.");if(provider!=-1&&!LocalDnsRouting.Supports(provider))throw new IOException("Провайдер Antigravity недоступен.");localAntigravity=provider;localAntigravityTls=false;}
+        public void SetAntigravity(int provider,bool tls){SetAntigravity(provider);if(provider>=0&&tls&&!DotDns.Available(provider))throw new IOException("У DNS нет DoT.");localAntigravityTls=tls;}
         public void Start(int provider,bool tls)
         {
             if(running)return;
@@ -76,7 +80,7 @@ namespace HbAi.XboxDns
             try {
                 Guid token=Guid.NewGuid();channel=DnsTunnel.Server(token);pending=channel.BeginWaitForConnection(null,null);pipe=channel;
                 bool elevated=!DnsElevation.IsAdministrator();
-                var start=new ProcessStartInfo(Assembly.GetExecutingAssembly().Location,(local?"--dns-local-worker ":"--dns-tunnel-worker ")+Process.GetCurrentProcess().Id+" "+token.ToString("N")+" "+provider+" "+(tls?"tls":"https")+(local?" "+localAntigravity:"")){UseShellExecute=elevated,CreateNoWindow=true,WorkingDirectory=Environment.GetFolderPath(Environment.SpecialFolder.System)};
+                var start=new ProcessStartInfo(Assembly.GetExecutingAssembly().Location,(local?"--dns-local-worker ":"--dns-tunnel-worker ")+Process.GetCurrentProcess().Id+" "+token.ToString("N")+" "+provider+" "+(tls?"tls":"https")+(local?" "+localAntigravity+" "+(localAntigravityTls?"tls":"https"):"")){UseShellExecute=elevated,CreateNoWindow=true,WorkingDirectory=Environment.GetFolderPath(Environment.SpecialFolder.System)};
                 if(elevated)start.Verb="runas";
                 Log("START provider="+Dns.Name[provider]+"; protocol="+(tls?"DoT":"DoH")+"; scope=system DNS; separate window=false");
                 child=launch(start);if(child==null)throw new IOException("Обработчик не запущен.");

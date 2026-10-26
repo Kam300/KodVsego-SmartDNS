@@ -17,6 +17,12 @@ namespace HbAi.XboxDns
         int CurrentAntigravity {get;}
         void SwitchAntigravity(int provider);
     }
+    interface ILocalAntigravityTransportSession : ILocalAntigravitySwitchSession
+    {
+        bool CurrentAntigravityTls {get;}
+        void SetAntigravity(int provider,bool tls);
+        void SwitchAntigravity(int provider,bool tls);
+    }
     sealed class LocalDnsSwitchCommand
     {
         internal int Provider;internal bool Tls,Antigravity;
@@ -29,7 +35,7 @@ namespace HbAi.XboxDns
                 (parts[2]=="tls"?!DotDns.Available(provider):EncryptedDns.Templates[provider]==null))
                 throw new IOException("Некорректная команда смены DNS.");
             bool special=parts[0]=="AGSWITCH";
-            if(special&&(parts[2]!="https"||!LocalDnsRouting.Supports(provider)))throw new IOException("Провайдер Antigravity недоступен.");
+            if(special&&!LocalDnsRouting.Supports(provider))throw new IOException("Провайдер Antigravity недоступен.");
             return new LocalDnsSwitchCommand{Provider=provider,Tls=parts[2]=="tls",Antigravity=special};
         }
     }

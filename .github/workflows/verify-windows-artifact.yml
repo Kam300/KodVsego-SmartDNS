@@ -19,7 +19,7 @@ jobs:
         run: |
           $compiler=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
           $test=Join-Path $env:RUNNER_TEMP 'ProcessSecurityTests.exe'
-          & $compiler /noconfig /nologo /target:exe /r:System.dll ("/out:"+$test) ProcessSecurity.cs tests/ProcessSecurity.Tests.cs
+          & $compiler /noconfig /nologo /target:exe /r:System.dll ("/out:"+$test) src\windows\Platform\ProcessSecurity.cs tests\ProcessSecurity.Tests.cs
           if($LASTEXITCODE -ne 0){throw 'Security test compilation failed'}
           & $test
           if($LASTEXITCODE -ne 0){throw 'Process security checks failed'}

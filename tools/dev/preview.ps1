@@ -1,6 +1,6 @@
 ﻿# Creates the form and renders its canvas only; never invokes DNS changes.
 param(
-    [string]$AssemblyPath = (Join-Path $PSScriptRoot 'KodVsego_SmartDNS.2.23.1.exe'),
+    [string]$AssemblyPath,
     [int]$Dpi = 96,
     [ValidateRange(-1,6)][int]$DnsSet = -1,
     [ValidateRange(-1,6)][int]$AutoGoal = -1,
@@ -18,9 +18,12 @@ param(
     [ValidateSet('Ready', 'Working', 'Done', 'Error')][string]$BrowserState = 'Ready',
     [ValidateSet('Live', 'Off', 'On', 'Partial', 'External', 'Unknown')][string]$AgPreview = 'Live',
     [ValidateRange(0,3)][int]$AgProvider = 0,
-    [string]$OutputPath = (Join-Path $PSScriptRoot 'preview.png')
+    [string]$OutputPath = (Join-Path $PSScriptRoot '..\..\dist\preview.png')
 )
 $ErrorActionPreference = 'Stop'
+$root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+if(!$AssemblyPath){$version=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'src\windows\Properties\AssemblyInfo.cs')),'AssemblyInformationalVersion\("([^"]+)"\)').Groups[1].Value;$AssemblyPath=Join-Path $root ('dist\dev\KodVsego_SmartDNS.'+$version+'.exe')}
+New-Item -ItemType Directory -Path (Split-Path $OutputPath -Parent) -Force | Out-Null
 $asm = [Reflection.Assembly]::LoadFile($AssemblyPath)
 if ($Harden) {
     $asm.GetType('HbAi.XboxDns.ProcessSecurity').GetMethod('Initialize', [Reflection.BindingFlags]'Static,NonPublic').Invoke($null, @()) | Out-Null
