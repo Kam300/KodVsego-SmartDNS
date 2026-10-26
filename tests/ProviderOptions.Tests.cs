@@ -15,17 +15,19 @@ static class ProviderOptionsTests
     static void Check(bool ok,string name){if(!ok)throw new Exception(name);passed++;Console.WriteLine("PASS "+name);}
     static void Set(object item,string name,object value){item.GetType().GetField(name,Fields).SetValue(item,value);}
     static T Get<T>(object item,string name){return (T)item.GetType().GetField(name,Fields).GetValue(item);}
-    sealed class Session : ITunnelSession,ILocalDnsSwitchSession,ILocalDnsConfiguration
+    sealed class Session : ITunnelSession,ILocalDnsSwitchSession,ILocalDnsConfiguration,ILocalAntigravitySwitchSession
     {
         public bool Running{get;private set;}public bool Connected{get;private set;}public bool Stopping{get;private set;}
         public string LastError{get;private set;}public string Statistics{get{return "0 0";}}
         public bool Switching{get;private set;}public int CurrentProvider{get;private set;}public bool CurrentTls{get;private set;}
         public event Action Changed;internal int Starts,Stops,Switches,Requested,Special=-1;internal bool RequestedTls;
+        bool specialRequest;public int CurrentAntigravity{get{return Special;}}
+        public void SwitchAntigravity(int provider){Requested=provider;specialRequest=true;Switching=true;Notify();}
         void Notify(){if(Changed!=null)Changed();}
         public void Start(int provider,bool tls){Starts++;CurrentProvider=provider;CurrentTls=tls;Running=Connected=true;Notify();}
         public void Stop(){Stops++;Running=Connected=Switching=false;Notify();}
-        public void SwitchProvider(int provider,bool tls){Switches++;Requested=provider;RequestedTls=tls;Switching=true;Notify();}
-        internal void Complete(bool success){if(success){CurrentProvider=Requested;CurrentTls=RequestedTls;}LastError=success?null:"Failed candidate; old route retained";Switching=false;Notify();}
+        public void SwitchProvider(int provider,bool tls){Switches++;Requested=provider;RequestedTls=tls;specialRequest=false;Switching=true;Notify();}
+        internal void Complete(bool success){if(success){if(specialRequest)Special=Requested;else{CurrentProvider=Requested;CurrentTls=RequestedTls;}}LastError=success?null:"Failed candidate; old route retained";Switching=false;Notify();}
         public void SetAntigravity(int provider){Special=provider;}public void Dispose(){}
     }
     sealed class Probe : IAutoDnsProbe
@@ -76,12 +78,24 @@ static class ProviderOptionsTests
             controller.Begin(request,c=>{wait.Wait();return q=>new byte[]{5};});controller.Cancel();wait.Set();controller.Poll(routes,()=>flushes++,line=>{throw new Exception("Late commit after stop");});
             Check(!controller.Pending&&routes.Query(query)[0]==2,"Stop discards pending work without a delayed route change");
         }
+        var specialCommand=LocalDnsSwitchCommand.Parse("AGSWITCH 5 https");
+        Check(specialCommand.Antigravity&&specialCommand.Wire=="AGSWITCH 5 https","Separate route has a distinct authenticated worker command");
+        foreach(string bad in new[]{"AGSWITCH 0 https","AGSWITCH 5 tls"}){bool rejected=false;try{LocalDnsSwitchCommand.Parse(bad);}catch(IOException){rejected=true;}Check(rejected,"Reject unsupported Antigravity command "+bad);}
+        controller=new LocalDnsSwitchController();controller.Begin(specialCommand,c=>q=>new byte[]{8});
+        Check(Await(controller,routes,()=>{})=="AGSWITCHED 5 https"&&routes.Query(DnsProbe.Query(AntigravityDns.Domains[0]))[0]==8&&routes.Query(query)[0]==2,"Live Antigravity replacement changes only the two API routes and acknowledges separately");
+        controller.Begin(specialCommand,c=>q=>new byte[]{7});
+        Check(Await(controller,routes,()=>{throw new IOException();}).StartsWith("SWITCH_FAILED ")&&routes.Query(DnsProbe.Query(AntigravityDns.Domains[0]))[0]==8&&routes.Query(query)[0]==2,"Flush failure rolls back Antigravity without changing the common route");
         var google=new Session();var local=new Session();
         using(var form=new MainForm(google,false,local)){
             foreach(string field in new[]{"initializing","agLoading","active","busy"})Set(form,field,false);Set(form,"defaultGoal",-1);var handle=form.Handle;
             form.SelectLocalMode(true);Set(form,"dnsSet",5);form.SelectLocalAntigravity(true,6);
             typeof(MainForm).GetMethod("Toggle",Fields).Invoke(form,null);Application.DoEvents();
             Check(local.Starts==1&&Get<bool>(form,"active"),"Fake local worker begins connected");
+            Check(form.SwitchLocalAntigravity(5)&&form.LocalAntigravityProvider==6&&local.Special==6,"Antigravity selection stays unchanged while the replacement is pending");
+            Application.DoEvents();Check(!form.SwitchLocalAntigravity(9),"A pending Antigravity switch cannot be submitted twice");
+            local.Complete(true);Application.DoEvents();Check(form.LocalAntigravityProvider==5&&Get<int>(form,"dnsSet")==5&&local.Starts==1&&local.Stops==0,"Acknowledged Antigravity switch uses the existing worker and preserves the common DNS");
+            form.SwitchLocalAntigravity(6);local.Complete(false);Application.DoEvents();Check(form.LocalAntigravityProvider==5&&Get<bool>(form,"active")&&!Get<bool>(form,"busy"),"Rejected Antigravity candidate leaves the current route and connection active");
+            form.SwitchLocalAntigravity(6);local.Complete(true);Application.DoEvents();
             Check(form.SwitchLocalProvider(7)&&local.Switches==1&&local.Starts==1&&local.Stops==0&&Get<int>(form,"dnsSet")==5,"Selecting a new local provider uses the existing worker and retains old selection until acknowledgement");
             Application.DoEvents();Check(!form.SwitchLocalProvider(6),"A pending live switch cannot be submitted twice");
             local.Complete(true);Application.DoEvents();Check(Get<int>(form,"dnsSet")==7&&!Get<bool>(form,"busy")&&Get<bool>(form,"active")&&local.Special==6,"Acknowledged switch updates the selected provider and preserves Antigravity");

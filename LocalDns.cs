@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -17,17 +17,23 @@ namespace HbAi.XboxDns
     interface ILocalDnsConfiguration { void SetAntigravity(int provider); }
     sealed class LocalDnsRouting
     {
-        Func<byte[],byte[]> common;readonly Func<byte[],byte[]> antigravity;
+        Func<byte[],byte[]> common,antigravity;
         internal LocalDnsRouting(Func<byte[],byte[]> common,Func<byte[],byte[]> antigravity=null){this.common=common;this.antigravity=antigravity;}
         internal static int[] Providers {get{return Dns.AvailableProviders.Where(Supports).ToArray();}}
-        internal static bool Supports(int provider){return Dns.IsAvailable(provider)&&ProviderCatalog.All[provider].autoGoals.Contains("Antigravity")&&EncryptedDns.Templates[provider]!=null;}
+        internal static bool Supports(int provider){return Dns.IsAvailable(provider)&&RuntimeProviders.All[provider].autoGoals.Contains("Antigravity")&&EncryptedDns.Templates[provider]!=null;}
         internal static bool IsAntigravity(byte[] query)
         {
             int end=TunnelWire.QuestionEnd(query),offset=12;var labels=new List<string>();
             while(offset<end-4){int length=query[offset++];if(length==0)break;labels.Add(Encoding.ASCII.GetString(query,offset,length));offset+=length;}
             return AntigravityDns.Domains.Contains(string.Join(".",labels),StringComparer.OrdinalIgnoreCase);
         }
-        internal byte[] Query(byte[] query){return antigravity!=null&&IsAntigravity(query)?antigravity(query):Volatile.Read(ref common)(query);}
+        internal byte[] Query(byte[] query){var special=Volatile.Read(ref antigravity);return special!=null&&IsAntigravity(query)?special(query):Volatile.Read(ref common)(query);}
+        internal void ReplaceAntigravity(Func<byte[],byte[]> next,Action flush)
+        {
+            if(next==null)throw new ArgumentNullException("next");
+            var previous=Interlocked.Exchange(ref antigravity,next);
+            try{flush();}catch{Interlocked.Exchange(ref antigravity,previous);try{flush();}catch{}throw;}
+        }
         internal void ReplaceCommon(Func<byte[],byte[]> next,Action flush)
         {
             if(next==null)throw new ArgumentNullException("next");
@@ -221,8 +227,8 @@ namespace HbAi.XboxDns
                                         if(guard.Exited)throw new IOException("Процесс восстановления остановлен. Локальный DNS выключается.");
                                         if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась. Локальный DNS выключен; включите его заново.");
                                         if(command.IsCompleted){string line=command.GetAwaiter().GetResult();if(line==null||line=="STOP")break;
-                                            var requested=LocalDnsSwitchCommand.Parse(line);trace("LOCAL SWITCH requested provider="+Dns.Name[requested.Provider]+"; protocol="+(requested.Tls?"DoT":"DoH"));
-                                            if(!switching.Begin(requested,candidate=>{var next=new TunnelUpstream(candidate.Provider,candidate.Tls,trace);var question=DnsProbe.Query("example.com");DnsProbe.Validate(question,next.Query(question));return next.Query;}))lock(logGate)writer.WriteLine("SWITCH_FAILED Предыдущая проверка ещё завершается. Повторите позже; прежний DNS работает.");
+                                            RuntimeProviders.Reload();var requested=LocalDnsSwitchCommand.Parse(line);trace("LOCAL SWITCH requested provider="+Dns.Name[requested.Provider]+"; route="+(requested.Antigravity?"Antigravity":"common")+"; protocol="+(requested.Tls?"DoT":"DoH"));
+                                            if(!switching.Begin(requested,candidate=>{var next=new TunnelUpstream(candidate.Provider,candidate.Tls,trace);foreach(string host in candidate.Antigravity?AntigravityDns.Domains:new[]{"example.com"}){var question=DnsProbe.Query(host);DnsProbe.Validate(question,next.Query(question));}return next.Query;}))lock(logGate)writer.WriteLine("SWITCH_FAILED Предыдущая проверка ещё завершается. Повторите позже; прежний DNS работает.");
                                             command=reader.ReadLineAsync();command.ContinueWith(t=>{var observed=t.Exception;},TaskContinuationOptions.OnlyOnFaulted);
                                         }
                                         switching.Poll(routes,system.Flush,line=>{trace("LOCAL "+line);lock(logGate)writer.WriteLine(line);});

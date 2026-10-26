@@ -124,7 +124,7 @@ namespace HbAi.XboxDns
         internal static string[] HostsForProvider(int provider)
         {
             if (provider < 0 || provider >= Dns.Name.Length) throw new ArgumentOutOfRangeException("provider");
-            return ProviderCatalog.All[provider].testHosts;
+            return RuntimeProviders.All[provider].testHosts;
         }
         internal static string Report(int provider, DnsProbeResult[] results)
         {

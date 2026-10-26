@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -49,11 +49,11 @@ namespace HbAi.XboxDns
             new AutoGoal {Name="Spotify", Hosts=new[]{"open.spotify.com"}},
             new AutoGoal {Name="Xbox", Hosts=new[]{"xbox.com"}},
             new AutoGoal {Name="Antigravity", Hosts=new[]{"cloudcode-pa.googleapis.com","daily-cloudcode-pa.googleapis.com"}, Api=true}
-        }.Where(goal=>ProviderCatalog.All.Any(provider=>Dns.IsAvailable(provider.id)&&provider.autoGoals.Contains(goal.Name))).ToArray();
+        }.Where(goal=>RuntimeProviders.All.Any(provider=>Dns.IsAvailable(provider.id)&&provider.autoGoals.Contains(goal.Name))).ToArray();
         internal static int[] Candidates(int goal, bool encrypted, bool tls = false,int[] allowedProviders=null)
         {
             if(goal<0 || goal>=Goals.Length) throw new ArgumentOutOfRangeException("goal");
-            return Enumerable.Range(0,ProviderCatalog.All.Length).Where(p=>ProviderCatalog.All[p].autoGoals.Contains(Goals[goal].Name)&&Dns.IsAvailable(p)&&(allowedProviders==null||allowedProviders.Contains(p))&&(!encrypted || (tls ? DotDns.Available(p) : EncryptedDns.Templates[p]!=null))).ToArray();
+            return Enumerable.Range(0,RuntimeProviders.All.Length).Where(p=>RuntimeProviders.All[p].autoGoals.Contains(Goals[goal].Name)&&Dns.IsAvailable(p)&&(allowedProviders==null||allowedProviders.Contains(p))&&(!encrypted || (tls ? DotDns.Available(p) : EncryptedDns.Templates[p]!=null))).ToArray();
         }
         internal static AutoDnsResult[] Search(int goal, bool encrypted, IAutoDnsProbe probe, CancellationToken cancel, Action<AutoDnsResult> progress=null, int? onlyProvider=null, bool tls=false,int[] allowedProviders=null)
         {

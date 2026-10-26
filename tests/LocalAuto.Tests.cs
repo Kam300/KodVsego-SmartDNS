@@ -50,7 +50,7 @@ static class LocalAutoTests
             typeof(MainForm).GetMethod("PickSet",Fields).Invoke(form,new object[]{5});
             Check(Get<int>(form,"SelectedSegment")==5&&Get<int>(form,"defaultGoal")==goal,"Manual local provider overrides Auto in the session and preserves the default service");
             form.SelectLocalAntigravity(true,9);int forms=Application.OpenForms.Count;
-            Check(form.LocalAutoHasSeparateTarget(AutoDns.GoalIndex("Antigravity"))&&!form.StartLocalAuto(best,AutoDns.GoalIndex("Antigravity")),"Auto cannot substitute a test of the main DNS for a separately pinned Antigravity route");
+            Check(!form.StartLocalAuto(new AutoDnsResult{Provider=7,Encrypted=true},AutoDns.GoalIndex("Antigravity")),"Antigravity Auto cannot use a provider without a supported separate route");
             Check(!form.StartLocalAuto(null,goal)&&!form.StartLocalAuto(new AutoDnsResult{Provider=6,Encrypted=false},goal)&&!form.StartLocalAuto(new AutoDnsResult{Provider=6,Encrypted=true,Error="failed"},goal),"Missing, plaintext and failed results cannot start local DNS");
             Check(!form.StartLocalAuto(new AutoDnsResult{Provider=1,Encrypted=true},goal)&&!form.StartLocalAuto(best,-1)&&!form.StartLocalAuto(best,AutoDns.Goals.Length),"Disabled providers and unknown goals cannot activate from Auto");
             Check(local.Starts==0&&google.Starts==0,"Rejected results never reach either worker");

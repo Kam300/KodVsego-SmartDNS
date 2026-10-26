@@ -33,7 +33,7 @@ namespace HbAi.XboxDns
         internal static string TemplateLabel(string template)
         {
             if (template == null) return "(automatic)";
-            if (EncryptedDns.Templates.Contains(template) || ProviderCatalog.All.Any(p => p.dot == template)) return template;
+            if (EncryptedDns.Templates.Contains(template) || RuntimeProviders.All.Any(p => p.dot == template)) return template;
             Uri uri;
             return Uri.TryCreate(template,UriKind.Absolute,out uri) ? uri.Scheme+"://"+uri.Host+(uri.IsDefaultPort ? "" : ":"+uri.Port)+"/<custom-template>" : "<custom-template>";
         }

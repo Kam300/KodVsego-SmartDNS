@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -71,7 +71,7 @@ namespace HbAi.XboxDns
             return "Эти домены используют отдельные DNS-настройки: " + domains + ".\n\nОни могут обходить выбранный DoH. Проверьте правила в программе или политике Windows, которая их создала, и повторите подключение. Настройки не изменены.";
         }
         // Only provider/IP combinations with a verified HTTPS endpoint are offered.
-        internal static readonly string[] Templates = ProviderCatalog.All.Select(p=>p.doh).ToArray();
+        internal static string[] Templates {get{return RuntimeProviders.Snapshot.Templates;}}
         internal static bool ExplicitlyConfigured(FamilyBackup settings, int provider)
         {
             if (settings.DohCaptured && settings.Servers.Length>0 && settings.Doh!=null && settings.Doh.Length==settings.Servers.Length &&
@@ -82,7 +82,7 @@ namespace HbAi.XboxDns
                 settings.Doh.Select(d => d.Index).Distinct().Count() == settings.Servers.Length;
         }
         internal static string[] ServersFor(int provider)
-        { return ProviderCatalog.All[provider].windowsDohServers; }
+        { return RuntimeProviders.All[provider].windowsDohServers; }
         internal static DohConfig[] Strict(int count, string template, bool tls = false)
         { return Enumerable.Range(0, count).Select(i => new DohConfig { Index = (uint)i, Template = template, Flags = tls ? 1UL : 2UL, Kind = tls ? 2U : 0U, Port = tls ? (ushort)853 : (ushort)0 }).ToArray(); }
         internal static bool IsStrict(DohConfig entry)

@@ -47,6 +47,8 @@ namespace HbAi.XboxDns
             try
             {
                 var matches = NetworkInterface.GetAllNetworkInterfaces().Where(adapter =>
+                    adapter.Id.Trim('{', '}') != DnsTunnelNative.AdapterId.ToString() &&
+                    !string.Equals(adapter.Name, DnsTunnelNative.Name, StringComparison.OrdinalIgnoreCase) &&
                     IsCandidate(adapter.Name, adapter.Description, adapter.NetworkInterfaceType,
                         adapter.OperationalStatus, adapter.GetIPProperties().UnicastAddresses.Count > 0))
                     .Select(adapter => adapter.Name).Distinct().ToArray();

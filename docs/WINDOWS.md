@@ -1,6 +1,6 @@
 ﻿> GeoHide RU/EU и Xbox отключены в актуальном каталоге; GeoHide US доступен отдельно. Доступность провайдеров для ПК и Android управляется общим файлом [providers.json](../config/providers.json).
 
-> Актуальная стабильная Windows-версия — [2.23.6](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/v2.23.6): установщик MSI, портативный ZIP и отдельный EXE. [Изменения выпуска](releases/2.23.6.md).
+> Актуальная стабильная Windows-версия — [2.23.7](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/v2.23.7): установщик MSI, портативный ZIP и отдельный EXE. [Изменения выпуска](releases/2.23.7.md).
 
 # Код Всего · Smart DNS для Windows
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -361,7 +361,7 @@ namespace HbAi.XboxDns
                     var current = system.Read(adapter.Id, family);
                     NativeDnsSystem.ValidateFamily(current);
                     if (!current.ProfilePresent && current.Manual && current.Servers.Length > 0 && current.Servers.All(s => known.Contains(IPAddress.Parse(s))) &&
-                        (current.Doh == null || current.Doh.All(d => d.Template == null || (d.Kind == 2 ? ProviderCatalog.All.Any(p => p.dot == d.Template) : EncryptedDns.Templates.Contains(d.Template)))))
+                        (current.Doh == null || current.Doh.All(d => d.Template == null || (d.Kind == 2 ? RuntimeProviders.All.Any(p => p.dot == d.Template) : EncryptedDns.Templates.Contains(d.Template)))))
                         families.Add(current);
                 }
                 if (families.Count > 0) records.Add(new AdapterBackup { Guid = adapter.Id.ToString("B"), Families = families.ToArray() });

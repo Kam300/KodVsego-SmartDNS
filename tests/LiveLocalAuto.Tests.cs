@@ -10,17 +10,19 @@ static class LiveLocalAutoTests
     static void Check(bool ok,string name){if(!ok)throw new Exception(name);passed++;Console.WriteLine("PASS "+name);}
     static void Set(MainForm form,string name,object value){typeof(MainForm).GetField(name,Fields).SetValue(form,value);}
     static T Get<T>(MainForm form,string name){return (T)typeof(MainForm).GetField(name,Fields).GetValue(form);}
-    sealed class Session : ITunnelSession,ILocalDnsSwitchSession,ILocalDnsConfiguration
+    sealed class Session : ITunnelSession,ILocalDnsSwitchSession,ILocalDnsConfiguration,ILocalAntigravitySwitchSession
     {
         public bool Running{get;private set;}public bool Connected{get;private set;}public bool Stopping{get;private set;}
         public string LastError{get;private set;}public string Statistics{get{return "0 0";}}
         public bool Switching{get;private set;}public int CurrentProvider{get;private set;}public bool CurrentTls{get;private set;}
         public event Action Changed;internal int Starts,Stops,Switches,Requested,Special=-1;internal bool RequestedTls,ThrowSwitch;
+        bool specialRequest;public int CurrentAntigravity{get{return Special;}}
+        public void SwitchAntigravity(int provider){Switches++;if(ThrowSwitch)throw new IOException("fixture control failure");Requested=provider;specialRequest=true;Switching=true;LastError=null;Notify();}
         void Notify(){if(Changed!=null)Changed();}
         public void Start(int provider,bool tls){Starts++;CurrentProvider=provider;CurrentTls=tls;Running=Connected=true;Notify();}
         public void Stop(){Stops++;Running=Connected=Switching=false;Notify();}
-        public void SwitchProvider(int provider,bool tls){Switches++;if(ThrowSwitch)throw new IOException("fixture control failure");Requested=provider;RequestedTls=tls;Switching=true;LastError=null;Notify();}
-        internal void Complete(bool success){if(success){CurrentProvider=Requested;CurrentTls=RequestedTls;}LastError=success?null:"fixture failed candidate";Switching=false;Notify();}
+        public void SwitchProvider(int provider,bool tls){Switches++;if(ThrowSwitch)throw new IOException("fixture control failure");Requested=provider;RequestedTls=tls;specialRequest=false;Switching=true;LastError=null;Notify();}
+        internal void Complete(bool success){if(success){if(specialRequest)Special=Requested;else{CurrentProvider=Requested;CurrentTls=RequestedTls;}}LastError=success?null:"fixture failed candidate";Switching=false;Notify();}
         public void SetAntigravity(int provider){Special=provider;}public void Dispose(){}
     }
     static MainForm Connected(Session local)
@@ -59,7 +61,7 @@ static class LiveLocalAutoTests
             Check(!form.SwitchLocalAuto(new AutoDnsResult{Provider=7,Encrypted=false},gemini,revision,6,DnsTransport.Https)&&!form.SwitchLocalAuto(new AutoDnsResult{Provider=7,Encrypted=true,Error="failed"},gemini,revision,6,DnsTransport.Https),"Plaintext and failed candidates cannot activate through live Auto");
             Check(!Apply(form,3,gemini)&&!Apply(form,7,-1)&&!Apply(form,7,AutoDns.Goals.Length),"Disabled providers and invalid goals cannot activate");
             form.SetProviderVisibility(new[]{7});Check(!Apply(form,7,gemini),"Hidden providers remain excluded from live Auto");form.SetProviderVisibility(new int[0]);
-            Check(!Apply(form,6,AutoDns.GoalIndex("Antigravity")),"Live Auto cannot substitute the main route for pinned Antigravity");
+            Check(!Apply(form,7,AutoDns.GoalIndex("Antigravity")),"Antigravity Auto rejects a provider without a declared special route");
             Check(local.Switches==switches&&local.Starts==1&&local.Stops==0,"Rejected candidates do not reach the worker");
             Check(Apply(form,7,gemini),"A valid pending Auto request can be cancelled by stopping DNS");local.Stop();Application.DoEvents();
             Check(!Get<bool>(form,"active")&&Get<int>(form,"autoGoal")==-1&&Get<bool>(form,"manualSelection")&&local.Starts==1,"Stopping discards the pending Auto selection and never reconnects automatically");
@@ -70,6 +72,21 @@ static class LiveLocalAutoTests
             Set(form,"autoGoal",chatgpt);Set(form,"manualSelection",false);
             Check(!Apply(form,6,gemini)&&Get<bool>(form,"active")&&!Get<bool>(form,"busy")&&Get<int>(form,"autoGoal")==chatgpt&&!Get<bool>(form,"manualSelection")&&Get<int>(form,"dnsSet")==5,"Control-write failure preserves the previous Auto goal and active provider");
             Check(local.Starts==1&&local.Stops==0&&Get<string>(form,"error").Contains("fixture control failure"),"Failed control write is retryable without stopping the old worker");
+        }
+        local=new Session();int ag=AutoDns.GoalIndex("Antigravity");
+        using(var form=Connected(local)){
+            Set(form,"localAntigravity",false);Set(form,"autoGoal",gemini);Set(form,"manualSelection",false);
+            Check(Apply(form,9,ag)&&!form.LocalAntigravity&&Get<int>(form,"autoGoal")==gemini,"Antigravity Auto waits for the special route acknowledgement before enabling its checkbox and goal");
+            local.Complete(false);Application.DoEvents();Check(!form.LocalAntigravity&&Get<int>(form,"autoGoal")==gemini&&Get<int>(form,"dnsSet")==5,"Failed special Auto preserves the previous checkbox, goal and common DNS");
+            Check(Apply(form,9,ag),"Failed special Auto is retryable");local.Complete(true);Application.DoEvents();
+            Check(form.LocalAntigravity&&form.LocalAntigravityProvider==9&&Get<int>(form,"autoGoal")==ag&&Get<int>(form,"dnsSet")==5&&local.Starts==1&&local.Stops==0,"Antigravity Auto enables the selected separate route while preserving the running common DNS");
+            Check(form.ShouldOfferLocalAntigravityRestart(true)&&!form.ShouldOfferLocalAntigravityRestart(false),"A running Antigravity is eligible for its restart prompt after Auto applies the special route");
+            Set(form,"hideAntigravityRestart",true);Check(!form.ShouldOfferLocalAntigravityRestart(true),"Disabled restart prompts are respected for the Auto route");
+        }
+        local=new Session();using(var form=new MainForm(new Session(),false,local)){
+            foreach(string field in new[]{"initializing","agLoading","busy","active"})Set(form,field,false);var handle=form.Handle;Set(form,"defaultGoal",-1);
+            Check(form.StartAntigravityAuto(Candidate(9)),"Antigravity Auto from an idle Windows mode starts the application method");Application.DoEvents();
+            Check(form.LocalMode&&form.LocalAntigravity&&form.LocalAntigravityProvider==9&&local.Special==9&&Get<int>(form,"autoGoal")==ag&&local.Starts==1,"Idle Auto configures its checkbox and selected special DNS before starting the worker");
         }
         Console.WriteLine("All "+passed+" live local Auto checks passed; fake results and workers only, no real DNS, registry changes or elevation.");
     }

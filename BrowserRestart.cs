@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -374,6 +374,20 @@ namespace HbAi.XboxDns
                     result += "--disable-gpu ";
                 return result.TrimEnd();
             }).Distinct(StringComparer.OrdinalIgnoreCase).Select(arguments => new BrowserLaunch { Arguments = arguments }).ToArray();
+        }
+        internal static bool IsRunning()
+        {
+            try
+            {
+                int session;
+                using (var current = Process.GetCurrentProcess()) session = current.SessionId;
+                foreach (var process in Process.GetProcessesByName("Antigravity"))
+                    using (process)
+                        if (!process.HasExited && process.SessionId == session && process.MainWindowHandle != IntPtr.Zero)
+                            return true;
+            }
+            catch { }
+            return false;
         }
         internal static void Run()
         {

@@ -19,7 +19,7 @@ namespace HbAi.XboxDns
         internal void AddProviderSettingsControls(int[] hidden,DnsTransport protocol)
         {
             providerGeneralHeading=Controls.OfType<Label>().Single(label=>label.Text=="Выбор DNS");
-            settingsGeneralControls=new Control[]{providerGeneralHeading,settingsConnectionPanel,settingsBackupPanel,settingsBackupHeading,settingsSupportHeading,settingsGithub,settingsTelegram,settingsSource,settingsTunnel,settingsResolverCheck,settingsRestartHeading,settingsRestartHint,settingsBrowserRestart,settingsAntigravityRestart}.Where(c=>c!=null).ToArray();
+            settingsGeneralControls=new Control[]{providerGeneralHeading,settingsConnectionPanel,settingsBackupPanel,settingsBackupHeading,settingsSupportHeading,settingsGithub,settingsTelegram,settingsSource,settingsTunnel,settingsResolverCheck,settingsRestartHeading,settingsRestartHint,settingsBrowserRestart,settingsAntigravityRestart,settingsStartupRecovery}.Where(c=>c!=null).ToArray();
             float scale=actionHeight/42f;Func<int,int> px=n=>(int)Math.Round(n*scale);
             settingsGeneralTab=new DialogButton("Общие",bodyFont,border,ForeColor,border,px(8));
             settingsProvidersTab=new DialogButton("DNS-провайдеры",bodyFont,border,ForeColor,border,px(8));
@@ -28,14 +28,10 @@ namespace HbAi.XboxDns
             providerPanel=new Panel{BackColor=surface};Controls.Add(providerPanel);
             providerHint=new Label{Text="Галочка — показывать в списке и использовать в Авто.\nСкрытие не выключает текущее подключение.",Font=bodyFont,ForeColor=messageText.ForeColor,UseMnemonic=false};providerPanel.Controls.Add(providerHint);
             providerRows=new Panel{AutoScroll=true,BackColor=surface};providerPanel.Controls.Add(providerRows);
-            foreach(int provider in Dns.AvailableProviders){int id=provider;
-                var check=new CheckBox{Text=Dns.Name[id],Checked=!hidden.Contains(id),Font=bodyFont,ForeColor=ForeColor,BackColor=surface,AutoEllipsis=true,AccessibleName="Показывать DNS-провайдера "+Dns.Name[id]};
-                check.CheckedChanged+=(s,e)=>{if(providerChecks.Count>0&&!providerChecks.Values.Any(c=>c.Checked))check.Checked=true;};
-                var ping=new Label{Text="Не измерено",Font=bodyFont,ForeColor=messageText.ForeColor,TextAlign=ContentAlignment.MiddleRight,AutoEllipsis=true,AccessibleName="Задержка DNS "+Dns.Name[id]};
-                providerChecks.Add(id,check);providerPings.Add(id,ping);providerRows.Controls.Add(check);providerRows.Controls.Add(ping);
-            }
+            customDns=RuntimeProviders.Customs.ToList();RebuildProviderRows(hidden);
             providerRefresh=new DialogButton("Измерить задержку DNS",bodyFont,border,ForeColor,border,px(8));providerPanel.Controls.Add(providerRefresh);
             providerRefresh.Click+=(s,e)=>MeasureProviders(protocol);
+            providerAdd=new DialogButton("+ Добавить DNS",bodyFont,border,ForeColor,border,px(8));providerPanel.Controls.Add(providerAdd);providerAdd.Click+=(s,e)=>EditCustomProvider(CustomDns.First+customDns.Count);
             FormClosed+=(s,e)=>{if(providerMeasurements!=null)providerMeasurements.Cancel();};
             SelectSettingsTab(false);
         }
@@ -52,10 +48,10 @@ namespace HbAi.XboxDns
             providerGeneralHeading.Bounds=new Rectangle(px(28),px(108),width,px(24));
             providerPanel.Bounds=new Rectangle(px(28),px(108),width,Math.Max(px(130),primaryAction.Top-px(124)));
             providerHint.Bounds=new Rectangle(0,0,width,px(52));
-            providerRefresh.Bounds=new Rectangle(0,providerPanel.Height-px(38),width,px(36));
+            providerRefresh.Bounds=new Rectangle(0,providerPanel.Height-px(38),half,px(36));providerAdd.Bounds=new Rectangle(half+px(8),providerPanel.Height-px(38),half,px(36));
             providerRows.Bounds=new Rectangle(0,px(60),width,Math.Max(px(30),providerRefresh.Top-px(68)));
             int row=0,rowWidth=width-SystemInformation.VerticalScrollBarWidth;
-            foreach(int id in Dns.AvailableProviders){providerChecks[id].Bounds=new Rectangle(0,px(38)*row,rowWidth-px(112),px(34));providerPings[id].Bounds=new Rectangle(rowWidth-px(112),px(38)*row,px(110),px(34));row++;}
+            foreach(int id in providerChecks.Keys.OrderBy(n=>n)){int extra=providerEdits.ContainsKey(id)?px(28):0;providerChecks[id].Bounds=new Rectangle(0,px(38)*row,rowWidth-px(112)-extra,px(34));providerPings[id].Bounds=new Rectangle(rowWidth-px(112)-extra,px(38)*row,px(110),px(34));if(extra>0)providerEdits[id].Bounds=new Rectangle(rowWidth-extra,px(38)*row,extra,px(30));row++;}
             providerRows.AutoScrollMinSize=new Size(0,px(38)*row);
             if(providersTab)foreach(var control in settingsGeneralControls)control.Visible=false;
         }
@@ -64,7 +60,8 @@ namespace HbAi.XboxDns
             if(providerMeasurements!=null)return;
             var cancel=new CancellationTokenSource();providerMeasurements=cancel;providerRefresh.Enabled=false;
             providerRefresh.Text="Измеряем…";foreach(var label in providerPings.Values)label.Text="…";
-            var ids=Dns.AvailableProviders;
+            var ids=providerChecks.Keys.Where(id=>id<Dns.Name.Length&&Dns.IsAvailable(id)&&(!CustomDns.IsCustom(id)||new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(customDns[id-CustomDns.First])==new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(RuntimeProviders.All[id]))).ToArray();
+            foreach(int id in providerChecks.Keys.Except(ids))providerPings[id].Text="Сначала сохраните";
             ThreadPool.QueueUserWorkItem(_=>{
                 try{Parallel.ForEach(ids,new ParallelOptions{MaxDegreeOfParallelism=4,CancellationToken=cancel.Token},id=>{
                     var result=measure==null?ProviderLatency.Measure(id,protocol,cancel.Token):measure(id,protocol,cancel.Token);

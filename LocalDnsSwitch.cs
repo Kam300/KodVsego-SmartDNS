@@ -12,18 +12,25 @@ namespace HbAi.XboxDns
         bool CurrentTls {get;}
         void SwitchProvider(int provider,bool tls);
     }
+    interface ILocalAntigravitySwitchSession
+    {
+        int CurrentAntigravity {get;}
+        void SwitchAntigravity(int provider);
+    }
     sealed class LocalDnsSwitchCommand
     {
-        internal int Provider;internal bool Tls;
-        internal string Wire {get{return "SWITCH "+Provider+" "+(Tls?"tls":"https");}}
+        internal int Provider;internal bool Tls,Antigravity;
+        internal string Wire {get{return (Antigravity?"AGSWITCH ":"SWITCH ")+Provider+" "+(Tls?"tls":"https");}}
         internal static LocalDnsSwitchCommand Parse(string line)
         {
             var parts=(line??"").Split(' ');int provider;
-            if(parts.Length!=3||parts[0]!="SWITCH"||!int.TryParse(parts[1],out provider)||
+            if(parts.Length!=3||(parts[0]!="SWITCH"&&parts[0]!="AGSWITCH")||!int.TryParse(parts[1],out provider)||
                 (parts[2]!="https"&&parts[2]!="tls")||!Dns.IsAvailable(provider)||
                 (parts[2]=="tls"?!DotDns.Available(provider):EncryptedDns.Templates[provider]==null))
                 throw new IOException("Некорректная команда смены DNS.");
-            return new LocalDnsSwitchCommand{Provider=provider,Tls=parts[2]=="tls"};
+            bool special=parts[0]=="AGSWITCH";
+            if(special&&(parts[2]!="https"||!LocalDnsRouting.Supports(provider)))throw new IOException("Провайдер Antigravity недоступен.");
+            return new LocalDnsSwitchCommand{Provider=provider,Tls=parts[2]=="tls",Antigravity=special};
         }
     }
     // Preparing a replacement never changes the live route. Only the worker's
@@ -47,7 +54,7 @@ namespace HbAi.XboxDns
             if(!preparing.IsCompleted&&now()-started<12000)return;
             var task=preparing;var request=command;preparing=null;command=null;
             if(!task.IsCompleted){retired=task;reply("SWITCH_FAILED Новый DNS не ответил за 12 с. Прежний DNS продолжает работать.");return;}
-            try{routes.ReplaceCommon(task.GetAwaiter().GetResult(),flush);reply("SWITCHED "+request.Provider+" "+(request.Tls?"tls":"https"));}
+            try{var next=task.GetAwaiter().GetResult();if(request.Antigravity)routes.ReplaceAntigravity(next,flush);else routes.ReplaceCommon(next,flush);reply((request.Antigravity?"AGSWITCHED ":"SWITCHED ")+request.Provider+" "+(request.Tls?"tls":"https"));}
             catch(Exception error){reply("SWITCH_FAILED "+TunnelDiagnostics.Error(error)+" Прежний DNS сохранён.");}
         }
         internal void Cancel(){preparing=null;command=null;}

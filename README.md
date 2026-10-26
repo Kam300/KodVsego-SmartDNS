@@ -3,19 +3,19 @@
 Переключатель Smart DNS для **компьютеров Windows и телефонов Android**. Выбор провайдера, обычный или зашифрованный DNS (DoH/DoT), тест доступности и значки сервисов: ChatGPT, Claude, Gemini, ElevenLabs и Spotify.
 
 > [!NOTE]
-> Актуальная стабильная Windows-версия — **[2.23.6](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/v2.23.6)**. Android 1.5.1 — предварительная версия. [Все выпуски](https://github.com/Kam300/KodVsego-SmartDNS/releases).
+> Актуальная стабильная Windows-версия — **[2.23.7](https://github.com/Kam300/KodVsego-SmartDNS/releases/tag/v2.23.7)**. Android 1.5.1 — предварительная версия. [Все выпуски](https://github.com/Kam300/KodVsego-SmartDNS/releases).
 
 ## Скачать
 
-| Windows · MSI 2.23.6 | Android · APK 1.5.1 |
+| Windows · MSI 2.23.7 | Android · APK 1.5.1 |
 | :---: | :---: |
-| <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.6/KodVsego_SmartDNS.Setup.2.23.6.msi"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Windows — MSI 2.23.6"></a> | <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.1/KodVsego-SmartDNS-Android-1.5.1.apk"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Android — APK 1.5.1"></a> |
+| <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.7/KodVsego_SmartDNS.Setup.2.23.7.msi"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Windows — MSI 2.23.7"></a> | <a href="https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.1/KodVsego-SmartDNS-Android-1.5.1.apk"><img src="docs/download-button-generated.png" width="260" alt="Скачать Smart DNS для Android — APK 1.5.1"></a> |
 
 | Платформа | Скачать | Требования |
 | --- | --- | --- |
-| Windows · установщик MSI 2.23.6 | [Скачать MSI](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.6/KodVsego_SmartDNS.Setup.2.23.6.msi) | Windows 10 2004+ / Windows 11, x64, .NET Framework 4.8 · все 3 способа подключения |
-| Windows · портативный ZIP 2.23.6 | [Скачать ZIP](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.6/KodVsego_SmartDNS.Portable.2.23.6.zip) | Распаковать архив целиком и запустить · все 3 способа подключения (`wintun.dll` в комплекте) |
-| Windows · отдельный EXE 2.23.6 | [Скачать EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.6/KodVsego_SmartDNS.2.23.6.exe) | Один файл без драйверов: способы 1 и 2 сразу; для способа 3 положите `wintun.dll` рядом |
+| Windows · установщик MSI 2.23.7 | [Скачать MSI](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.7/KodVsego_SmartDNS.Setup.2.23.7.msi) | Windows 10 2004+ / Windows 11, x64, .NET Framework 4.8 · все 3 способа подключения |
+| Windows · портативный ZIP 2.23.7 | [Скачать ZIP](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.7/KodVsego_SmartDNS.Portable.2.23.7.zip) | Распаковать архив целиком и запустить · все 3 способа подключения (`wintun.dll` в комплекте) |
+| Windows · отдельный EXE 2.23.7 | [Скачать EXE](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/v2.23.7/KodVsego_SmartDNS.2.23.7.exe) | Один файл без драйверов: способы 1 и 2 сразу; для способа 3 положите `wintun.dll` рядом |
 | Android · APK 1.5.1, предварительная версия | [Скачать APK](https://github.com/Kam300/KodVsego-SmartDNS/releases/download/android-v1.5.1/KodVsego-SmartDNS-Android-1.5.1.apk) | Android 8.0+, без root |
 
 Основной установщик Windows — **MSI** с ярлыком и удалением через настройки Windows. **Портативный ZIP** работает без установки и уже содержит `wintun.dll` рядом с программой (доступны все 3 способа подключения). В отдельный файл **EXE** библиотека `wintun.dll` не встроена, чтобы избежать ложных срабатываний антивирусов: в нём сразу работают способы **1 («Через Windows»)** и **2 («Через приложение»)**, а при выборе экспериментального способа **3 («Gemini / NotebookLM · beta»)** программа предложит в один клик переключиться на способ 2 либо использовать ZIP / MSI (или положить официальный `wintun.dll` 0.14.1 x64 в папку с EXE). Перед установкой или обновлением закройте работающую копию Smart DNS. При удалении MSI восстанавливает DNS, DoH, IPv6 и правила Antigravity; обновление через MSI очистку не запускает. [Различия, сборка и удаление](docs/DISTRIBUTION.md) · [Как устроены MSI и очистка](docs/MSI.md).
@@ -27,26 +27,19 @@
 
 ## Проверка VirusTotal
 
-Проверено 2026-10-25. Ссылки ведут на полный отчёт VirusTotal; в знаменателе — движки, которые поддерживают этот тип файла.
+Для Windows 2.23.7 проверка пока не выполнена: 2026-10-26 сайт и API VirusTotal недоступны с компьютера сборки (тайм-аут соединения). Сверяйте SHA-256 с `SHA256SUMS.txt` в релизе. Результаты предыдущей версии не относятся к этим файлам.
 
-| Платформа | Файл | Срабатывания / движков | Кто сработал | SHA-256 |
-| --- | --- | :---: | --- | --- |
-| Windows · MSI 2.23.6 | `KodVsego_SmartDNS.Setup.2.23.6.msi` | [0 / 61](https://www.virustotal.com/gui/file/edddb84d08c5c322bdd245384d0282686a13bee1bf3b89824bafd420834f1d12/detection) | — | `edddb84d08c5c322bdd245384d0282686a13bee1bf3b89824bafd420834f1d12` |
-| Windows · ZIP 2.23.6 | `KodVsego_SmartDNS.Portable.2.23.6.zip` | [0 / 67](https://www.virustotal.com/gui/file/5beeefc6c612efc4baa03ae08627959980999cfd8be3c195f57096c678083163/detection) | — | `5beeefc6c612efc4baa03ae08627959980999cfd8be3c195f57096c678083163` |
-| Windows · EXE 2.23.6 | `KodVsego_SmartDNS.2.23.6.exe` | [1 / 70](https://www.virustotal.com/gui/file/2fc33a2562af008014078b039ee5f606a56e073986448c9f191767864e2b0265/detection) | APEX | `2fc33a2562af008014078b039ee5f606a56e073986448c9f191767864e2b0265` |
-| Android · APK 1.5.1 | `KodVsego-SmartDNS-Android-1.5.1.apk` | [0 / 66](https://www.virustotal.com/gui/file/9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6/detection) | — | `9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6` |
+[Отчёты предыдущей Windows 2.23.6](https://github.com/Kam300/KodVsego-SmartDNS/blob/v2.23.6/README.md#проверка-virustotal) · [Android APK 1.5.1: 0 / 66, проверено 2026-10-25](https://www.virustotal.com/gui/file/9f45eecacd68844612383c5d68adda283e7ac1d27bedd471f1119df48ab5fcf6/detection).
 
-Установщик **MSI**, портативный архив **ZIP** и **Android APK** проходят проверку полностью чисто (**0 срабатываний**). Единственное срабатывание на отдельном файле EXE (`APEX`) — ML-эвристика на неподписанном `.exe`, который изменяет сетевые настройки Windows. Если сомневаетесь, используйте MSI или портативный ZIP и сверьте SHA-256 с `SHA256SUMS.txt`.
+## Что нового в Windows 2.23.7
 
-## Что нового в Windows 2.23.6
+- Свои DNS-провайдеры в настройках: IP, DoH и DoT, редактирование и удаление.
+- Смена отдельного DNS Antigravity при работающем локальном подключении.
+- Авто с целью Antigravity применяет отдельный маршрут и учитывает настройку предложения перезапуска.
+- Отключаемое восстановление страницы ошибки запуска Antigravity после готовности локального сервера.
+- Авто и экспериментальные способы сохраняют отметку **beta**.
 
-- Три способа подключения: через Windows, через приложение (локальный DNS) и экспериментальный профиль Gemini / NotebookLM; шифрование DoH или DoT.
-- Смена провайдера и переход в «Авто» без отключения локального DNS.
-- В настройках — скрытие провайдеров, замер задержки, предложения перезапуска браузера и Antigravity.
-- Под статусом — результат чекера провайдера, рядом — задержка DNS.
-- «Авто» и экспериментальные способы сохраняют отметку **beta**.
-
-[Полное описание выпуска](docs/releases/2.23.6.md) · [История выпусков](https://github.com/Kam300/KodVsego-SmartDNS/releases)
+[Полное описание выпуска](docs/releases/2.23.7.md) · [История выпусков](https://github.com/Kam300/KodVsego-SmartDNS/releases)
 
 <img src="docs/ui-dark.png" width="280" alt="Тёмная тема Smart DNS"> <img src="docs/ui-light.png" width="280" alt="Светлая тема Smart DNS">
 

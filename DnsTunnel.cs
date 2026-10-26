@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -28,26 +28,32 @@ namespace HbAi.XboxDns
         event Action Changed;
         void Start(int provider,bool tls);void Stop();
     }
-    sealed class TunnelSession : ITunnelSession,ILocalDnsConfiguration,ILocalDnsSwitchSession
+    sealed class TunnelSession : ITunnelSession,ILocalDnsConfiguration,ILocalDnsSwitchSession,ILocalAntigravitySwitchSession
     {
         readonly Func<ProcessStartInfo,Process> launch;
         readonly bool local;
         readonly Func<bool> recoveryPending;
-        int localAntigravity=-1;
-        volatile bool switching,currentTls;volatile int currentProvider=-1;int pendingProvider=-1;bool pendingTls;
+        volatile int localAntigravity=-1;
+        volatile bool switching,currentTls;volatile int currentProvider=-1;int pendingProvider=-1;bool pendingTls,pendingAntigravity;
+        public int CurrentAntigravity{get{return localAntigravity;}}
+        public void SwitchAntigravity(int provider){SendSwitch(LocalDnsSwitchCommand.Parse("AGSWITCH "+provider+" https"));}
         public bool Switching{get{return switching;}}public int CurrentProvider{get{return currentProvider;}}public bool CurrentTls{get{return currentTls;}}
         public void SwitchProvider(int provider,bool tls)
         {
             var request=LocalDnsSwitchCommand.Parse("SWITCH "+provider+" "+(tls?"tls":"https"));
+            SendSwitch(request);
+        }
+        void SendSwitch(LocalDnsSwitchCommand request)
+        {
             lock(gate){if(!local||!connected||stopping||switching||writer==null)throw new IOException("Смена DNS сейчас недоступна.");
-                pendingProvider=request.Provider;pendingTls=request.Tls;switching=true;failure=null;
+                pendingProvider=request.Provider;pendingTls=request.Tls;pendingAntigravity=request.Antigravity;switching=true;failure=null;
                 try{writer.WriteLine(request.Wire);}catch{switching=false;throw;}}
             Notify();
         }
         internal void AcceptSwitchStatus(string line)
         {
             lock(gate){if(!local||!switching||stopping)return;
-                if(line=="SWITCHED "+pendingProvider+" "+(pendingTls?"tls":"https")){currentProvider=pendingProvider;currentTls=pendingTls;switching=false;failure=null;}
+                if(line==(pendingAntigravity?"AGSWITCHED ":"SWITCHED ")+pendingProvider+" "+(pendingTls?"tls":"https")){if(pendingAntigravity)localAntigravity=pendingProvider;else{currentProvider=pendingProvider;currentTls=pendingTls;}switching=false;failure=null;}
                 else if(line.StartsWith("SWITCH_FAILED ",StringComparison.Ordinal)){switching=false;failure=line.Substring(14);}
                 else throw new IOException("Неожиданный ответ смены DNS.");}
             Notify();
@@ -87,7 +93,7 @@ namespace HbAi.XboxDns
                         string line;while((line=input.ReadLine())!=null){stage="validate-status";if(line.Length>8192)throw new IOException("Слишком длинный ответ обработчика.");
                             if(line.StartsWith("STATS ",StringComparison.Ordinal)){statistics=line.Substring(6);Notify();stage="read-status";continue;}
                             Log(line);
-                            if(line.StartsWith("SWITCHED ",StringComparison.Ordinal)||line.StartsWith("SWITCH_FAILED ",StringComparison.Ordinal)){AcceptSwitchStatus(line);stage="read-status";continue;}
+                            if(line.StartsWith("SWITCHED ",StringComparison.Ordinal)||line.StartsWith("AGSWITCHED ",StringComparison.Ordinal)||line.StartsWith("SWITCH_FAILED ",StringComparison.Ordinal)){AcceptSwitchStatus(line);stage="read-status";continue;}
                             outcome.Accept(line);
                             if(line.StartsWith("CONNECTED ",StringComparison.Ordinal)){connected=true;Notify();}
                             stage="read-status";
@@ -110,7 +116,7 @@ namespace HbAi.XboxDns
                 }
             });
         }
-        internal static bool GoogleProvider(int id){return Dns.IsAvailable(id)&&ProviderCatalog.All[id].services.Contains("Gemini")&&(DotDns.Available(id)||EncryptedDns.Templates[id]!=null);}
+        internal static bool GoogleProvider(int id){return Dns.IsAvailable(id)&&RuntimeProviders.All[id].services.Contains("Gemini")&&(DotDns.Available(id)||EncryptedDns.Templates[id]!=null);}
         internal static bool EncryptedProvider(int id){return Dns.IsAvailable(id)&&(DotDns.Available(id)||EncryptedDns.Templates[id]!=null);}
         public void Stop(){if(!running)return;stopping=true;Notify();lock(gate)try{if(writer!=null)writer.WriteLine("STOP");else if(pipe!=null)pipe.Dispose();}catch(IOException){}catch(ObjectDisposedException){}}
         public void Dispose(){Stop();}

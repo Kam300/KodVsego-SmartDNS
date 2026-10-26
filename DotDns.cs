@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -17,8 +17,8 @@ namespace HbAi.XboxDns
 
     static class DotDns
     {
-        internal static string Host(int provider) { return ProviderCatalog.All[provider].dot; }
-        internal static string[] Servers(int provider) { return ProviderCatalog.All[provider].windowsDotServers; }
+        internal static string Host(int provider) { return RuntimeProviders.All[provider].dot; }
+        internal static string[] Servers(int provider) { return RuntimeProviders.All[provider].windowsDotServers; }
         internal static bool Available(int provider) { return !string.IsNullOrEmpty(Host(provider)); }
         internal static bool InUse()
         {

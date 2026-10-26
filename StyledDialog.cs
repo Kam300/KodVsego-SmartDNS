@@ -54,6 +54,13 @@ namespace HbAi.XboxDns
         CheckBox settingsResolverCheck;
         Label settingsRestartHeading,settingsRestartHint;
         CheckBox settingsBrowserRestart,settingsAntigravityRestart;
+        CheckBox settingsStartupRecovery;
+        internal bool StartupRecoveryEnabled {get{return settingsStartupRecovery==null||settingsStartupRecovery.Checked;}}
+        internal void AddStartupRecoveryControl(bool enabled)
+        {
+            settingsStartupRecovery=new CheckBox{Text="Восстанавливать чёрное окно Antigravity",Checked=enabled,Font=bodyFont,ForeColor=ForeColor,BackColor=surface,AccessibleName="Повторять загрузку только окна Antigravity с ошибкой после готовности локального сервера"};
+            Controls.Add(settingsStartupRecovery);UpdateDialogLayout();
+        }
         internal bool ShowBrowserRestartPrompt {get{return settingsBrowserRestart==null||settingsBrowserRestart.Checked;}}
         internal bool ShowAntigravityRestartPrompt {get{return settingsAntigravityRestart==null||settingsAntigravityRestart.Checked;}}
         internal bool AutoResolverCheck { get { return settingsResolverCheck==null||settingsResolverCheck.Checked; } }
@@ -504,7 +511,7 @@ namespace HbAi.XboxDns
             SuspendLayout();settingsConnectionPanel.SuspendLayout();settingsBackupPanel.SuspendLayout();
             try {
             float scale=actionHeight/42f;Func<int,int> px=n=>(int)Math.Round(n*scale);bool automatic=settingsAutoMode.Checked;
-            int height=Math.Min(maxDialogHeight,px((automatic?574:518)+(settingsTunnel==null?0:32)+(settingsResolverCheck==null?0:30)+(settingsRestartHeading==null?0:94)+(providerPanel==null?0:44)));if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
+            int height=Math.Min(maxDialogHeight,px((automatic?574:518)+(settingsTunnel==null?0:32)+(settingsResolverCheck==null?0:30)+(settingsRestartHeading==null?0:94)+(settingsStartupRecovery==null?0:30)+(providerPanel==null?0:44)));if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
             int innerWidth=ClientSize.Width-px(88),half=(innerWidth-px(8))/2;
             settingsConnectionBounds=new Rectangle(px(28),px(providerPanel==null?100:144),ClientSize.Width-px(56),px(automatic?148:92));
             settingsConnectionPanel.Bounds=settingsConnectionBounds;
@@ -518,7 +525,8 @@ namespace HbAi.XboxDns
                 settingsAntigravityRestart.Bounds=new Rectangle(settingsBrowserRestart.Right+px(8),settingsBrowserRestart.Top,settingsBrowserRestart.Width,px(24));
                 settingsRestartHint.Bounds=new Rectangle(px(28),settingsBrowserRestart.Bottom+px(6),ClientSize.Width-px(56),px(22));
             }
-            settingsBackupHeading.Bounds=new Rectangle(px(28),settingsRestartHeading==null?settingsConnectionBounds.Bottom+px(20):settingsRestartHint.Bottom+px(16),ClientSize.Width-px(56),px(24));
+            if(settingsStartupRecovery!=null)settingsStartupRecovery.Bounds=new Rectangle(px(28),settingsRestartHint.Bottom+px(4),ClientSize.Width-px(56),px(26));
+            settingsBackupHeading.Bounds=new Rectangle(px(28),settingsRestartHeading==null?settingsConnectionBounds.Bottom+px(20):settingsStartupRecovery==null?settingsRestartHint.Bottom+px(16):settingsStartupRecovery.Bottom+px(12),ClientSize.Width-px(56),px(24));
             settingsBackupBounds=new Rectangle(px(28),settingsBackupHeading.Bottom+px(8),ClientSize.Width-px(56),px(64));
             settingsBackupPanel.Bounds=settingsBackupBounds;
             settingsBackupTitle.Bounds=new Rectangle(px(16),px(9),ClientSize.Width-px(232),px(24));

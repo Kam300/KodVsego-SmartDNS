@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -142,6 +142,14 @@ static class LocalDnsTests
         using(var form=new MainForm(google,false,local)){
             foreach(string field in new[]{"initializing","agLoading","active","busy"})typeof(MainForm).GetField(field,fields).SetValue(form,false);var handle=form.Handle;var originalSize=form.Size;
             typeof(MainForm).GetField("defaultGoal",fields).SetValue(form,-1);
+            Check(form.LocalAntigravityProvider==5,"Default Antigravity route provider is DNS-AI (5)");
+            Check(!form.LocalMode&&form.EnableAntigravityAppMode()&&form.LocalMode&&!form.GoogleMode&&form.Transport==DnsTransport.Https&&form.LocalAntigravity&&form.LocalAntigravityProvider==5,"Enabling Antigravity from Windows mode automatically switches to Mode 2 (DoH) with DNS-AI route");
+            typeof(MainForm).GetField("hideAntigravityRestart",fields).SetValue(form,false);
+            Check(form.ShouldOfferLocalAntigravityRestart(true)&&!form.ShouldOfferLocalAntigravityRestart(false),"Mode 2 with Antigravity route offers Antigravity restart when enabled in settings and Antigravity is running");
+            typeof(MainForm).GetField("hideAntigravityRestart",fields).SetValue(form,true);
+            Check(!form.ShouldOfferLocalAntigravityRestart(true),"Disabling Antigravity restart in settings suppresses the Mode 2 restart prompt");
+            typeof(MainForm).GetField("hideAntigravityRestart",fields).SetValue(form,false);
+            form.SelectLocalAntigravity(false,5);form.SelectLocalMode(false);
             form.SelectLocalMode(true);Check(form.LocalMode&&!form.GoogleMode&&form.Transport==DnsTransport.Https&&local.Starts==0,"Selecting local compatibility is separate from Google and defaults to HTTPS without starting DNS");
             typeof(MainForm).GetMethod("PickSet",fields).Invoke(form,new object[]{12});
             int selected=(int)typeof(MainForm).GetField("dnsSet",fields).GetValue(form);form.SelectLocalAntigravity(true,6);Check(form.LocalAntigravity&&form.LocalAntigravityProvider==6&&(int)typeof(MainForm).GetField("dnsSet",fields).GetValue(form)==selected&&local.Starts==0,"Antigravity has its own opt-in provider and does not start or replace the main resolver");
@@ -152,6 +160,19 @@ static class LocalDnsTests
             Check(local.Starts==1&&google.Starts==0&&form.ConnectionLabel=="Локальный DNS включён","Main power uses the local worker and reports its connection");
             Check(local.Antigravity==6,"Power button passes the selected independent Antigravity route to the local session");form.SelectLocalAntigravity(false,4);Check(form.LocalAntigravity&&form.LocalAntigravityProvider==6,"Running route cannot be replaced or disabled midway through outstanding DNS queries");
             Check(local.Provider==12&&local.Antigravity==6&&!form.SharedAntigravityDeclared,"Application mode can keep AdGuard as main DNS and use an explicitly separate MagicDNS route");
+            Check(!form.ConnectionWarning,"Healthy connected local mode has no warning status");
+            form.UpdateVpnStatus(new VpnStatus{Connections=new[]{"happ-xray"}});
+            Check(form.ConnectionWarning,"Active VPN (e.g. happ-xray) triggers yellow ConnectionWarning in local mode");
+            form.UpdateVpnStatus(new VpnStatus());
+            Check(!form.ConnectionWarning,"Clearing VPN restores healthy non-warning state");
+            typeof(MainForm).GetField("latencyProvider",fields).SetValue(form,selected);typeof(MainForm).GetField("latencyTransport",fields).SetValue(form,form.Transport);typeof(MainForm).GetField("latencyLocal",fields).SetValue(form,true);typeof(MainForm).GetField("latencyChecking",fields).SetValue(form,false);
+            typeof(MainForm).GetField("connectionLatency",fields).SetValue(form,new ProviderLatency{Provider=selected,Protocol=form.Transport,Error="Timeout",MeasuredUtc=DateTime.UtcNow});
+            Check(form.LatencyWarning&&form.ConnectionWarning&&form.ConnectionStatusCaption.EndsWith("— мс"),"Failed DNS latency triggers yellow warning status");
+            typeof(MainForm).GetField("connectionLatency",fields).SetValue(form,new ProviderLatency{Provider=selected,Protocol=form.Transport,Milliseconds=24,MeasuredUtc=DateTime.UtcNow});
+            Check(!form.LatencyWarning&&!form.ConnectionWarning,"Successful DNS latency clears warning status");
+            int rev=(int)typeof(MainForm).GetField("resolverRevision",fields).GetValue(form);
+            Check(form.AcceptManualResolverResult(selected,form.Transport,rev,new ResolverCheckResult{Provider=HbAi.XboxDns.Dns.Name[selected],Protocol=form.Transport.ToString(),Comparison=ResolverComparison.Incomplete})&&form.CheckerWarning&&form.ConnectionWarning&&form.CheckerCaption.Contains("не удалось проверить"),"Failed website checker triggers yellow warning status");
+            Check(form.AcceptManualResolverResult(selected,form.Transport,rev,new ResolverCheckResult{Provider=HbAi.XboxDns.Dns.Name[selected],Protocol=form.Transport.ToString(),Official=new ProviderCheckResult{State=ProviderCheckState.Confirmed}})&&!form.CheckerWarning&&!form.ConnectionWarning,"Confirmed website checker clears yellow warning status");
             form.SelectGoogleMode(true);form.SelectLocalMode(false);form.SelectTransport(DnsTransport.Plain);Check(form.LocalMode&&!form.GoogleMode&&form.Transport!=DnsTransport.Plain,"Active localhost mode cannot switch profile or downgrade encryption");
             form.Close();Application.DoEvents();Check(!form.IsDisposed&&local.Stops>0,"Closing waits for original DNS restoration");local.Finish();Application.DoEvents();Check(form.IsDisposed,"Form closes once the local worker has restored DNS");
         }
