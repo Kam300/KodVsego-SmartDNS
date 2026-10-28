@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Drawing;
@@ -511,7 +511,7 @@ namespace HbAi.XboxDns
             SuspendLayout();settingsConnectionPanel.SuspendLayout();settingsBackupPanel.SuspendLayout();
             try {
             float scale=actionHeight/42f;Func<int,int> px=n=>(int)Math.Round(n*scale);bool automatic=settingsAutoMode.Checked;
-            int height=Math.Min(maxDialogHeight,px((automatic?574:518)+(settingsTunnel==null?0:32)+(settingsResolverCheck==null?0:30)+(settingsRestartHeading==null?0:94)+(settingsStartupRecovery==null?0:30)+(providerPanel==null?0:44)));if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
+            int height=Math.Min(maxDialogHeight,px((automatic?574:518)+(settingsTunnel==null?0:32)+(settingsResolverCheck==null?0:30)+(settingsRestartHeading==null?0:94)+(settingsStartupRecovery==null?0:30)+(providerPanel==null?0:44)+(settingsCatalog==null?0:58)));if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
             int innerWidth=ClientSize.Width-px(88),half=(innerWidth-px(8))/2;
             settingsConnectionBounds=new Rectangle(px(28),px(providerPanel==null?100:144),ClientSize.Width-px(56),px(automatic?148:92));
             settingsConnectionPanel.Bounds=settingsConnectionBounds;
@@ -539,6 +539,7 @@ namespace HbAi.XboxDns
             settingsSource.Bounds=new Rectangle(px(28),settingsGithub.Bottom+px(12),ClientSize.Width-px(56),px(24));
             if(settingsTunnel!=null)settingsTunnel.Bounds=new Rectangle(px(28),settingsSource.Bottom+px(6),ClientSize.Width-px(56),px(24));
             if(settingsResolverCheck!=null)settingsResolverCheck.Bounds=new Rectangle(px(28),(settingsTunnel!=null?settingsTunnel.Bottom:settingsSource.Bottom)+px(6),ClientSize.Width-px(56),px(24));
+            if(settingsCatalog!=null)settingsCatalog.Bounds=new Rectangle(px(28),(settingsResolverCheck!=null?settingsResolverCheck.Bottom:settingsSource.Bottom)+px(6),ClientSize.Width-px(56),px(52));
             primaryAction.Bounds=new Rectangle(ClientSize.Width-px(178),ClientSize.Height-footerGap-actionHeight,px(150),actionHeight);
             cancelAction.Bounds=new Rectangle(px(28),primaryAction.Top,px(112),actionHeight);
             LayoutProviderSettings(px);

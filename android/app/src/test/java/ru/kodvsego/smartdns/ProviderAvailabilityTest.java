@@ -3,6 +3,7 @@ import org.junit.Test;
 import java.lang.reflect.Field;
 import static org.junit.Assert.*;
 public class ProviderAvailabilityTest {
+    @Test public void comssUsesCurrentAddresses(){assertArrayEquals(new String[]{"94.250.253.55","212.109.195.93"},Provider.at(0).servers);assertEquals("195.133.25.16",Provider.at(0).dotServers[0]);assertEquals("dns.comss.one",Provider.at(0).dot);}
     @Test public void addedProvidersKeepIndependentEndpoints() {
         for(int id=7;id<14;id++)assertTrue(Provider.isAvailable(id));
         assertEquals("https://us.geohide.ru/dns-query",Provider.at(8).doh);
@@ -20,12 +21,10 @@ public class ProviderAvailabilityTest {
         assertEquals("Xbox DNS",Provider.at(3).name);
         for(int id=0;id<Provider.ALL.length;id++)assertEquals(id==1||id==2||id==3?0:id,Provider.preferredIndex(id));
     }
-    @Test public void magicDnsSupportsAntigravityWithEncryption() {
+    @Test public void androidDoesNotOfferAntigravityFeatures() {
         Provider magic=Provider.at(6);
         assertTrue(Provider.isAvailable(6));
-        assertTrue(java.util.Arrays.asList(magic.services).contains("Antigravity"));
-        assertTrue(java.util.Arrays.asList(magic.testHosts()).contains("cloudcode-pa.googleapis.com"));
-        assertTrue(java.util.Arrays.asList(magic.testHosts()).contains("daily-cloudcode-pa.googleapis.com"));
+        for(Provider provider:Provider.ALL){assertFalse(java.util.Arrays.asList(provider.services).contains("Antigravity"));assertFalse(java.util.Arrays.asList(provider.testHosts()).contains("cloudcode-pa.googleapis.com"));assertFalse(java.util.Arrays.asList(provider.testHosts()).contains("daily-cloudcode-pa.googleapis.com"));}
         DnsConfig config=new DnsConfig(6,true);
         assertTrue(config.encrypted);assertEquals("https://dns.magicdns.ru/dns-query",magic.doh);
     }
@@ -34,7 +33,7 @@ public class ProviderAvailabilityTest {
         assertTrue(Provider.isAvailable(13));
         assertTrue(java.util.Arrays.asList(cf.services).contains("Gemini"));
         assertFalse(java.util.Arrays.asList(cf.services).contains("Antigravity"));
-        assertTrue(java.util.Arrays.asList(Provider.at(9).services).contains("Antigravity"));
+        assertFalse(java.util.Arrays.asList(Provider.at(9).services).contains("Antigravity"));
     }
     @Test public void disabledProviderChoiceFallsBackWithoutRenumbering() throws Exception {
         Field field=ProviderAvailability.class.getDeclaredField("ENABLED");field.setAccessible(true);

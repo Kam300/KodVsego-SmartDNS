@@ -1,0 +1,9 @@
+{
+  "comss": {"kind":"comss","url":"https://check.comss.one/"},
+  "dns-ai": {"kind":"dns-ai","url":"https://dns-ai.ru/dnscheck","control":"https://check.dns-ai.ru/dnscheck"},
+  "zapret": {"kind":"zapret","url":"https://dns.zapret.moe/api/dns-check","lookupSuffix":"check.dns.zapret.moe"},
+  "wlrus": {"kind":"wlrus","url":"https://probe.dns.wlrus.cfd/whoami"},
+  "webshift": {"kind":"webshift","url":"https://dns.webshiftvpn.ru/api/dns-check"},
+  "malw": {"kind":"malw","url":"https://test.dns.malw.link/"},
+  "malw-cf": {"kind":"malw","url":"https://test.dns.malw.link/"}
+}

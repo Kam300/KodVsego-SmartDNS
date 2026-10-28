@@ -3,7 +3,7 @@ cd /d "%~dp0"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\Sync-ProviderAvailability.ps1
 if errorlevel 1 exit /b 1
 if not exist "dist\dev" mkdir "dist\dev"
-"%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /optimize+ /out:"dist\dev\KodVsego_SmartDNS.2.23.8.exe" ^
+"%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /optimize+ /out:"dist\dev\KodVsego_SmartDNS.2.23.9.exe" ^
  /win32icon:res\app.ico /win32manifest:src\windows\Properties\app.manifest ^
  /resource:LICENSE,licenses.MIT /resource:LICENSE.ru.md,licenses.Russian ^
  /resource:res\OFL-Unbounded.txt,licenses.OFL-Unbounded /resource:res\OFL-Manrope.txt,licenses.OFL-Manrope ^

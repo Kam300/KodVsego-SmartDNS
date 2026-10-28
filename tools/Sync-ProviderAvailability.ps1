@@ -53,7 +53,7 @@ namespace HbAi.XboxDns {
     }
 }
 "@
-$rows=@($config | ForEach-Object {'new Provider('+(Quote $_.name)+','+(Strings $_.ipv4)+','+(Quote $_.doh)+','+$_.encryptedOnly.ToString().ToLowerInvariant()+','+(Strings $_.services)+','+(Strings $_.testHosts)+')'}) -join ",`n"
+$rows=@($config | ForEach-Object {'new Provider('+(Quote $_.name)+','+(Strings $_.ipv4)+','+(Quote $_.doh)+','+$_.encryptedOnly.ToString().ToLowerInvariant()+','+(Strings $_.services)+','+(Strings $_.testHosts)+','+(Quote $_.dot)+','+(Strings $_.windowsDotServers)+','+(Quote $_.url)+','+(Strings $_.windowsDohServers)+')'}) -join ",`n"
 $java=@"
 // Generated from config/providers.json. Do not edit directly.
 package ru.kodvsego.smartdns;
@@ -68,3 +68,5 @@ foreach($entry in @(@('src\windows\Providers\ProviderAvailability.cs',$cs),@('an
     New-Item -ItemType Directory -Path (Split-Path $path -Parent) -Force | Out-Null
     if(!(Test-Path -LiteralPath $path) -or [IO.File]::ReadAllText($path) -ne $entry[1]){[IO.File]::WriteAllText($path,$entry[1],[Text.UTF8Encoding]::new($false))}
 }
+
+& (Join-Path $PSScriptRoot 'Build-ProviderCatalog.ps1') -Providers $config -OutputRoot $OutputRoot

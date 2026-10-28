@@ -41,8 +41,11 @@ namespace HbAi.XboxDns
     }
     static class ProviderCheck
     {
+        internal static Func<int,string> CatalogKind=p=>p==0?"comss":p==5?"dns-ai":p==7?"zapret":p==10?"wlrus":p==11?"webshift":p==9||p==13?"malw":null;
+        internal static Func<int,string,string,string> CatalogUrl=(p,field,fallback)=>fallback;
+        static string Url(int p,string fallback,string nonce,string field){return CatalogUrl(p,field,fallback)+"?"+(CatalogKind(p)=="webshift"?"t":CatalogKind(p)=="zapret"?"token":"c")+"="+nonce;}
         internal static bool Available(int provider)
-        {return Dns.IsAvailable(provider)&&(provider==0||provider==5||provider==7||provider==9||provider==10||provider==11||provider==13);}
+        {return Dns.IsAvailable(provider)&&CatalogKind(provider)!=null;}
         static string Source(int provider)
         {return provider==0?"comss.ru/page.php?id=7315":provider==5?"dns-ai.ru/ip":provider==7?"dns.zapret.moe":provider==10?"site.dns.wlrus.cfd":provider==11?"dns.webshiftvpn.ru":"info.dns.malw.link";}
         internal static ProviderCheckResult Run(int provider,IProviderCheckIo io,CancellationToken cancel)
@@ -52,43 +55,43 @@ namespace HbAi.XboxDns
             var clock=Stopwatch.StartNew();var trace=new StringBuilder("Official provider check; provider="+provider+"; UTC="+DateTime.UtcNow.ToString("O")+"; path=system; proxy=none\n");string before=null;
             try {
                 cancel.ThrowIfCancellationRequested();before=io.Stamp();string nonce=Nonce();
-                if(provider==0) {
+                if(CatalogKind(provider)=="comss") {
                     // Exact marker used by the official page, through Windows DNS only.
                     // A timeout or an unexpected body is unknown, never proof of misconfiguration.
-                    var reply=Get(io,"https://check.comss.one/?c="+nonce,cancel,trace);
+                    var reply=Get(io,Url(provider,"https://check.comss.one/",nonce,"url"),cancel,trace);
                     if(reply.Body==null||reply.Body.Length>32768||reply.Body.Trim()!="Comss.one DNS enabled")throw new InvalidDataException();
                     result.State=ProviderCheckState.Confirmed;
-                } else if(provider==10) {
-                    var data=Json(Get(io,"https://probe.dns.wlrus.cfd/whoami?c="+nonce,cancel,trace));object value;
+                } else if(CatalogKind(provider)=="wlrus") {
+                    var data=Json(Get(io,Url(provider,"https://probe.dns.wlrus.cfd/whoami",nonce,"url"),cancel,trace));object value;
                     if(!data.TryGetValue("via",out value)||!(value is string))throw new InvalidDataException();
                     if((string)value=="ours")result.State=ProviderCheckState.Confirmed;
                     else if((string)value=="public")result.State=ProviderCheckState.NotConfirmed;
                     else throw new InvalidDataException();
-                } else if(provider==11) {
+                } else if(CatalogKind(provider)=="webshift") {
                     string stamp=((long)(DateTime.UtcNow-new DateTime(1970,1,1)).TotalMilliseconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    result.State=Boolean(Json(Get(io,"https://dns.webshiftvpn.ru/api/dns-check?t="+stamp,cancel,trace)),"connected")?ProviderCheckState.Confirmed:ProviderCheckState.NotConfirmed;
-                } else if(provider==7) {
+                    result.State=Boolean(Json(Get(io,Url(provider,"https://dns.webshiftvpn.ru/api/dns-check",stamp,"url"),cancel,trace)),"connected")?ProviderCheckState.Confirmed:ProviderCheckState.NotConfirmed;
+                } else if(CatalogKind(provider)=="zapret") {
                     // Fresh Windows lookup; never use the tested provider's direct DoH for this probe.
                     bool lookupTimedOut=false;
-                    try {io.Lookup(nonce+".check.dns.zapret.moe",cancel);trace.AppendLine("Fresh system lookup completed");}
+                    try {io.Lookup(nonce+"."+CatalogUrl(provider,"lookupSuffix","check.dns.zapret.moe"),cancel);trace.AppendLine("Fresh system lookup completed");}
                     catch(OperationCanceledException){throw;}
                     catch(TimeoutException){lookupTimedOut=true;trace.AppendLine("Fresh system lookup: deadline reached");}
                     catch(Exception error){trace.AppendLine("Fresh system lookup: "+error.GetType().Name);}
                     for(int attempt=0;attempt<4;attempt++) {
                         cancel.ThrowIfCancellationRequested();io.Pause(cancel);
-                        var data=Json(Get(io,"https://dns.zapret.moe/api/dns-check?token="+nonce,cancel,trace));
+                        var data=Json(Get(io,Url(provider,"https://dns.zapret.moe/api/dns-check",nonce,"url"),cancel,trace));
                         if(Boolean(data,"seen")) {
                             result.State=ProviderCheckState.Confirmed;object protocol;
                             if(data.TryGetValue("protocol",out protocol)&&protocol is string)result.Protocol=Protocol((string)protocol);break;
                         }
                         if(attempt==3)result.State=lookupTimedOut?ProviderCheckState.Inconclusive:ProviderCheckState.NotConfirmed;
                     }
-                } else if(provider==5) {
-                    Get(io,"https://dns-ai.ru/dnscheck?c="+nonce,cancel,trace,true);
-                    Get(io,"https://check.dns-ai.ru/dnscheck?c="+nonce,cancel,trace,true);
+                } else if(CatalogKind(provider)=="dns-ai") {
+                    Get(io,Url(provider,"https://dns-ai.ru/dnscheck",nonce,"url"),cancel,trace,true);
+                    Get(io,Url(provider,"https://check.dns-ai.ru/dnscheck",nonce,"control"),cancel,trace,true);
                     result.State=ProviderCheckState.Confirmed;
                 } else {
-                    Get(io,"https://test.dns.malw.link/?c="+nonce,cancel,trace,true);
+                    Get(io,Url(provider,"https://test.dns.malw.link/",nonce,"url"),cancel,trace,true);
                     result.State=ProviderCheckState.ProbePassed;
                 }
             }
@@ -122,10 +125,13 @@ namespace HbAi.XboxDns
     }
     sealed class ProviderCheckIo : IProviderCheckIo
     {
+        internal static Func<string,bool> CatalogAllowed=url=>false;
+        internal static Func<string,bool> CatalogLookup=host=>false;
         public string Stamp(){return new MangoResolverCheckIo().Stamp();}
         internal static bool Allowed(string url)
         {
             Uri uri;if(!Uri.TryCreate(url,UriKind.Absolute,out uri)||uri.Scheme!="https"||uri.Port!=443||uri.UserInfo!=""||uri.Fragment!="")return false;
+            if(CatalogAllowed(url))return true;
             string path=uri.AbsolutePath;
             return uri.Host=="check.comss.one"&&path=="/"||uri.Host=="probe.dns.wlrus.cfd"&&path=="/whoami"||uri.Host=="dns.webshiftvpn.ru"&&path=="/api/dns-check"||
                 uri.Host=="dns.zapret.moe"&&path=="/api/dns-check"||(uri.Host=="dns-ai.ru"||uri.Host=="check.dns-ai.ru")&&path=="/dnscheck"||uri.Host=="test.dns.malw.link"&&path=="/";
@@ -165,7 +171,7 @@ namespace HbAi.XboxDns
         }
         public void Lookup(string host,CancellationToken cancel)
         {
-            if(!Regex.IsMatch(host??"",@"\A[a-f0-9]{16}\.check\.dns\.zapret\.moe\z"))throw new IOException("Unexpected check name");cancel.ThrowIfCancellationRequested();
+            if(!CatalogLookup(host)&&!Regex.IsMatch(host??"",@"\A[a-f0-9]{16}\.check\.dns\.zapret\.moe\z"))throw new IOException("Unexpected check name");cancel.ThrowIfCancellationRequested();
             var task=Task.Factory.FromAsync<string,IPAddress[]>(System.Net.Dns.BeginGetHostAddresses,System.Net.Dns.EndGetHostAddresses,host,null);
             if(!task.Wait(2500,cancel))throw new TimeoutException();
         }

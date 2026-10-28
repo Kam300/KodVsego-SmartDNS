@@ -17,7 +17,7 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class) @Config(sdk={28,35}) @LooperMode(LooperMode.Mode.PAUSED)
 public class UpdateUiTest {
     private ActivityController<MainActivity> activity;
-    @Before public void before(){RuntimeEnvironment.getApplication().getSharedPreferences("updates",0).edit().clear().putLong("lastCheck",System.currentTimeMillis()).apply();}
+    @Before public void before(){RuntimeEnvironment.getApplication().getSharedPreferences("catalog-updates",0).edit().putLong("lastCheck",System.currentTimeMillis()).apply();RuntimeEnvironment.getApplication().getSharedPreferences("updates",0).edit().clear().putLong("lastCheck",System.currentTimeMillis()).apply();}
     @After public void after(){if(activity!=null)activity.pause().stop().destroy();}
     private View findText(View view,String text){
         if(view instanceof TextView&&((TextView)view).getText().toString().equals(text))return view;
@@ -30,7 +30,7 @@ public class UpdateUiTest {
         View root=dialog.getWindow().getDecorView();assertNotNull(findText(root,"Доступно обновление"));assertNotNull(findText(root,"Обновить"));assertNotNull(findText(root,"Позже"));
         findText(root,"Позже").performClick();Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();assertFalse(dialog.isShowing());assertFalse(update.shouldPrompt());
         activity.pause().stop().start().resume();assertFalse(dialog.isShowing());
-        app.findViewById(R.id.check_updates).performClick();assertTrue(org.robolectric.shadows.ShadowDialog.getLatestDialog().isShowing());
+        app.findViewById(android.R.id.content).findViewWithTag("app-settings").performClick();org.robolectric.shadows.ShadowDialog.getLatestDialog().findViewById(R.id.check_updates).performClick();Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();assertTrue(org.robolectric.shadows.ShadowDialog.getLatestDialog().isShowing());
         assertEquals(UpdateController.Phase.AVAILABLE,update.phase); // No APK is downloaded without acceptance.
     }
     @Test public void providerOnlyExposesOneReadOnlyFile()throws Exception{
@@ -56,7 +56,7 @@ public class UpdateUiTest {
         org.robolectric.shadows.ShadowPackageManager manager=Shadows.shadowOf(app.getPackageManager());manager.installPackage(installed);manager.setCanRequestPackageInstalls(false);
         android.content.pm.PackageInfo candidate=new android.content.pm.PackageInfo();candidate.packageName=app.getPackageName();candidate.versionName="9.0.0";candidate.setLongVersionCode(BuildConfig.VERSION_CODE+1);candidate.signingInfo=signing;candidate.applicationInfo=new android.content.pm.ApplicationInfo();candidate.applicationInfo.minSdkVersion=26;
         manager.setPackageArchiveInfo(update.readyFile.getAbsolutePath(),candidate);
-        app.findViewById(R.id.check_updates).performClick();
+        app.findViewById(android.R.id.content).findViewWithTag("app-settings").performClick();org.robolectric.shadows.ShadowDialog.getLatestDialog().findViewById(R.id.check_updates).performClick();
         await(()->{Dialog d=org.robolectric.shadows.ShadowDialog.getLatestDialog();return d!=null&&d.isShowing()&&findText(d.getWindow().getDecorView(),"Открыть настройки")!=null;});
         Dialog permission=org.robolectric.shadows.ShadowDialog.getLatestDialog();findText(permission.getWindow().getDecorView(),"Открыть настройки").performClick();
         android.content.Intent settings=Shadows.shadowOf(app).getNextStartedActivityForResult().intent;assertEquals(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,settings.getAction());assertEquals("package:"+app.getPackageName(),settings.getDataString());

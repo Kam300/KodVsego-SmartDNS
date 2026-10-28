@@ -21,7 +21,7 @@ namespace HbAi.XboxDns
         internal void AddProviderSettingsControls(int[] hidden,DnsTransport protocol)
         {
             providerGeneralHeading=Controls.OfType<Label>().Single(label=>label.Text=="Выбор DNS");
-            settingsGeneralControls=new Control[]{providerGeneralHeading,settingsConnectionPanel,settingsBackupPanel,settingsBackupHeading,settingsSupportHeading,settingsGithub,settingsTelegram,settingsSource,settingsTunnel,settingsResolverCheck,settingsRestartHeading,settingsRestartHint,settingsBrowserRestart,settingsAntigravityRestart,settingsStartupRecovery}.Where(c=>c!=null).ToArray();
+            settingsGeneralControls=new Control[]{providerGeneralHeading,settingsConnectionPanel,settingsBackupPanel,settingsBackupHeading,settingsSupportHeading,settingsGithub,settingsTelegram,settingsSource,settingsTunnel,settingsResolverCheck,settingsCatalog,settingsRestartHeading,settingsRestartHint,settingsBrowserRestart,settingsAntigravityRestart,settingsStartupRecovery}.Where(c=>c!=null).ToArray();
             float scale=actionHeight/42f;Func<int,int> px=n=>(int)Math.Round(n*scale);
             settingsGeneralTab=new DialogButton("Общие",bodyFont,border,ForeColor,border,px(8));
             settingsProvidersTab=new DialogButton("Провайдеры",bodyFont,border,ForeColor,border,px(8));

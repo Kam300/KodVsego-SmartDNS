@@ -25,8 +25,9 @@ public class AndroidLifecycleTest {
     private ServiceController<DnsVpnService> service;
     private final CountDownLatch cleanupEntered=new CountDownLatch(1),releaseCleanup=new CountDownLatch(1);
 
-    @Before public void before(){RuntimeEnvironment.getApplication().getSharedPreferences("updates",0).edit().putLong("lastCheck",System.currentTimeMillis()).apply();DnsVpnService.active=false;DnsVpnService.connecting=false;DnsVpnService.current=null;DnsVpnService.status="DNS выключен";}
+    @Before public void before(){RuntimeEnvironment.getApplication().getSharedPreferences("catalog-updates",0).edit().putLong("lastCheck",System.currentTimeMillis()).apply();RuntimeEnvironment.getApplication().getSharedPreferences("updates",0).edit().putLong("lastCheck",System.currentTimeMillis()).apply();DnsVpnService.active=false;DnsVpnService.connecting=false;DnsVpnService.current=null;DnsVpnService.status="DNS выключен";}
     @After public void after(){releaseCleanup.countDown();if(activity!=null)activity.pause().stop().destroy();if(service!=null)service.destroy();}
+    private boolean hasText(View view,String text){if(view instanceof android.widget.TextView&&((android.widget.TextView)view).getText().toString().equals(text))return true;if(view instanceof android.view.ViewGroup)for(int i=0;i<((android.view.ViewGroup)view).getChildCount();i++)if(hasText(((android.view.ViewGroup)view).getChildAt(i),text))return true;return false;}
     private MainActivity screen(){activity=Robolectric.buildActivity(MainActivity.class).setup();return activity.get();}
     private DnsVpnService blockedService(boolean connecting) {
         service=Robolectric.buildService(DnsVpnService.class).create();DnsVpnService vpn=service.get();
@@ -39,7 +40,8 @@ public class AndroidLifecycleTest {
         long start=System.nanoTime();assertTrue(app.findViewById(R.id.dns_power).performClick());
         assertTrue("UI was blocked by teardown",System.nanoTime()-start<TimeUnit.SECONDS.toNanos(1));
         assertFalse(DnsVpnService.active);assertFalse(DnsVpnService.connecting);assertTrue(cleanupEntered.await(1,TimeUnit.SECONDS));
-        assertTrue(app.findViewById(R.id.add_widget).performClick());
+        app.findViewById(android.R.id.content).findViewWithTag("app-settings").performClick();
+        assertTrue(org.robolectric.shadows.ShadowDialog.getLatestDialog().findViewById(R.id.add_widget).performClick());
     }
     @Test public void cancellingPendingConnectionRejectsLateCompletion() {
         DnsVpnService vpn=blockedService(true);long old=vpn.sessions.begin();MainActivity app=screen();
@@ -79,18 +81,18 @@ public class AndroidLifecycleTest {
         blockedService(true);MainActivity app=screen();assertFalse(app.findViewById(R.id.dns_provider).isEnabled());
     }
     @Test public void unsupportedEncryptionIsExplicitAndMagicDnsRemainsSelectable() {
+        MainActivity app=screen();
         Provider saved=Provider.ALL[4];
         // Exercise missing-transport UI using an enabled provider.
         Provider.ALL[4]=new Provider(saved.name,saved.servers,null,saved.encryptedOnly,saved.services,saved.testHosts());
         try {
-        MainActivity app=screen();
         for(int provider:new int[]{4,6}){
             app.findViewById(R.id.dns_provider).performClick();android.app.Dialog dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog();
             dialog.findViewById(R.id.provider_sheet).findViewWithTag("provider-"+provider).performClick();
-            android.widget.Switch encryption=app.findViewById(R.id.encrypted_dns_switch);
-            assertEquals(provider==6,encryption.isEnabled());
-            assertEquals(provider!=6,encryption.getText().toString().contains("недоступен"));
-            assertFalse(encryption.isChecked());
+            assertNull(app.findViewById(R.id.encrypted_dns_switch));
+            android.view.View protocols=app.findViewById(android.R.id.content).findViewWithTag("dns-protocol");
+            assertEquals(provider==6,protocols.findViewWithTag("protocol-1").isEnabled());
+            assertTrue(protocols.findViewWithTag("protocol-0").isEnabled());
         }
         } finally {Provider.ALL[4]=saved;}
     }

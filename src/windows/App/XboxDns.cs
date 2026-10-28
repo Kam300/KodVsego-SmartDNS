@@ -26,7 +26,7 @@ namespace HbAi.XboxDns
         public static string[] Site {get{return RuntimeProviders.Snapshot.Sites;}}
         public static string[] Url {get{return RuntimeProviders.Snapshot.Urls;}}
         // Keep historical IDs for restore; availability is shared with Android in config/providers.json.
-        internal static bool IsAvailable(int provider) { return provider>=0 && provider<Name.Length && (CustomDns.IsCustom(provider)?RuntimeProviders.All[provider].enabled:ProviderAvailability.IsEnabled(provider)); }
+        internal static bool IsAvailable(int provider) { return provider>=0 && provider<Name.Length && RuntimeProviders.All[provider].enabled; }
         internal static int[] AvailableProviders { get { return Enumerable.Range(0,Name.Length).Where(IsAvailable).ToArray(); } }
         internal static bool EncryptedOnly(int provider) { return provider>=0&&provider<RuntimeProviders.All.Length&&RuntimeProviders.All[provider].encryptedOnly; }
         // Старые адреса xbox-dns.ru из версии 1.0: если стоят они, показываем Xbox DNS
@@ -416,9 +416,9 @@ namespace HbAi.XboxDns
             MouseWheel += (s, e) => { if (ProviderBar.Contains(CanvasPoint(e.Location))) ScrollProviderPage(e.Delta > 0 ? -1 : 1); };
             EnsureProviderVisible();
             networkMonitor.Interval = 3000;
-            networkMonitor.Tick += (s, e) => {RefreshConnectionLatency();RefreshNetworkStatus();if(profilePreferences){startupRecovery.Tick(startupRecoveryEnabled);TickAntigravityHealth();}};
+            networkMonitor.Tick += (s, e) => {RefreshConnectionLatency();RefreshNetworkStatus();ApplyCatalogIfIdle();if(profilePreferences){startupRecovery.Tick(startupRecoveryEnabled);TickAntigravityHealth();}};
             Shown += (s, e) => { RefreshNetworkStatus(); networkMonitor.Start(); };
-            Shown += (s, e) => { if(checkUpdateAtStartup)CheckUpdatesQuietly(); };
+            Shown += (s, e) => { if(checkUpdateAtStartup)CheckUpdatesQuietly();if(profilePreferences)CatalogUpdate.Check(false,()=>{}); };
             motionReady = true;
             SnapMotion();
         }
@@ -503,6 +503,7 @@ namespace HbAi.XboxDns
             dialog.AddRestartSettingsControls(!hideDnsReminder,!hideAntigravityRestart);
             dialog.AddStartupRecoveryControl(startupRecoveryEnabled);
             dialog.AddLogSettingsAction(update=>SaveApplicationLog(dialog,update));dialog.AddResolverSettingsAction(autoResolverCheck);
+            dialog.AddCatalogSettings(CatalogUpdate.Auto,CheckCatalogInSettings);
             dialog.AddProviderSettingsControls(hiddenProviders,Transport);
             dialog.AddAntigravitySettingsControls(localAntigravity,localAntigravityProvider,ManagedDns.Running||busy,localMode&&localAntigravity&&ManagedDns.Connected&&!ManagedDns.Stopping&&!busy);
             dialog.SetAntigravityAutoDns(agAutoDns);
@@ -733,6 +734,7 @@ namespace HbAi.XboxDns
                     startupRecoveryEnabled=dialog.StartupRecoveryEnabled;startupRecovery.Tick(startupRecoveryEnabled);
                     SetProviderVisibility(dialog.HiddenProviders);
                     hideDnsReminder=!dialog.ShowBrowserRestartPrompt;hideAntigravityRestart=!dialog.ShowAntigravityRestartPrompt;
+                    CatalogUpdate.Auto=dialog.AutoCatalogUpdate;
                     autoResolverCheck=dialog.AutoResolverCheck;if(!autoResolverCheck)CancelResolverCheck();else if(active&&!busy)StartResolverCheck();
                     defaultGoal=selected;manualSelection=false;if(selected<0)autoGoal=-1;EnsureProviderVisible();Invalidate();
                     ApplyAntigravitySettings(dialog.AntigravityRouteEnabled,dialog.AntigravityRouteProvider);

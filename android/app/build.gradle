@@ -9,6 +9,7 @@ android {
         targetSdk 35
         versionCode 9
         versionName '1.5.2'
+        manifestPlaceholders = [appLabel: 'Код Всего · Smart DNS']
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
@@ -33,7 +34,8 @@ android {
         preview {
             initWith debug
             applicationIdSuffix '.test'
-            versionNameSuffix '-test.1'
+            versionNameSuffix '-test.12'
+            manifestPlaceholders = [appLabel: 'Код Всего · Smart DNS · тест']
             matchingFallbacks = ['debug']
         }
         release {
@@ -45,6 +47,12 @@ android {
     testOptions {
         unitTests.includeAndroidResources = true
         unitTests.all {
+            // Robolectric changes JVM security providers. Keep ordinary wire/TLS
+            // test classes in fresh workers so their ALPN provider cannot mismatch.
+            forkEvery = 1
+            // Robolectric installs Conscrypt in the test JVM. JDK 17+ restricts
+            // its access to InetAddress; open it for tests, not for the APK.
+            jvmArgs '--add-opens=java.base/java.net=ALL-UNNAMED'
             systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
         }
     }
@@ -61,26 +69,31 @@ dependencies {
 // Shared provider catalog. IDs are append-only to preserve saved preferences.
 def providerConfig = rootProject.file('../config/providers.json')
 def providerOutput = file('src/main/java/ru/kodvsego/smartdns/ProviderAvailability.java')
+def catalogFile = rootProject.file('../config/catalog.json')
+def catalogDefaultOutput = file('src/main/java/ru/kodvsego/smartdns/CatalogDefaults.java')
 def generateProviderAvailability = tasks.register('generateProviderAvailability') {
     inputs.file(providerConfig)
-    outputs.file(providerOutput)
+    inputs.file(catalogFile)
+    outputs.files(providerOutput,catalogDefaultOutput)
     doLast {
         def entries = new groovy.json.JsonSlurper().parse(providerConfig, 'UTF-8')
         def keys = ['comss','geohide','geohide-eu','xbox','bezmezhau','dns-ai','magicdns']
         if (!(entries instanceof List) || entries.size()<7 || entries.collect{it.key}.toSet().size()!=entries.size()) throw new GradleException('Invalid provider catalog')
         entries.eachWithIndex { p, i ->
-            [enabled:true,encryptedOnly:false,ipv6:[],legacyIpv4:[],windowsDohServers:p.ipv4,services:[],autoGoals:[],testHosts:['example.com'],description:'',site:'',url:'',doh:null].each { field, value -> if(!p.containsKey(field))p[field]=value }
+            [enabled:true,encryptedOnly:false,ipv6:[],legacyIpv4:[],windowsDohServers:p.ipv4,services:[],autoGoals:[],testHosts:['example.com'],description:'',site:'',url:'',doh:null,dot:null,windowsDotServers:[]].each { field, value -> if(!p.containsKey(field))p[field]=value }
             if(p.id!=i || (i<7 && p.key!=keys[i]) || !(p.enabled instanceof Boolean) || !(p.encryptedOnly instanceof Boolean) || !p.name || !p.ipv4 || !p.windowsDohServers || !p.testHosts || (p.encryptedOnly && !p.doh)) throw new GradleException('Invalid provider '+i)
             if(!(p.key instanceof String) || !(p.key ==~ /[a-z0-9-]+/) || !(p.name instanceof String) || !p.name.trim() || (p.doh!=null && !p.doh.trim())) throw new GradleException('Invalid name or DoH')
-            ['ipv4','ipv6','legacyIpv4','windowsDohServers','services','autoGoals','testHosts'].each { field -> if(!(p[field] instanceof List))throw new GradleException(field+' must be an array') }
+            ['ipv4','ipv6','legacyIpv4','windowsDohServers','windowsDotServers','services','autoGoals','testHosts'].each { field -> if(!(p[field] instanceof List))throw new GradleException(field+' must be an array') }
             p.legacyIpv4.each { old ->
                 if(!(old instanceof List) || !old || old.any { ip -> !(ip instanceof String) || !(ip ==~ /[0-9]+(\.[0-9]+){3}/) || ip.split('\\.').any { it.toInteger()>255 } }) throw new GradleException('Invalid legacy IPv4 set')
             }
-            ['ipv4','windowsDohServers'].each { field -> p[field].each { ip ->
+            ['ipv4','windowsDohServers','windowsDotServers'].each { field -> p[field].each { ip ->
                 if(!(ip instanceof String) || !(ip ==~ /[0-9]+(\.[0-9]+){3}/) || ip.split('\\.').any { it.toInteger()>255 }) throw new GradleException('Invalid IPv4')
             } }
             p.ipv6.each { ip -> if(!(ip instanceof String) || !ip.contains(':') || !(ip ==~ /[0-9a-fA-F:.]+/) || !(java.net.InetAddress.getByName(ip) instanceof java.net.Inet6Address))throw new GradleException('Invalid IPv6') }
             p.testHosts.each { host -> if(!(host instanceof String) || !(host ==~ /[a-zA-Z0-9_\-]+(\.[a-zA-Z0-9_\-]+)*\.?/))throw new GradleException('Invalid hostname') }
+            if(p.dot!=null && (!(p.dot instanceof String) || !(p.dot ==~ /[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+/) || !p.windowsDotServers))throw new GradleException('Invalid DoT hostname or IPs')
+            if(p.dot==null && p.windowsDotServers)throw new GradleException('DoT IPs need a hostname')
             if(p.autoGoals.any{ !(it in ['ChatGPT','Claude','Gemini','ElevenLabs','Spotify','Xbox','Antigravity']) }) throw new GradleException('Unknown auto goal')
             [p.doh,p.url].findAll{it}.each { value ->
                 def uri = new URI(value)
@@ -88,10 +101,17 @@ def generateProviderAvailability = tasks.register('generateProviderAvailability'
             }
         }
         if(!entries.any { it.enabled })throw new GradleException('At least one provider must remain enabled.')
+        entries.each { p -> if(!p.description)p.description=p.services.join(', ') }
+        def delivery = new groovy.json.JsonSlurper().parse(catalogFile, 'UTF-8')
+        if(delivery.schema!=1 || delivery.providers!=entries)throw new GradleException('Run tools/Sync-ProviderAvailability.ps1 to update the catalog snapshot')
+        def payload=catalogFile.getText('UTF-8').trim()
+        def quoted=new groovy.json.JsonGenerator.Options().disableUnicodeEscaping().build().toJson(payload)
+        catalogDefaultOutput.setText('package ru.kodvsego.smartdns;\nfinal class CatalogDefaults {static final long REVISION='+delivery.revision+'L;static final String URL="https://raw.githubusercontent.com/Kam300/KodVsego-SmartDNS/main/config/catalog.json";static final String JSON='+quoted+';}\n','UTF-8')
+
         def quote = { value -> groovy.json.JsonOutput.toJson(value) }
         def strings = { values -> 'new String[]{'+values.collect{quote(it)}.join(',')+'}' }
         def flags = entries.collect{it.enabled.toString()}.join(',')
-        def rows = entries.collect{ p -> 'new Provider('+quote(p.name)+','+strings(p.ipv4)+','+quote(p.doh)+','+p.encryptedOnly+','+strings(p.services)+','+strings(p.testHosts)+')' }.join(',\n')
+        def rows = entries.collect{ p -> 'new Provider('+quote(p.name)+','+strings(p.ipv4)+','+quote(p.doh)+','+p.encryptedOnly+','+strings(p.services)+','+strings(p.testHosts)+','+quote(p.dot)+','+strings(p.windowsDotServers ?: [])+','+quote(p.url)+','+strings(p.windowsDohServers)+')' }.join(',\n')
         providerOutput.parentFile.mkdirs()
         providerOutput.setText("""// Generated from config/providers.json. Do not edit directly.
 package ru.kodvsego.smartdns;

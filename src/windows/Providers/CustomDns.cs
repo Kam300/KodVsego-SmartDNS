@@ -67,10 +67,11 @@ namespace HbAi.XboxDns
         internal static ProviderEntry[] All {get{return Snapshot.All;}}
         static ProviderEntry[] Merge(ProviderEntry[] custom)
         {
-            if(custom.Length==0)return ProviderCatalog.All;
-            if(ProviderCatalog.All.Length>CustomDns.First)throw new IOException("Конфликт идентификаторов DNS-каталога.");
-            var reserved=Enumerable.Range(ProviderCatalog.All.Length,CustomDns.First-ProviderCatalog.All.Length).Select(id=>new ProviderEntry{id=id,key="reserved-"+id,name="Недоступен",enabled=false,ipv4=new string[0],ipv6=new string[0],services=new string[0],autoGoals=new string[0],testHosts=new string[0],windowsDohServers=new string[0],windowsDotServers=new string[0],legacyIpv4=new string[0][],description="",site="",url=null});
-            return ProviderCatalog.All.Concat(reserved).Concat(custom).ToArray();
+            var builtins=CatalogUpdate.Builtins();
+            if(custom.Length==0)return builtins;
+            if(builtins.Length>CustomDns.First)throw new IOException("Конфликт идентификаторов DNS-каталога.");
+            var reserved=Enumerable.Range(builtins.Length,CustomDns.First-builtins.Length).Select(id=>new ProviderEntry{id=id,key="reserved-"+id,name="Недоступен",enabled=false,ipv4=new string[0],ipv6=new string[0],services=new string[0],autoGoals=new string[0],testHosts=new string[0],windowsDohServers=new string[0],windowsDotServers=new string[0],legacyIpv4=new string[0][],description="",site="",url=null});
+            return builtins.Concat(reserved).Concat(custom).ToArray();
         }
         static ProviderSnapshot Load(){ProviderEntry[] custom=new ProviderEntry[0];try{using(var key=Registry.CurrentUser.OpenSubKey(CustomDns.RegistryPath))custom=CustomDns.Read(key);}catch(Exception error){DiagnosticReport.Record("Свои DNS","Не удалось загрузить список: "+error.GetType().Name);}return new ProviderSnapshot(Merge(custom));}
         internal static void Reload(){Interlocked.Exchange(ref current,Load());}

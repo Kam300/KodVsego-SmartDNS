@@ -27,7 +27,7 @@ public class DnsWidget extends AppWidgetProvider {
         DnsConfig current=DnsVpnService.current;
         String provider=Provider.at(current==null?selected:current.provider).name;
         views.setTextViewText(R.id.widget_status,running?(DnsVpnService.connecting?"Подключаем…":"DNS включён"):"DNS выключен");
-        views.setTextViewText(R.id.widget_provider,provider+(current!=null&&current.encrypted?" · DoH":""));
+        views.setTextViewText(R.id.widget_provider,provider+(current!=null&&current.encrypted?" · "+(current.protocol==DnsConfig.DOT?"DoT":"DoH"):""));
         boolean compact=layout==R.layout.widget_dns_compact;
         views.setTextViewText(R.id.widget_toggle,compact?(running?"Выкл":"Вкл"):(running?"Выключить":"Включить"));
         Intent open=new Intent(context,MainActivity.class).setData(Uri.parse("smartdns://widget/"+id+"/open"))

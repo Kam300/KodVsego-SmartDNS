@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using HbAi.XboxDns;
 static class ProbeTests
@@ -45,7 +45,8 @@ static class ProbeTests
         Check(EncryptedDns.Templates[0] == "https://dns.comss.one/dns-query" && EncryptedDns.ServersFor(0).SequenceEqual(new[] {"195.133.25.16"}), "Comss DoH uses its published dedicated address and endpoint");
         Check(Dns.MatchProvider(EncryptedDns.ServersFor(0)) == 0, "Comss encrypted address is recognized after apply and restart");
         Check(Dns.MatchProvider(new[] {"195.133.25.16", "192.0.2.53"}) == -1, "Mixed encrypted Comss and custom resolver is rejected");
-        Check(Dns.V4[0].SequenceEqual(new[] {"83.220.169.155", "212.109.195.93"}), "Comss plain DNS remains separate from its encrypted address");
+        Check(Dns.V4[0].SequenceEqual(new[] {"94.250.253.55", "212.109.195.93"}), "Comss plain DNS remains separate from its encrypted address");
+        Check(Dns.MatchProvider(new[]{"83.220.169.155","212.109.195.93"})==0,"Retired Comss pair remains recognized for recovery");
         Check(Dns.EncryptedOnly(5) && EncryptedDns.Templates[5] == "https://dns.dns-ai.ru/dns-query" && Dns.V4[5].SequenceEqual(new[]{"194.87.196.13","45.151.102.219"}) && EncryptedDns.ServersFor(5).SequenceEqual(Dns.V4[5]), "DNS-AI uses current published addresses and requires encryption");
         Check(Dns.MatchProvider(new[]{"194.87.196.13","186.246.49.127"})==5 && Dns.KnownServers.Contains("186.246.49.127"),"Retired DNS-AI pair remains recognized and recoverable");
         Check(!EncryptedDns.ServersFor(5).Contains("186.246.49.127") && Dns.MatchProvider(new[]{"186.246.49.127","45.151.102.219"})==-1 && Dns.MatchProvider(new[]{"186.246.49.127"})==-1,"Retired address is never newly applied; partial and mixed legacy sets are not attributed to DNS-AI");

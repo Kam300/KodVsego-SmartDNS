@@ -25,6 +25,7 @@ $cases+=,@('LiveLocalAutoTests','LiveLocalAuto.Tests.cs')
 $cases+=,@('CustomDnsTests','CustomDns.Tests.cs')
 $cases+=,@('AntigravityStartupTests','AntigravityStartup.Tests.cs')
 $cases+=,@('AntigravityHealthTests','AntigravityHealth.Tests.cs')
+$cases+=,@('CatalogUpdateTests','CatalogUpdate.Tests.cs')
 foreach ($case in $cases) {
     if ($Only.Count -gt 0 -and $case[0] -notin $Only) { continue }
     $exe = Join-Path $OutputDirectory ($case[0] + '.exe')

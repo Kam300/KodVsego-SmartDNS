@@ -1,0 +1,163 @@
+{
+  "schema": 1,
+  "observations": {
+    "bezmezhau": {
+      "source": "https://bezmezhau.com/ru/setup",
+      "ipv4": [
+        "1.1.1.1",
+        "181.215.40.49",
+        "31.58.216.201",
+        "8.8.8.8"
+      ],
+      "ipv6": [],
+      "doh": [
+        "https://dns.bezmezhau.com/dns-query"
+      ],
+      "explicitDot": []
+    },
+    "dns-ai": {
+      "source": "https://dns-ai.ru/",
+      "ipv4": [
+        "1.1.1.2",
+        "1.1.1.3",
+        "194.87.196.13",
+        "45.151.102.219"
+      ],
+      "ipv6": [
+        "2a00:b700:5::3:62",
+        "2a12:5940:d4ef::219"
+      ],
+      "doh": [
+        "https://dns.dns-ai.ru/dns-query"
+      ],
+      "explicitDot": [
+        "dns.dns-ai.ru"
+      ]
+    },
+    "magicdns": {
+      "source": "https://magicdns.ru/",
+      "ipv4": [
+        "1.1.1.1",
+        "109.120.132.43",
+        "8.8.8.8",
+        "94.249.177.102"
+      ],
+      "ipv6": [],
+      "doh": [
+        "https://dns.magicdns.ru/dns-query"
+      ],
+      "explicitDot": []
+    },
+    "zapret": {
+      "source": "https://dns.zapret.moe/",
+      "ipv4": [
+        "83.217.211.149"
+      ],
+      "ipv6": [
+        "2a03:afc0:9::235d"
+      ],
+      "doh": [
+        "https://dns.zapret.moe/dns-query"
+      ],
+      "explicitDot": []
+    },
+    "geohide-us": {
+      "source": "https://geohide.ru/",
+      "ipv4": [
+        "142.250.74.68"
+      ],
+      "ipv6": [],
+      "doh": [],
+      "explicitDot": []
+    },
+    "malw": {
+      "source": "https://info.dns.malw.link/setup",
+      "ipv4": [
+        "164.5.224.81",
+        "179.254.166.171"
+      ],
+      "ipv6": [
+        "2a12:bec4:1bb0:27dd::2",
+        "2a13:82c0:0:d::3"
+      ],
+      "doh": [
+        "https://dns.malw.link/dns-query"
+      ],
+      "explicitDot": []
+    },
+    "adguard": {
+      "source": "https://adguard-dns.io/ru/public-dns.html",
+      "ipv4": [
+        "94.140.14.14",
+        "94.140.14.140",
+        "94.140.14.141",
+        "94.140.14.15",
+        "94.140.15.15",
+        "94.140.15.16"
+      ],
+      "ipv6": [
+        "2a10:50c0::1:ff",
+        "2a10:50c0::2:ff",
+        "2a10:50c0::ad1:ff",
+        "2a10:50c0::ad2:ff",
+        "2a10:50c0::bad1:ff",
+        "2a10:50c0::bad2:ff"
+      ],
+      "doh": [
+        "https://dns.adguard-dns.com/dns-query",
+        "https://family.adguard-dns.com/dns-query",
+        "https://unfiltered.adguard-dns.com/dns-query"
+      ],
+      "explicitDot": [
+        "dns.adguard-dns.com",
+        "family.adguard-dns.com",
+        "unfiltered.adguard-dns.com"
+      ]
+    },
+    "malw-cf": {
+      "source": "https://info.dns.malw.link/setup/cloudflare",
+      "ipv4": [],
+      "ipv6": [],
+      "doh": [
+        "https://5u35p8m9i7.cloudflare-gateway.com/dns-query"
+      ],
+      "explicitDot": []
+    },
+    "comss": {
+      "source": "https://www.comss.ru/page.php?id=7315",
+      "ipv4": [
+        "195.133.25.16",
+        "212.109.195.93",
+        "94.250.253.55"
+      ],
+      "ipv6": [],
+      "doh": [
+        "https://dns.comss.one/dns-query"
+      ],
+      "explicitDot": [
+        "dns.comss.one"
+      ]
+    },
+    "wlrus": {
+      "source": "https://site.dns.wlrus.cfd/",
+      "ipv4": [],
+      "ipv6": [],
+      "doh": [
+        "https://dns.wlrus.cfd/dns-query"
+      ],
+      "explicitDot": []
+    },
+    "webshift": {
+      "source": "https://dns.webshiftvpn.ru/",
+      "ipv4": [
+        "31.31.207.68",
+        "8.8.8.8"
+      ],
+      "ipv6": [],
+      "doh": [
+        "https://d.webshiftvpn.ru/dns-query`,Vd=`/webshift-dns.mobileconfig`,Hd=`https://t.me/webshiftvpn`,Ud=`https://app.webshiftvpn.ru`,Wd=`https://webshiftvpn.ru`;function"
+      ],
+      "explicitDot": []
+    }
+  }
+}

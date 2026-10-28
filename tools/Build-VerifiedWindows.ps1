@@ -30,7 +30,7 @@ $arguments=@('/noconfig','/nologo','/nostdlib+','/target:winexe','/optimize+','/
 $arguments+=@($references | ForEach-Object {'/r:'+$_})
 $arguments+=@($resources | ForEach-Object {'/resource:'+(Join-Path $root $_.Path)+','+$_.Name})
 $arguments+=@($sources | ForEach-Object {Join-Path $root $_})
-$inputPaths=@($sources)+@($resources | ForEach-Object {$_.Path})+@('src\windows\Properties\app.manifest','src/windows/sources.rsp','config\providers.json','tools\Sync-ProviderAvailability.ps1','tools\Read-WindowsSources.ps1','tools\Build-VerifiedWindows.ps1','build.bat')
+$inputPaths=@($sources)+@($resources | ForEach-Object {$_.Path})+@('src\windows\Properties\app.manifest','src/windows/sources.rsp','config\providers.json','config/catalog.json','config/provider-checkers.json','tools/Build-ProviderCatalog.ps1','tools\Sync-ProviderAvailability.ps1','tools\Read-WindowsSources.ps1','tools\Build-VerifiedWindows.ps1','build.bat')
 $inputs=@($inputPaths | Sort-Object -Unique | ForEach-Object {[pscustomobject]@{Path=$_;SHA256=(Get-FileHash -LiteralPath (Join-Path $root $_)).Hash.ToLowerInvariant()}})
 & $Compiler $arguments
 if($LASTEXITCODE -ne 0){throw 'Deterministic app build failed'}

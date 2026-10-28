@@ -39,3 +39,6 @@ src\windows\Antigravity\BrowserProfiles.cs
 src\windows\Properties\AssemblyInfo.cs
 src\windows\Antigravity\AntigravityHealth.cs
 src\windows\Antigravity\AntigravityFailoverUi.cs
+src\windows\Providers\CatalogDefaults.cs
+src\windows\Providers\CatalogUpdate.cs
+src\windows\Ui\CatalogUi.cs
