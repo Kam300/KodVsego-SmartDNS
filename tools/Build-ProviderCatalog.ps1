@@ -1,11 +1,11 @@
 param([object[]]$Providers,[string]$OutputRoot=(Split-Path $PSScriptRoot -Parent))
 $ErrorActionPreference='Stop'
 $sourceRoot=Split-Path $PSScriptRoot -Parent
-if(!$Providers){$Providers=Get-Content (Join-Path $sourceRoot 'config/providers.json') -Raw | ConvertFrom-Json}
-$checkers=Get-Content (Join-Path $sourceRoot 'config/provider-checkers.json') -Raw | ConvertFrom-Json
+if(!$Providers){$Providers=[IO.File]::ReadAllText((Join-Path $sourceRoot 'config/providers.json')) | ConvertFrom-Json}
+$checkers=[IO.File]::ReadAllText((Join-Path $sourceRoot 'config/provider-checkers.json')) | ConvertFrom-Json
 $path=Join-Path $OutputRoot 'config/catalog.json'
 $existing=$null
-if(Test-Path -LiteralPath $path){try{$existing=Get-Content -LiteralPath $path -Raw | ConvertFrom-Json}catch{}}
+if(Test-Path -LiteralPath $path){try{$existing=[IO.File]::ReadAllText($path) | ConvertFrom-Json}catch{}}
 $content=@{providers=$Providers;checkers=$checkers} | ConvertTo-Json -Depth 30 -Compress
 $same=$existing -and ((@{providers=$existing.providers;checkers=$existing.checkers}|ConvertTo-Json -Depth 30 -Compress) -ceq $content)
 if($same){$revision=[long]$existing.revision;$date=$existing.updatedUtc}else{
