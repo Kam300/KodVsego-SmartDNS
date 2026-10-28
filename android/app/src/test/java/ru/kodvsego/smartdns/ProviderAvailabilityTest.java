@@ -3,6 +3,13 @@ import org.junit.Test;
 import java.lang.reflect.Field;
 import static org.junit.Assert.*;
 public class ProviderAvailabilityTest {
+    @Test public void everyGeminiProviderChecksWebsiteAndApi() {
+        for(Provider provider:Provider.ALL)if(java.util.Arrays.asList(provider.services).contains("Gemini")) {
+            java.util.List<String> hosts=java.util.Arrays.asList(provider.testHosts());
+            assertTrue(provider.name+" must check Gemini website",hosts.contains("gemini.google.com"));
+            assertTrue(provider.name+" must check Gemini API",hosts.contains("generativelanguage.googleapis.com"));
+        }
+    }
     @Test public void comssUsesCurrentAddresses(){assertArrayEquals(new String[]{"94.250.253.55","212.109.195.93"},Provider.at(0).servers);assertEquals("195.133.25.16",Provider.at(0).dotServers[0]);assertEquals("dns.comss.one",Provider.at(0).dot);}
     @Test public void addedProvidersKeepIndependentEndpoints() {
         for(int id=7;id<14;id++)assertTrue(Provider.isAvailable(id));

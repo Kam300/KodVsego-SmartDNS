@@ -24,6 +24,8 @@ static class CatalogUpdateTests {
         string isolated=Path.Combine(Path.GetTempPath(),"SmartDNS-catalog-"+Guid.NewGuid().ToString("N"));CatalogUpdate.root=isolated;
         try{
             var builtin=CatalogUpdate.Parse(CatalogDefaults.Json,CatalogDefaults.Revision,null);Check(builtin.providers.Length==ProviderCatalog.All.Length,"Bundled catalog validates; baseline identities preserved");
+            foreach(var provider in builtin.providers.Where(p=>p.services.Contains("Gemini")))
+                Check(provider.testHosts.Contains("gemini.google.com")&&provider.testHosts.Contains("generativelanguage.googleapis.com"),provider.name+" checks both Gemini website and API");
             Check(CatalogUpdate.Builtins().Length==builtin.providers.Length,"Offline startup uses bundled copy");
             foreach(string ip in new[]{"127.0.0.1","10.0.0.1","169.254.1.1","100.64.0.1","224.0.0.1","::1","fc00::1","fe80::1","fec0::1","2001:db8::1","203.0.113.53","resolver.example","123","1.2"})Check(!CatalogUpdate.PublicIp(ip),"Reject nonpublic or nonnumeric IP "+ip);
             foreach(string url in new[]{"http://resolver.example/dns-query","https://127.0.0.1/dns-query","https://10.0.0.1/dns-query","https://user:pass@resolver.example/dns-query","https://resolver.example:444/dns-query","https://resolver.example/dns-query?secret=x","https://resolver.example/#fragment"}){var d=Next();d.providers[0].doh=url;Reject(()=>CatalogUpdate.Parse(Json(d),builtin.revision,builtin.Raw),"Reject unsafe endpoint");}

@@ -102,9 +102,11 @@ Android-версия использует **локальный DNS-туннел�
 
 ## Провайдеры
 
+[Проверка всех DNS и Gemini от 28 октября 2026](docs/DNS-AUDIT-2026-10-28.md): текущие IPv4 сверены с источниками; обнаружены сетевые сбои GeoHide US и отдельных обычных DNS-транспортов. В проверках каждого Gemini-профиля теперь есть и сайт, и API. Ответ DNS не подтверждает вход в аккаунт или генерацию.
+
 | Провайдер | IPv4 / подключение | DoH |
 | --- | --- | --- |
-| [Comss.one](https://www.comss.ru/page.php?id=7315) | `83.220.169.155`, `212.109.195.93` | `https://dns.comss.one/dns-query` |
+| [Comss.one](https://www.comss.ru/page.php?id=7315) | `94.250.253.55`, `212.109.195.93` | `https://dns.comss.one/dns-query` |
 | [Bezmezhau](https://bezmezhau.com/ru/setup) | `181.215.40.49`, `31.58.216.201` | `https://dns.bezmezhau.com/dns-query` |
 | [DNS-AI](https://dns-ai.ru/) | `194.87.196.13`, `45.151.102.219` · только с шифрованием | `https://dns.dns-ai.ru/dns-query` |
 | [MagicDNS](https://magicdns.ru/) | `109.120.132.43`, `94.249.177.102` | `https://dns.magicdns.ru/dns-query` |

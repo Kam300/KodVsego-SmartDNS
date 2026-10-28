@@ -29,6 +29,7 @@
     "testHosts": [
       "example.com",
       "chatgpt.com",
+      "gemini.google.com",
       "claude.ai",
       "generativelanguage.googleapis.com",
       "api.elevenlabs.io",
@@ -83,6 +84,7 @@
     "testHosts": [
       "example.com",
       "chatgpt.com",
+      "gemini.google.com",
       "claude.ai",
       "generativelanguage.googleapis.com",
       "api.elevenlabs.io",
@@ -130,6 +132,7 @@
     "testHosts": [
       "example.com",
       "chatgpt.com",
+      "gemini.google.com",
       "claude.ai",
       "generativelanguage.googleapis.com",
       "api.elevenlabs.io",
@@ -212,6 +215,7 @@
     "testHosts": [
       "example.com",
       "chatgpt.com",
+      "gemini.google.com",
       "generativelanguage.googleapis.com",
       "open.spotify.com",
       "cloudcode-pa.googleapis.com",
@@ -319,6 +323,7 @@
     "testHosts": [
       "example.com",
       "chatgpt.com",
+      "generativelanguage.googleapis.com",
       "claude.ai",
       "gemini.google.com",
       "elevenlabs.io",
