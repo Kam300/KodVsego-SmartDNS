@@ -25,6 +25,7 @@ public final class MainActivity extends Activity {
     private ProviderCheck.Result checkerResult;private Future<?> checkerTask;private volatile ProviderCheck.SystemIo checkerIo;
     private final ExecutorService checkerWorker=Executors.newSingleThreadExecutor();
     private RemoteCatalog catalog;
+    private ServiceHealthPanel healthPanel;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService tests=Executors.newSingleThreadExecutor();
     private android.content.SharedPreferences prefs;
@@ -46,7 +47,7 @@ public final class MainActivity extends Activity {
     private String lastUiState,providerContent;
     private boolean updatingProvider;
     private boolean tlsSelected;private final Map<Integer,Button> protocolChoices=new HashMap<>();private String lastTestReport="",exportJournal;
-    private final Runnable refresh=new Runnable(){public void run(){updateState();showUpdatePrompt(false);handler.postDelayed(this,1000);}};
+    private final Runnable refresh=new Runnable(){public void run(){if(healthPanel!=null)healthPanel.freshness();updateState();showUpdatePrompt(false);handler.postDelayed(this,1000);}};
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);catalog=RemoteCatalog.get(this);catalog.applyIfIdle(true);prefs=getSharedPreferences("smartdns",MODE_PRIVATE);updater=UpdateController.get(this);AppJournal.init(this);AppJournal.record("Экран","Открыт; версия "+BuildConfig.VERSION_NAME);
         installAfterPermission=saved!=null&&saved.getBoolean("installAfterPermission",false);
@@ -102,6 +103,7 @@ public final class MainActivity extends Activity {
         space(4);state=text("DNS выключен",18,ink,true);state.setTypeface(heading);state.setGravity(Gravity.CENTER);state.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);content.addView(state);
         connectionDetail=text("",13,muted,false);connectionDetail.setTag("connection-detail");connectionDetail.setGravity(Gravity.CENTER);connectionDetail.setVisibility(View.GONE);content.addView(connectionDetail);connectionDetail.setOnClickListener(v->message("Подробности подключения",DnsVpnService.switchError.isEmpty()?DnsVpnService.status:DnsVpnService.switchError));
         checkerStatus=text("Чекер: DNS выключен",12,muted,false);checkerStatus.setTag("provider-checker");checkerStatus.setGravity(Gravity.CENTER);checkerStatus.setMinHeight(dp(48));checkerStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);content.addView(checkerStatus);checkerStatus.setOnClickListener(v->showChecker());
+        space(12);healthPanel=new ServiceHealthPanel(this,ink,muted,accent,card,this::message);content.addView(healthPanel);space(16);
         content.addView(text("После смены DNS полностью перезапустите нужное приложение.",13,muted,false));space(20);
         LinearLayout selection=box();selection.addView(text("Провайдер DNS",12,muted,false));
         providers=text("",18,ink,true);providers.setId(R.id.dns_provider);providers.setGravity(Gravity.CENTER_VERTICAL);
@@ -202,7 +204,7 @@ public final class MainActivity extends Activity {
     private void save(){prefs.edit().putInt("provider",selected).putBoolean("encrypted",encrypted.isChecked()).putInt("protocol",tlsSelected?DnsConfig.DOT:encrypted.isChecked()?DnsConfig.DOH:DnsConfig.PLAIN).apply();DnsWidget.updateAll(this);}
     private DnsConfig config(){if(!Provider.isAvailable(selected))throw new IllegalArgumentException("Провайдер временно недоступен. Выберите другой DNS.");return new DnsConfig(selected,tlsSelected?DnsConfig.DOT:encrypted.isChecked()?DnsConfig.DOH:DnsConfig.PLAIN);}
     private void updateState() {
-        if(state==null)return;if(catalog!=null&&catalog.applyIfIdle(!testing&&providerDialog==null&&dialogs.stream().noneMatch(Dialog::isShowing))){selected=Provider.preferredIndex(selected);updateProvider();lastUiState=null;checkerKey="";}updateChecker(false);boolean locked=DnsVpnService.active||DnsVpnService.connecting;
+        if(state==null)return;if(catalog!=null&&catalog.applyIfIdle(!testing&&(healthPanel==null||!healthPanel.busy())&&providerDialog==null&&dialogs.stream().noneMatch(Dialog::isShowing))){selected=Provider.preferredIndex(selected);updateProvider();lastUiState=null;checkerKey="";}updateChecker(false);boolean locked=DnsVpnService.active||DnsVpnService.connecting;
         DnsConfig current=DnsVpnService.current;if(DnsVpnService.active&&current!=null&&(selected!=current.provider||config().protocol!=current.protocol)){selected=current.provider;tlsSelected=current.protocol==DnsConfig.DOT;updatingProvider=true;encrypted.setChecked(current.encrypted);updatingProvider=false;updateProvider();}
         String snapshot=DnsVpnService.status+":"+locked+":"+DnsVpnService.active+":"+DnsVpnService.connecting+":"+selected+":"+testing+":"+DnsVpnService.switching+":"+DnsVpnService.switchError;
         if(snapshot.equals(lastUiState))return;lastUiState=snapshot;
@@ -477,7 +479,7 @@ public final class MainActivity extends Activity {
         if(serviceRow!=null){serviceRow.animate().cancel();serviceRow.setAlpha(1);serviceRow.setTranslationY(0);}
     }
     @Override protected void onResume(){super.onResume();resumed=true;if(catalog!=null)catalog.check(false,()->{if(!isDestroyed()){lastUiState=null;updateState();}});updatePromptKey="";settleMotion();lastUiState=null;updateState();connect.resumeUi();handler.removeCallbacks(refresh);handler.post(refresh);DnsWidget.updateAll(this);updater.attach(updateListener);android.net.ConnectivityManager network=getSystemService(android.net.ConnectivityManager.class);if(network!=null&&network.getActiveNetwork()!=null)updater.check(false);}
-    @Override protected void onPause(){resumed=false;cancelChecker();checkerKey="";updater.detach(updateListener);handler.removeCallbacks(refresh);settleMotion();if(connect!=null)connect.pauseUi();super.onPause();}
+    @Override protected void onPause(){resumed=false;if(healthPanel!=null&&healthPanel.busy())healthPanel.cancel("Проверка приостановлена · нажмите проверить снова");cancelChecker();checkerKey="";updater.detach(updateListener);handler.removeCallbacks(refresh);settleMotion();if(connect!=null)connect.pauseUi();super.onPause();}
     @Override protected void onSaveInstanceState(Bundle state){state.putBoolean("installAfterPermission",installAfterPermission);super.onSaveInstanceState(state);}
     @Override protected void onDestroy(){updater.detach(updateListener);if(providerDialog!=null)providerDialog.dismiss();for(Dialog dialog:new java.util.ArrayList<>(dialogs))dialog.dismiss();handler.removeCallbacksAndMessages(null);cancelChecker();checkerWorker.shutdownNow();tests.shutdownNow();super.onDestroy();}
 }

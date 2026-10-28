@@ -42,3 +42,5 @@ src\windows\Antigravity\AntigravityFailoverUi.cs
 src\windows\Providers\CatalogDefaults.cs
 src\windows\Providers\CatalogUpdate.cs
 src\windows\Ui\CatalogUi.cs
+src\windows\Diagnostics\ServiceBoard.cs
+src\windows\Ui\ServiceBoardWindow.cs

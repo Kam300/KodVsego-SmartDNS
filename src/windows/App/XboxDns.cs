@@ -311,7 +311,7 @@ namespace HbAi.XboxDns
         Rectangle providerPrevious = new Rectangle(28, 500, 30, 56);
         Rectangle providerNext = new Rectangle(382, 500, 30, 56);
         Rectangle ProviderBar {get{return new Rectangle(28,LowerY(500),layoutWidth-56,56);}}
-        Rectangle DnsTestButton {get{return new Rectangle(layoutWidth-138,LowerY(630),92,24);}}
+        Rectangle DnsTestButton {get{return new Rectangle(44,LowerY(630),layoutWidth-88,24);}}
         int providerScroll;
         string[] probeLabels = Enumerable.Repeat("Ответы DNS ещё не проверены", Dns.Name.Length).ToArray();
         bool probing;
@@ -1421,14 +1421,12 @@ namespace HbAi.XboxDns
             }
             if(googleMode){using(var font=UiFont(fBold,10f))using(var brush=new SolidBrush(Ink))g.DrawString("Gemini app · NotebookLM",font,brush,card.X+20,card.Y+33);}
             else DrawServiceIcons(g, new RectangleF(card.X + 20, card.Y + 33, card.Width - 40, 23));
-            using (var f = UiFont(fMed, 8f))
-            using (var b = new SolidBrush(Accent)) g.DrawString(probing ? "Проверяем ответы DNS…" : probeLabels[dnsSet], f, b, 48, LowerY(636));
             using (var path = RoundPath(DnsTestButton, 8))
             using (var b = new SolidBrush(Selection)) g.FillPath(b, path);
             using (var f = UiFont(fBold, 8f))
             using (var b = new SolidBrush(ContrastInk))
-            using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                g.DrawString(googleMode?"Проверить":"Тест DNS", f, b, DnsTestButton, sf);
+            using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center,FormatFlags=StringFormatFlags.NoWrap,Trimming=StringTrimming.EllipsisCharacter })
+                g.DrawString("Карта сервисов · "+serviceBoardSummary+"  →", f, b, DnsTestButton, sf);
 
             using (var path = RoundPath(rSecureOption, 16))
             using (var fill = new SolidBrush(CardBg))
@@ -1649,7 +1647,7 @@ namespace HbAi.XboxDns
             }
             if (providerPrevious.Contains(e.Location)) { ScrollProviderPage(-1); return; }
             if (providerNext.Contains(e.Location)) { ScrollProviderPage(1); return; }
-            if (DnsTestButton.Contains(e.Location)) { if(googleMode&&resolverResult==null)CheckGoogleServices();else ShowDnsDiagnostics(); return; }
+            if (DnsTestButton.Contains(e.Location)) { ShowServiceBoard(); return; }
             if (rAgCleanup.Contains(e.Location) && agStatus.External&&!ManagedMode) {
                 if (busy || agLoading) return;
                 RemoveOldAntigravity();

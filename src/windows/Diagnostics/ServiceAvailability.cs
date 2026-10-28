@@ -95,11 +95,15 @@ namespace HbAi.XboxDns
         internal static ServiceAvailabilityResult Check(int target,int provider,bool encrypted,IServiceAvailabilityProbe probe,CancellationToken cancel,int parallelism=2)
         {
             if(target<0||target>=Targets.Length)throw new ArgumentOutOfRangeException("target");
-            var endpoints=Targets[target].Endpoints;
+            return Check(Targets[target],provider,encrypted,probe,cancel,parallelism);
+        }
+        internal static ServiceAvailabilityResult Check(ServiceTarget target,int provider,bool encrypted,IServiceAvailabilityProbe probe,CancellationToken cancel,int parallelism=2)
+        {
+            var endpoints=target.Endpoints;
             var results=new ServiceEndpointResult[endpoints.Length];
             Parallel.For(0,endpoints.Length,new ParallelOptions{MaxDegreeOfParallelism=parallelism,CancellationToken=cancel},i=> {
                 var endpoint=endpoints[i];var result=new ServiceEndpointResult{Endpoint=endpoint};var clock=Stopwatch.StartNew();
-                var trace=new StringBuilder("Availability: "+Targets[target].Name+"; provider="+Dns.Name[provider]+"; host="+endpoint.Host+endpoint.Path+"; UTC="+DateTime.UtcNow.ToString("O")+"\n");
+                var trace=new StringBuilder("Availability: "+target.Name+"; provider="+Dns.Name[provider]+"; host="+endpoint.Host+endpoint.Path+"; UTC="+DateTime.UtcNow.ToString("O")+"\n");
                 string stage="DNS";
                 try {
                     cancel.ThrowIfCancellationRequested();
@@ -127,7 +131,7 @@ namespace HbAi.XboxDns
                 catch(Exception error){result.Error=stage+": "+(stage=="DNS"?"нет ответа или ошибка адреса":stage=="TLS"?"защищённое соединение не подтверждено":stage=="HTTP"?"нет корректного ответа сервиса":"не удалось подключиться");trace.AppendLine(error.GetType().Name+": "+error.Message);}
                 result.Milliseconds=(int)clock.ElapsedMilliseconds;trace.AppendLine("Endpoint total="+result.Milliseconds+" ms");result.Trace=trace.ToString();results[i]=result;
             });
-            cancel.ThrowIfCancellationRequested();return new ServiceAvailabilityResult{Name=Targets[target].Name,Endpoints=results};
+            cancel.ThrowIfCancellationRequested();return new ServiceAvailabilityResult{Name=target.Name,Endpoints=results};
         }
         static void ErrorStrings(object value,List<string> output,int depth)
         {
@@ -155,7 +159,7 @@ namespace HbAi.XboxDns
                 (redirect.Host=="accounts.google.com"||redirect.AbsolutePath.IndexOf("login",StringComparison.OrdinalIgnoreCase)>=0||redirect.AbsolutePath.IndexOf("signin",StringComparison.OrdinalIgnoreCase)>=0);
             if(response.Status>=300&&response.Status<400)return login?ServiceReply.Login:ServiceReply.Unknown;
             if(response.Status==401)return ServiceReply.Login;
-            if(endpoint.Api&&(response.Status==400||response.Status==403)&&new[]{"api key","api_key","api-key","unauthenticated","authentication","missing bearer","not authenticated"}.Any(error.Contains))return ServiceReply.Login;
+            if(endpoint.Api&&(response.Status==400||response.Status==403)&&new[]{"api key","api_key","api-key","unauthenticated","authentication","missing bearer","not authenticated","unregistered callers"}.Any(error.Contains))return ServiceReply.Login;
             if(response.Status>=200&&response.Status<300) {
                 // An HTML 200 at an API route can be a substituted landing/challenge page.
                 if(endpoint.Api) {

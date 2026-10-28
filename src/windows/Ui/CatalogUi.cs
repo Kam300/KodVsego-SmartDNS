@@ -26,8 +26,8 @@ namespace HbAi.XboxDns {
     }
     partial class MainForm {
         void ApplyCatalogIfIdle(){
-            if(!profilePreferences||initializing||active||busy||googleChecking||resolverChecking||latencyChecking||agLoading||agSearch!=null||HasLegacyAntigravityState||hasBackup||ManagedDns.Running||ManagedDns.Stopping||Form.ActiveForm!=this)return;
-            try{var customs=RuntimeProviders.Customs;if(CatalogUpdate.Promote(true)){RefreshCustomProviders(customs);DiagnosticReport.Record("Каталог DNS","Применена версия "+CatalogUpdate.Revision);}}
+            if(!profilePreferences||initializing||active||busy||googleChecking||resolverChecking||latencyChecking||agLoading||agSearch!=null||serviceBoardWindow!=null&&serviceBoardWindow.Running||HasLegacyAntigravityState||hasBackup||ManagedDns.Running||ManagedDns.Stopping||Form.ActiveForm!=this)return;
+            try{var customs=RuntimeProviders.Customs;if(CatalogUpdate.Promote(true)){serviceBoardSummary="каталог изменился · повторите";RefreshCustomProviders(customs);DiagnosticReport.Record("Каталог DNS","Применена версия "+CatalogUpdate.Revision);}}
             catch(Exception error){DiagnosticReport.Record("Каталог DNS",error.GetType().Name);}
         }
         void CheckCatalogInSettings(StyledDialog dialog){
