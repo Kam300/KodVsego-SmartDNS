@@ -4,65 +4,39 @@
 Одна страница может описывать разные профили, bootstrap, IPv6 и примеры. Не переносите все найденные IP в один профиль.
 Отказы сайтов не выключают провайдеров и не меняют последний каталог.
 
-## wlrus
+## comss
 
-Источник: https://site.dns.wlrus.cfd/
+Источник: https://www.comss.ru/page.php?id=7315
 
 Текущие настройки:
 ```json
 {
   "ipv4": [
-    "95.85.240.254",
-    "138.124.254.134"
+    "94.250.253.55",
+    "212.109.195.93"
   ],
   "ipv6": [],
-  "doh": "https://dns.wlrus.cfd/dns-query",
-  "dot": "dns.wlrus.cfd"
+  "doh": "https://dns.comss.one/dns-query",
+  "dot": "dns.comss.one"
 }
 ```
 
 Опубликованные на странице адреса (кандидаты для проверки):
 ```json
 {
-  "source": "https://site.dns.wlrus.cfd/",
-  "ipv4": [],
-  "ipv6": [],
-  "doh": [
-    "https://dns.wlrus.cfd/dns-query"
-  ],
-  "explicitDot": []
-}
-```
-
-## webshift
-
-Источник: https://dns.webshiftvpn.ru/
-
-Текущие настройки:
-```json
-{
+  "source": "https://www.comss.ru/page.php?id=7315",
   "ipv4": [
-    "31.31.207.68"
-  ],
-  "ipv6": [],
-  "doh": "https://d.webshiftvpn.ru/dns-query",
-  "dot": null
-}
-```
-
-Опубликованные на странице адреса (кандидаты для проверки):
-```json
-{
-  "source": "https://dns.webshiftvpn.ru/",
-  "ipv4": [
-    "31.31.207.68",
-    "8.8.8.8"
+    "195.133.25.16",
+    "212.109.195.93",
+    "212.109.221.20"
   ],
   "ipv6": [],
   "doh": [
-    "https://d.webshiftvpn.ru/dns-query`,Vd=`/webshift-dns.mobileconfig`,Hd=`https://t.me/webshiftvpn`,Ud=`https://app.webshiftvpn.ru`,Wd=`https://webshiftvpn.ru`;function"
+    "https://dns.comss.one/dns-query"
   ],
-  "explicitDot": []
+  "explicitDot": [
+    "dns.comss.one"
+  ]
 }
 ```
 
