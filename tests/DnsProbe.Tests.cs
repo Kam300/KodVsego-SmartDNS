@@ -50,7 +50,7 @@ static class ProbeTests
         Check(Dns.EncryptedOnly(5) && EncryptedDns.Templates[5] == "https://dns.dns-ai.ru/dns-query" && Dns.V4[5].SequenceEqual(new[]{"194.87.196.13","45.151.102.219"}) && EncryptedDns.ServersFor(5).SequenceEqual(Dns.V4[5]), "DNS-AI uses current published addresses and requires encryption");
         Check(Dns.MatchProvider(new[]{"194.87.196.13","186.246.49.127"})==5 && Dns.KnownServers.Contains("186.246.49.127"),"Retired DNS-AI pair remains recognized and recoverable");
         Check(!EncryptedDns.ServersFor(5).Contains("186.246.49.127") && Dns.MatchProvider(new[]{"186.246.49.127","45.151.102.219"})==-1 && Dns.MatchProvider(new[]{"186.246.49.127"})==-1,"Retired address is never newly applied; partial and mixed legacy sets are not attributed to DNS-AI");
-        Check(Dns.Name[6]=="MagicDNS" && Dns.V4[6].SequenceEqual(new[]{"109.120.132.43","94.249.177.102"}) && EncryptedDns.Templates[6]=="https://dns.magicdns.ru/dns-query" && !Dns.EncryptedOnly(6), "MagicDNS supports published plain and HTTPS endpoints");
+        Check(Dns.Name[6]=="MagicDNS" && Dns.V4[6].SequenceEqual(new[]{"109.120.177.170","45.88.163.92"}) && EncryptedDns.Templates[6]=="https://api.magicdns.ru/sync" && !Dns.EncryptedOnly(6), "MagicDNS supports published plain and HTTPS endpoints");
         var magicSecure=new FamilyBackup{Family="IPv4",Manual=true,Servers=EncryptedDns.ServersFor(6),DohCaptured=true,Doh=EncryptedDns.Strict(2,EncryptedDns.Templates[6])};
         Check(magicSecure.Servers.SequenceEqual(Dns.V4[6])&&EncryptedDns.ExplicitlyConfigured(magicSecure,6),"MagicDNS configures strict DoH for both published servers");
         magicSecure.Doh[1].Flags=6;

@@ -10,6 +10,9 @@ class WatcherTest(unittest.TestCase):
     def test_extracts_data_not_scripts_and_rejects_unsafe_endpoints(self):
         found=w.extract('<code>1.1.1.1 127.0.0.1 10.0.0.1 100.64.0.1</code><script>8.8.8.8</script><pre>https://dns.example/dns-query tls://dns.example</pre><div>https://127.0.0.1/dns-query https://user:pass@dns.example/dns-query</div>')
         self.assertEqual(['1.1.1.1'],found['ipv4']);self.assertEqual(['https://dns.example/dns-query'],found['doh']);self.assertEqual(['dns.example'],found['explicitDot'])
+    def test_magicdns_sync_endpoint(self):
+        found = w.extract('<code>https://api.magicdns.ru/sync</code> https://foreign.example/sync https://api.magicdns.ru/sync/other')
+        self.assertEqual(['https://api.magicdns.ru/sync'], found['doh'])
     def test_timeout_keeps_old_observation_and_does_not_disable(self):
         p=[dict(key='one',enabled=True,url='https://dns.example/',name='One',ipv4=['1.1.1.1'])];previous={'schema':1,'observations':{'one':{'source':'https://dns.example/','ipv4':['1.1.1.1']}}}
         def offline(url):raise TimeoutError()

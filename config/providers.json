@@ -296,14 +296,14 @@
     "name": "MagicDNS",
     "enabled": true,
     "ipv4": [
-      "109.120.132.43",
-      "94.249.177.102"
+      "109.120.177.170",
+      "45.88.163.92"
     ],
     "ipv6": [],
-    "doh": "https://dns.magicdns.ru/dns-query",
+    "doh": "https://api.magicdns.ru/sync",
     "windowsDohServers": [
-      "109.120.132.43",
-      "94.249.177.102"
+      "109.120.177.170",
+      "45.88.163.92"
     ],
     "encryptedOnly": false,
     "services": [
@@ -333,10 +333,16 @@
     "description": "ChatGPT, Claude, Gemini, ElevenLabs, Antigravity",
     "site": "magicdns.ru",
     "url": "https://magicdns.ru/",
-    "dot": "dns.magicdns.ru",
+    "dot": "api.magicdns.ru",
     "windowsDotServers": [
-      "109.120.132.43",
-      "94.249.177.102"
+      "45.88.163.92",
+      "109.120.177.170"
+    ],
+    "legacyIpv4": [
+      [
+        "109.120.132.43",
+        "94.249.177.102"
+      ]
     ]
   },
   {

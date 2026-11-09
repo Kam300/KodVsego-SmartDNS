@@ -70,6 +70,9 @@ def extract_text(text):
     ips = sorted({value for value in re.findall(r'(?<![\w.:])(?:\d{1,3}\.){3}\d{1,3}(?![\w.:])', text) if public_ip(value)})[:64]
     v6 = sorted({value for value in re.findall(r'(?<![\w:])(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(?![\w:])', text) if public_ip(value)})[:32]
     endpoints = sorted({url.rstrip('.,;)') for url in re.findall(r'https://[^\s<>"\']+/dns-query(?:[^\s<>"\']*)?', text) if https_url(url.rstrip('.,;)'))})[:32]
+    # MagicDNS publishes a nonstandard DoH path. Only recognize it on its official domain.
+    if re.search(r'''https://api[.]magicdns[.]ru/sync(?=$|[\s<>"'.,;)])''', text):
+        endpoints = sorted(set(endpoints + ['https://api.magicdns.ru/sync']))[:32]
     dot = sorted({host.rstrip('.,;)') for host in re.findall(r'tls://([A-Za-z0-9.-]+)', text) if public_host(host.rstrip('.,;)'))})[:32]
     return dict(ipv4=ips, ipv6=v6, doh=endpoints, explicitDot=dot)
 
