@@ -52,16 +52,17 @@ static class AutoDnsTests
         Check(AutoDns.GoalIndex("ChatGPT")==1&&AutoDns.GoalIndex("gemini")==0&&AutoDns.GoalIndex(null)==-1&&AutoDns.GoalIndex("obsolete service")==-1,"Saved service names reload safely without relying on numeric order");
         Check(AutoDns.GoalIndex("Xbox")==-1&&Enumerable.Range(0,AutoDns.Goals.Length).All(g=>!AutoDns.Candidates(g,false).Contains(3)),"Saved Xbox goal falls back safely and Xbox DNS never participates in Auto");
         Check(!AutoDns.Candidates(AutoDns.GoalIndex("Antigravity"),false).Contains(0)&&!AutoDns.Candidates(2,false).Contains(4),"Unsupported Comss Antigravity and Bezmezhau Claude combinations excluded");
-        Check(AutoDns.Candidates(0,true).SequenceEqual(new[]{0,4,5,6,7,8,9,10,13}),"Encrypted Auto includes the new providers with published Gemini support");
-        Check(AutoDns.Candidates(0,true,true).SequenceEqual(new[]{0,4,5,6,7,8,9,10,13}),"TLS Auto follows confirmed TLS metadata and availability switches");
-        Check(!Dns.IsAvailable(1)&&!Dns.IsAvailable(2)&&!Dns.IsAvailable(3)&&!Dns.IsAvailable(-1)&&!Dns.IsAvailable(Dns.Name.Length)&&Dns.IsAvailable(8),"US GeoHide remains enabled; historical RU/EU and Xbox IDs stay disabled");
-        Check(AutoDns.Candidates(AutoDns.GoalIndex("Antigravity"),false).SequenceEqual(new[]{4,5,6,9})&&AutoDns.Candidates(AutoDns.GoalIndex("Antigravity"),true).SequenceEqual(new[]{4,5,6,9}),"Malw DNS joins Antigravity Auto while Malw CF is excluded");
+        Check(AutoDns.Candidates(0,true).SequenceEqual(new[]{0,4,5,6,7,9,14,16}),"Encrypted Auto includes the enabled providers with published Gemini support");
+        Check(AutoDns.Candidates(0,true,true).SequenceEqual(new[]{0,4,5,6,7,9,14}),"TLS Auto follows confirmed TLS metadata and availability switches");
+        Check(!Dns.IsAvailable(1)&&!Dns.IsAvailable(2)&&!Dns.IsAvailable(3)&&!Dns.IsAvailable(8)&&!Dns.IsAvailable(10)&&!Dns.IsAvailable(13)&&!Dns.IsAvailable(-1)&&!Dns.IsAvailable(Dns.Name.Length),"Disabled legacy GeoHide, Xbox, GeoHide US, WLrus and Malw CF remain excluded");
+        Check(AutoDns.Candidates(AutoDns.GoalIndex("Antigravity"),false).SequenceEqual(new[]{4,5,6,9,14,16})&&AutoDns.Candidates(AutoDns.GoalIndex("Antigravity"),true).SequenceEqual(new[]{4,5,6,9,14,16})&&AutoDns.Candidates(AutoDns.GoalIndex("Antigravity"),true,true).SequenceEqual(new[]{4,5,6,9,14}),"Antigravity Auto includes enabled DoH/DoT providers without excluded Malw CF");
         Check(Enumerable.Range(0,AutoDns.Goals.Length).All(g=>!AutoDns.Candidates(g,false).Contains(11)&&!AutoDns.Candidates(g,false).Contains(12)),"Webshift and filtering AdGuard are not advertised as AI unlockers without declared coverage");
-        Check(Dns.Name.Length==16&&Enumerable.Range(7,9).All(Dns.IsAvailable)&&ProviderCatalog.All[8].key=="geohide-us"&&ProviderCatalog.All[14].key=="pereval"&&ProviderCatalog.All[15].key=="geohide-eu-current","New providers append to the shared catalog without reviving GeoHide RU/EU");
+        Check(Dns.Name.Length==17&&new[]{0,4,5,6,7,9,11,12,14,15,16}.All(Dns.IsAvailable)&&ProviderCatalog.All[8].key=="geohide-us"&&ProviderCatalog.All[14].key=="pereval"&&ProviderCatalog.All[15].key=="geohide-eu-current"&&ProviderCatalog.All[16].key=="dns-ai-cf","New providers append to the shared catalog without reviving disabled entries");
         Check(ProviderCatalog.All[11].doh=="https://d.webshiftvpn.ru/dns-query"&&Dns.EncryptedOnly(11)&&!DotDns.Available(11)&&Dns.V4[11].SequenceEqual(new[]{"31.31.207.68"}),"Webshift uses its verified bootstrap with HTTPS only");
         Check(Dns.V4[12].SequenceEqual(new[]{"94.140.14.14","94.140.15.15"})&&EncryptedDns.Templates[12]=="https://dns.adguard-dns.com/dns-query"&&DotDns.Host(12)=="dns.adguard-dns.com","AdGuard addresses stay separate from Webshift and use the matching TLS hostname");
-        Check(Dns.EncryptedOnly(13)&&DotDns.Available(13)&&EncryptedDns.Templates[13].Contains("5u35p8m9i7.cloudflare-gateway.com"),"Published Malw Cloudflare alternative supports encryption without exposing plaintext mode");
-        Check(Dns.V6[7].Length==1&&Dns.V6[9].Length==2&&Dns.V6[12].Length==2&&Dns.V4[8].Length==4,"Published IPv6 and all four GeoHide US addresses are retained");
+        Check(!Dns.IsAvailable(13)&&Dns.EncryptedOnly(13)&&DotDns.Available(13)&&EncryptedDns.Templates[13].Contains("5u35p8m9i7.cloudflare-gateway.com"),"Retired Malw Cloudflare metadata stays intact for existing settings");
+        Check(Dns.EncryptedOnly(16)&&!DotDns.Available(16)&&EncryptedDns.Templates[16]=="https://cf.dns-ai.ru/dns-query"&&Dns.V4[16].SequenceEqual(new[]{"104.21.82.125","172.67.157.232"}),"DNS-AI CF uses Cloudflare fallback DoH with encryption required");
+        Check(Dns.V6[7].Length==1&&Dns.V6[9].Length==2&&Dns.V6[12].Length==2&&Dns.V4[8].Length==4,"Published IPv6 and historical GeoHide US addresses are retained");
         var switches=(bool[])typeof(ProviderAvailability).GetField("Enabled",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static).GetValue(null);
         var savedSwitches=(bool[])switches.Clone();
         try {
@@ -74,11 +75,11 @@ static class AutoDnsTests
             Check(new[]{0,2}.All(p=>AntigravityDns.Run(true,false,p).Contains("временно недоступен")),"Same switch blocks Antigravity rules");
         } finally {Array.Copy(savedSwitches,switches,switches.Length);}
         var fake=new Probe();var results=AutoDns.Search(0,false,fake,CancellationToken.None);
-        Check(results.Length==9&&AutoDns.Best(results).Provider==4,"Only an enabled candidate with both DNS and HTTPS succeeds across the expanded catalog");
+        Check(results.Length==8&&AutoDns.Best(results).Provider==4,"Only an enabled candidate with both DNS and HTTPS succeeds across the expanded catalog");
         Check(fake.badAddressAttempts==1,"Gemini website retries a failed IP before the alternative resolved address");
         string diagnostic=AutoDns.Diagnostic(0,results);
         Check(diagnostic.Contains("Auto goal=Gemini")&&diagnostic.Contains("109.120.131.201")&&diagnostic.Contains("simulated relay timeout")&&diagnostic.Contains("Classification=Response")&&diagnostic.Contains("Total=")&&diagnostic.Contains("IOException"),"Developer log keeps failed IP attempts, error type, timings and website classification");
-        Check(results.Single(r=>r.Provider==5).Encrypted&&results.Single(r=>r.Provider==13).Encrypted&&fake.encryptedCalls==2,"DNS-AI and Malw CF always use encryption even in mixed search");
+        Check(results.Single(r=>r.Provider==5).Encrypted&&results.Single(r=>r.Provider==16).Encrypted&&fake.encryptedCalls==2,"DNS-AI and DNS-AI CF always use encryption even in mixed search");
         Check(AutoDns.Best(AutoDns.Search(0,false,new Probe{FailAll=true},CancellationToken.None))==null,"All failed candidates produce no selection");
         var currentOnly=new Probe();
         var health=AutoDns.Search(0,false,currentOnly,CancellationToken.None,null,4);
@@ -124,8 +125,20 @@ static class AutoDnsTests
         Check(AutoDns.Best(verified)!=null&&AutoDns.Report(chatGpt,verified).Contains("API:"),"Expected API response is eligible with separate website and API results");
         var concurrent=new Probe{AnyProvider=true};
         AutoDns.Search(0,false,concurrent,CancellationToken.None);
-        Check(concurrent.maxRequests<=4&&concurrent.calls==9,"Expanded catalog checks remain bounded to four concurrent HTTP requests");
+        Check(concurrent.maxRequests<=4&&concurrent.calls==8,"Expanded catalog checks remain bounded to four concurrent HTTP requests");
+        var directGuardProbe=new DirectAutoProbe();
+        var directGemini=AutoDns.Search(0,false,directGuardProbe,CancellationToken.None,null,4).Single();
+        Check(!directGemini.Ok&&directGemini.Availability.Endpoints[0].Reply==ServiceReply.Direct,"Auto Gemini rejects unspoofed direct CDN/origin IPs");
+        var directAg=AutoDns.Search(AutoDns.GoalIndex("Antigravity"),true,directGuardProbe,CancellationToken.None,null,6).Single();
+        Check(!directAg.Ok&&directAg.Error.Contains("Без подмены DNS"),"Auto Antigravity rejects direct Google IPs via IDirectAddressGuard");
         Check(!diagnostic.Contains("Missing authentication"),"Auto diagnostics do not copy raw API response bodies");
         Console.WriteLine("All "+passed+" auto-selection checks passed; fake probes only, no network or DNS changes.");
+    }
+    sealed class DirectAutoProbe : IAutoDnsProbe, IDirectAddressGuard
+    {
+        public string[] Resolve(int provider,bool encrypted,string host,CancellationToken cancel){return new[]{"172.217.118.4"};}
+        public bool IsDirectAddress(string host,string address,CancellationToken cancel){return DirectDnsGuard.KnownDirectRange(address);}
+        public void Https(string host,string address,bool api,CancellationToken cancel){throw new Exception("Should not probe direct address");}
+        public ServiceHttpReply Request(ServiceEndpoint endpoint,string address,CancellationToken cancel){throw new Exception("Should not request direct address");}
     }
 }

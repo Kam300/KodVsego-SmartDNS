@@ -32,6 +32,14 @@ static class ServiceAvailabilityTests
             return response;
         }
     }
+    sealed class DirectProbe : IServiceAvailabilityProbe, IDirectAddressGuard
+    {
+        internal int calls;
+        internal string[] Addresses = new[]{"142.251.1.1"};
+        public string[] Resolve(int provider,bool encrypted,string host,CancellationToken cancel){cancel.ThrowIfCancellationRequested();return Addresses;}
+        public bool IsDirectAddress(string host,string address,CancellationToken cancel){cancel.ThrowIfCancellationRequested();return DirectDnsGuard.KnownDirectRange(address);}
+        public ServiceHttpReply Request(ServiceEndpoint endpoint,string address,CancellationToken cancel){Interlocked.Increment(ref calls);return Reply(endpoint.Api?401:200,"{}");}
+    }
     static ServiceHttpReply Read(string wire,bool api=true)
     {using(var input=new MemoryStream(Encoding.UTF8.GetBytes(wire)))return ServiceAvailabilityProbe.ReadResponse(input,api,CancellationToken.None);}
     static void Invalid(string wire,string reason)
@@ -116,6 +124,22 @@ static class ServiceAvailabilityTests
         string page="<title>Access denied</title>";string htmlWire="HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\nContent-Length: "+page.Length+"\r\n\r\n"+page;
         using(var wire=new MemoryStream(Encoding.ASCII.GetBytes(htmlWire)))Check(ServiceAvailabilityProbe.ReadResponse(wire,true,CancellationToken.None).Body==null,"Existing public API probes still avoid downloading HTML");
         using(var wire=new MemoryStream(Encoding.ASCII.GetBytes(htmlWire)))Check(ServiceAvailabilityProbe.ReadResponse(wire,true,CancellationToken.None,false,true).Body==page,"Explicit diagnostics can inspect bounded anonymous HTML errors");
+        foreach(string ip in new[]{"142.251.1.1","172.217.118.4","104.18.32.47","172.66.0.243","160.79.104.10","151.101.1.42","199.232.175.42"})
+            Check(DirectDnsGuard.KnownDirectRange(ip),"Direct range recognizes origin/CDN IP "+ip);
+        foreach(string ip in new[]{"206.223.242.221","31.58.216.201","144.31.159.147","152.228.98.30"})
+            Check(!DirectDnsGuard.KnownDirectRange(ip),"Direct range excludes Smart DNS proxy IP "+ip);
+        var directProbe=new DirectProbe();
+        var directResult=ServiceAvailability.Check(0,0,false,directProbe,CancellationToken.None);
+        Check(directProbe.calls==0&&directResult.Endpoints[0].Reply==ServiceReply.Direct&&!directResult.CanRecommend&&!directResult.OfferReport&&directResult.Endpoints[0].Caption=="Без подмены DNS · прямой адрес сервиса","Direct IP is rejected cleanly without claiming availability");
+        var fallbackProbe=new DirectProbe{Addresses=new[]{"142.251.1.1","206.223.242.221"}};
+        var fallbackResult=ServiceAvailability.Check(0,0,false,fallbackProbe,CancellationToken.None);
+        Check(fallbackProbe.calls==1&&fallbackResult.CanRecommend&&fallbackResult.Endpoints[0].Address=="206.223.242.221","Working proxy IP still succeeds after skipping direct IP");
+        var customEntry=CustomDns.Create(CustomDns.First,"Custom DNS","1.1.1.1",null,null,false,false);
+        RuntimeProviders.Replace(new[]{customEntry});
+        try {
+            var customBypass=ServiceAvailability.Check(0,CustomDns.First,false,new DirectProbe(),CancellationToken.None);
+            Check(customBypass.Endpoints[0].Reply==ServiceReply.Response&&customBypass.CanRecommend,"Custom DNS bypasses DirectDnsGuard check");
+        } finally { RuntimeProviders.Replace(new ProviderEntry[0]); }
         Console.WriteLine("All "+passed+" availability checks passed; no credentials or network settings used.");
     }
 }

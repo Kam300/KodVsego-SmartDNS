@@ -41,13 +41,13 @@ namespace HbAi.XboxDns
     }
     static class ProviderCheck
     {
-        internal static Func<int,string> CatalogKind=p=>p==0?"comss":p==5?"dns-ai":p==7?"zapret":p==10?"wlrus":p==11?"webshift":p==9||p==13?"malw":null;
+        internal static Func<int,string> CatalogKind=p=>p==0?"comss":p==5||p==16?"dns-ai":p==7?"zapret":p==10?"wlrus":p==11?"webshift":p==9||p==13?"malw":null;
         internal static Func<int,string,string,string> CatalogUrl=(p,field,fallback)=>fallback;
         static string Url(int p,string fallback,string nonce,string field){return CatalogUrl(p,field,fallback)+"?"+(CatalogKind(p)=="webshift"?"t":CatalogKind(p)=="zapret"?"token":"c")+"="+nonce;}
         internal static bool Available(int provider)
         {return Dns.IsAvailable(provider)&&CatalogKind(provider)!=null;}
         static string Source(int provider)
-        {return provider==0?"comss.ru/page.php?id=7315":provider==5?"dns-ai.ru/ip":provider==7?"dns.zapret.moe":provider==10?"site.dns.wlrus.cfd":provider==11?"dns.webshiftvpn.ru":"info.dns.malw.link";}
+        {string k=CatalogKind(provider);return k=="comss"?"comss.ru/page.php?id=7315":k=="dns-ai"?"dns-ai.ru/ip":k=="zapret"?"dns.zapret.moe":k=="wlrus"?"site.dns.wlrus.cfd":k=="webshift"?"dns.webshiftvpn.ru":"info.dns.malw.link";}
         internal static ProviderCheckResult Run(int provider,IProviderCheckIo io,CancellationToken cancel)
         {
             if(!Available(provider))throw new ArgumentOutOfRangeException("provider");

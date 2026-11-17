@@ -35,15 +35,23 @@ namespace HbAi.XboxDns
             if(error is IOException&&error.InnerException!=null)return CanRetry(error.InnerException);
             var native=error as Win32Exception;return native!=null&&(native.NativeErrorCode==12002||native.NativeErrorCode==12029||native.NativeErrorCode==12030||native.NativeErrorCode==12031);
         }
+        internal static string[] BootstrapServers(string endpoint)
+        {
+            if(string.IsNullOrEmpty(endpoint))return new string[0];
+            var match=RuntimeProviders.All.FirstOrDefault(p=>p!=null&&string.Equals(p.doh,endpoint,StringComparison.OrdinalIgnoreCase)&&p.windowsDohServers!=null&&p.windowsDohServers.Length>0);
+            return match!=null?match.windowsDohServers:new string[0];
+        }
         internal static string[] ResolverAddresses(string endpoint,Func<string,string[]> resolve)
         {
-            if(endpoint==EncryptedDns.Templates[0])return EncryptedDns.ServersFor(0);
+            var bootstrap=BootstrapServers(endpoint);
+            if(bootstrap.Length>0)return bootstrap;
             return resolve(new Uri(endpoint).Host).Where(AutoDnsProbe.PublicAddress).Take(6).ToArray();
         }
         internal static byte[] QueryReliable(string endpoint,byte[] dns,Action<string> trace=null)
         {
-            if(endpoint==EncryptedDns.Templates[5]&&Interlocked.CompareExchange(ref pinningUnavailable,0,0)==0) {
-                try {return QueryHealthyAddresses(endpoint,dns,EncryptedDns.ServersFor(5),AddressHealth,
+            var bootstrap=BootstrapServers(endpoint);
+            if(bootstrap.Length>0&&Interlocked.CompareExchange(ref pinningUnavailable,0,0)==0) {
+                try {return QueryHealthyAddresses(endpoint,dns,bootstrap,AddressHealth,
                     (url,address,packet)=>Query(url,packet,RequestTimeoutMilliseconds,address),trace);}
                 catch(AddressPinningUnavailableException) {
                     // Windows before 10 21H1 cannot override resolution per request.
@@ -55,7 +63,7 @@ namespace HbAi.XboxDns
             int attempt=0;
             return QueryReliable(endpoint,dns,(url,packet)=> {
                 attempt++;
-                if(url==EncryptedDns.Templates[0])return QueryAlternateAddresses(url,packet,trace);
+                if(bootstrap.Length>0)return QueryAlternateAddresses(url,packet,trace);
                 if(attempt==2&&url==EncryptedDns.Templates[1])return QueryAlternateAddresses(url,packet,trace);
                 return Query(url,packet,RequestTimeoutMilliseconds);
             },trace);

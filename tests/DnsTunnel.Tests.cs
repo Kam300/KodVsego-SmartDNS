@@ -107,7 +107,7 @@ static class TunnelTests
         Check((refused[3]&15)==5&&messages.Single().Contains("REFUSED(5)")&&messages[0].Contains("upstream=")&&!messages[0].Contains("private-visit"),"REFUSED remains a DNS reply while diagnostic logs identify the server without disclosing private names");
         messages.Clear();upstream=new TunnelUpstream(0,false,messages.Add,(address,q)=>{throw new IOException("TLS failed",new IOException("api_key=sample-secret"));});
         Reject(()=>upstream.Query(query),"Both upstream transport failures remain failures");
-        Check(messages.Count==1&&messages[0].Contains("TLS failed")&&!messages[0].Contains("sample-secret")&&messages[0].Contains("ms="),"Upstream cause and duration survive redaction");
+        Check(messages.Count==EncryptedDns.ServersFor(0).Length&&messages.All(m=>m.Contains("TLS failed")&&!m.Contains("sample-secret")&&m.Contains("ms=")),"Upstream cause and duration survive redaction");
         messages.Clear();upstream=new TunnelUpstream(6,true,messages.Add,(address,q)=>TunnelWire.Error(q));for(int i=0;i<510;i++)upstream.Query(query);
         Check(messages.Count==501&&messages.Last().Contains("limit=500"),"Repeated DNS failures cannot flood the detailed log indefinitely");
         Check(!TunnelDiagnostics.Line("Authorization: Bearer sample-secret\r\napi_key=another-secret").Contains("sample-secret")&&!TunnelDiagnostics.Line("api_key=another-secret").Contains("another-secret"),"Copied diagnostic lines redact authorization and key values");

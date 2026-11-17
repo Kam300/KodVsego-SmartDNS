@@ -107,20 +107,18 @@ Android-версия использует **локальный DNS-туннел�
 | Провайдер | IPv4 / подключение | DoH |
 | --- | --- | --- |
 | [Comss.one](https://www.comss.ru/page.php?id=7315) | `94.250.253.55`, `212.109.195.93` | `https://dns.comss.one/dns-query` |
-| [Bezmezhau](https://bezmezhau.com/ru/setup) | `181.215.40.49`, `31.58.216.201` | `https://dns.bezmezhau.com/dns-query` |
+| [Bezmezhau](https://bezmezhau.com/ru/setup) | `31.58.216.201`, `181.215.40.49` | `https://dns.bezmezhau.com/dns-query` |
 | [DNS-AI](https://dns-ai.ru/) | `194.87.196.13`, `45.151.102.219` · только с шифрованием | `https://dns.dns-ai.ru/dns-query` |
+| [DNS-AI · CF](https://dns-ai.ru/) | `104.21.82.125`, `172.67.157.232` · только с шифрованием | `https://cf.dns-ai.ru/dns-query` |
 | [MagicDNS](https://magicdns.ru/#setup) | `217.144.190.216`, `109.120.187.249` | `https://api.magicinfo.art/rpc` |
 | [Zapret DNS](https://dns.zapret.moe/) | `83.217.211.149` | `https://dns.zapret.moe/dns-query` |
-| [GeoHide US](https://geohide.ru/) | `192.255.159.240`, `192.255.159.241`, `192.3.233.253`, `107.175.76.134` | `https://us.geohide.ru/dns-query` |
 | [Malw DNS](https://info.dns.malw.link/setup) | `179.254.166.171`, `164.5.224.81` | `https://dns.malw.link/dns-query` |
-| [WLrus DNS](https://site.dns.wlrus.cfd/) | `95.85.240.254`, `138.124.254.134` | `https://dns.wlrus.cfd/dns-query` |
 | [Webshift](https://dns.webshiftvpn.ru/) | `31.31.207.68` · только с шифрованием | `https://d.webshiftvpn.ru/dns-query` |
 | [AdGuard DNS](https://adguard-dns.io/ru/public-dns.html) | `94.140.14.14`, `94.140.15.15` | `https://dns.adguard-dns.com/dns-query` |
-| [Malw · CF](https://info.dns.malw.link/setup/cloudflare) | `162.159.36.20`, `162.159.36.5` · только с шифрованием | `https://5u35p8m9i7.cloudflare-gateway.com/dns-query` |
-| [Перевал](https://pereval.top/) | `153.80.200.170` | обычный DNS |
+| [Перевал](https://pereval.top/) | `153.80.200.170` | `https://free.pereval.top/dns-query` |
 | [GeoHide EU](https://geohide.ru/) | `5.175.161.40`, `143.20.64.192` | обычный DNS |
 
-Параметры хранятся в [общем каталоге](config/providers.json). Записи GeoHide US и EU имеют отдельные идентификаторы. Прежние адреса используются для восстановления настроек. Для системного DoH Comss используется отдельный адрес `195.133.25.16`.
+Параметры хранятся в [общем каталоге](config/providers.json). Записи GeoHide US и EU имеют отдельные идентификаторы. `GeoHide US`, `WLrus DNS` и `Malw · CF` временно отключены (`enabled: false`), а прежний адрес Comss `195.133.25.16` перенесён в `legacyIpv4` для восстановления; для DoH/DoT Comss используются `94.250.253.55` и `212.109.195.93`.
 
 В способе «Через приложение» основной DNS и отдельный Antigravity могут использовать разных провайдеров. Строка чекера показывает подтверждение только по поддерживаемому механизму сайта провайдера. Общий чекер Malw не различает обычный Malw и вариант Cloudflare. Доступность сайта, вход и ответ модели — разные проверки. [Механизмы и ограничения](docs/RESOLVER-CHECK.md).
 

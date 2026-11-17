@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
@@ -17,6 +18,13 @@ namespace HbAi.XboxDns
 
     static class DotDns
     {
+        static readonly DohAddressHealth AddressHealth = new DohAddressHealth();
+        static DotDns()
+        {
+            NetworkChange.NetworkAddressChanged += (sender, args) => ResetAddressHealth();
+            NetworkChange.NetworkAvailabilityChanged += (sender, args) => ResetAddressHealth();
+        }
+        internal static void ResetAddressHealth() { AddressHealth.Reset(); }
         internal static string Host(int provider) { return RuntimeProviders.All[provider].dot; }
         internal static string[] Servers(int provider) { return RuntimeProviders.All[provider].windowsDotServers; }
         internal static bool Available(int provider) { return !string.IsNullOrEmpty(Host(provider)); }
@@ -70,11 +78,49 @@ namespace HbAi.XboxDns
             Task.WaitAll(results);
             return results.Select(t => t.Result).OrderBy(r => !r.Ok).ThenBy(r => r.Milliseconds).First();
         }
+        static bool HasAuthenticationError(Exception error)
+        {
+            for (var current = error; current != null; current = current.InnerException)
+                if (current is AuthenticationException) return true;
+            return false;
+        }
+        internal static bool CanRetry(Exception error)
+        {
+            if (error == null || HasAuthenticationError(error) || error is InvalidDataException) return false;
+            if (error is SocketException || error is TimeoutException) return true;
+            var io = error as IOException;
+            if (io == null) return false;
+            return io.InnerException != null ? CanRetry(io.InnerException) : io.Message.StartsWith("DoT:", StringComparison.Ordinal);
+        }
         internal static string[] Resolve(int provider, string host)
         {
+            return Resolve(Host(provider), host, Servers(provider), AddressHealth, (address, hostName, request) => Query(address, hostName, request));
+        }
+        internal static string[] Resolve(string endpointHost, string host, string[] servers, DohAddressHealth health, Func<string, string, byte[], byte[]> query)
+        {
+            if (servers == null || servers.Length == 0 || string.IsNullOrEmpty(endpointHost))
+                throw new IOException("DoT не ответил: нет сервера");
+            long generation;
+            string endpoint = "dot://" + endpointHost;
+            var ready = health.Ready(endpoint, servers, out generation);
+            if (ready.Length == 0)
+                throw new IOException("Серверы DoT временно пропущены после сетевых ошибок.");
             Exception last = null; var request = DnsProbe.Query(host);
-            foreach (string address in Servers(provider))
-            { try { return DnsProbe.Addresses(request, Query(address, Host(provider), request)); } catch (Exception e) { last = e; } }
+            foreach (string address in ready)
+            {
+                try
+                {
+                    var response = DnsProbe.Addresses(request, query(address, endpointHost, request));
+                    health.Success(endpoint, address, generation);
+                    return response;
+                }
+                catch (Exception e)
+                {
+                    if (!CanRetry(e)) throw;
+                    health.Failure(endpoint, address, generation);
+                    last = e;
+                }
+            }
             throw new IOException("DoT не ответил: " + (last == null ? "нет сервера" : last.Message), last);
         }
     }

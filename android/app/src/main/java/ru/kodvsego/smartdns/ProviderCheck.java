@@ -24,7 +24,7 @@ final class ProviderCheck {
             "Проверен текущий DNS-путь приложения Android. DNS провайдера принудительно не подставлялся. Собственный DNS браузера, вход в аккаунт и ответы ИИ не проверяются. Недоступность чекера не доказывает неисправность DNS.\n\n"+detail;}
     }
     static boolean available(int p){return Provider.isAvailable(p)&&RemoteCatalog.kind(p)!=null;}
-    static String source(int p){return p==0?"comss.ru/page.php?id=7315":p==5?"dns-ai.ru/ip":p==7?"dns.zapret.moe":p==10?"site.dns.wlrus.cfd":p==11?"dns.webshiftvpn.ru":"info.dns.malw.link";}
+    static String source(int p){String k=RemoteCatalog.kind(p);return "comss".equals(k)||p==0?"comss.ru/page.php?id=7315":"dns-ai".equals(k)||p==5||p==16?"dns-ai.ru/ip":"zapret".equals(k)||p==7?"dns.zapret.moe":"wlrus".equals(k)||p==10?"site.dns.wlrus.cfd":"webshift".equals(k)||p==11?"dns.webshiftvpn.ru":"info.dns.malw.link";}
     static Result run(int p,Io io) throws InterruptedException {
         if(!available(p))throw new IllegalArgumentException("У провайдера нет поддерживаемого чекера");
         Result result=new Result(p);String before=null;StringBuilder trace=new StringBuilder("UTC="+java.time.Instant.now()+"; path=Android system DNS; provider="+p+"\n");

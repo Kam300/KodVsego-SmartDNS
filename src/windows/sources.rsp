@@ -46,5 +46,5 @@ src\windows\Ui\CatalogUi.cs
 src\windows\Ui\DnsRecoveryUi.cs
 src\windows\Diagnostics\EndpointAddressHealth.cs
 
-src/windows/Dns/VpnDns.cs
-src/windows/Ui/DnsRatingsUi.cs
+src\windows\Dns\VpnDns.cs
+src\windows\Ui\DnsRatingsUi.cs

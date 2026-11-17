@@ -1891,6 +1891,8 @@ namespace HbAi.XboxDns
                 dialog.AddAutoDnsControls(AutoDns.Goals.Select(g => g.Name).ToArray(), startImmediately&&UseDefaultGoal?defaultGoal:autoGoal >= 0 ? autoGoal : defaultGoal>=0?defaultGoal:0, goal => {
                     if (running) return;
                     DohHttp2.ResetAddressHealth();
+                    DotDns.ResetAddressHealth();
+                    DirectDnsGuard.Reset();
                     chosen = null; chosenGoal = -1;
                     dialog.SetPrimaryText("Отмена");
                     running = true;
@@ -1933,7 +1935,15 @@ namespace HbAi.XboxDns
                             }
                             var best = AutoDns.Best(results);
                             string report = AutoDns.Report(goal, results)+(antigravityTarget?"\n\nБудет включена галочка «Antigravity · отдельно» (DoH). В способе 2 основной DNS сохранится. При переходе со способа 1 прежние настройки сначала восстановятся, затем запустится способ 2. После применения можно перезапустить Antigravity.":localNote);
-                            if (best == null) { dialog.ShowAutoDnsResult("Нет подходящего варианта","Попробуйте позже или выберите DNS вручную.\nНастройки не изменены.",report); dialog.SetDiagnosticDetails(connectionDiagnostic+"\n"+AutoDns.Diagnostic(goal,results),true); return; }
+                            if (best == null) {
+                                bool allDirect = !encrypted && results != null && results.Length > 0 && results.All(r => !r.Encrypted && ((r.Error ?? "").IndexOf("Без подмены DNS", StringComparison.OrdinalIgnoreCase) >= 0 || (r.Availability != null && r.Availability.Endpoints.Any(e => e.Reply == ServiceReply.Direct))));
+                                string noBestHint = allDirect
+                                    ? "Обычный DNS (порт 53) перехватывается провайдером или возвращает прямые адреса.\nВключите «Зашифрованный DNS» (DoH/DoT) или способ 2 «Через приложение»."
+                                    : "Попробуйте позже или выберите DNS вручную.\nНастройки не изменены.";
+                                dialog.ShowAutoDnsResult("Нет подходящего варианта", noBestHint, report);
+                                dialog.SetDiagnosticDetails(connectionDiagnostic+"\n"+AutoDns.Diagnostic(goal,results),true);
+                                return;
+                            }
                             dialog.ShowAutoDnsResult(Dns.Name[best.Provider]+" для "+AutoDns.Goals[goal].Name,
                                 best.Availability!=null?best.Summary:best.NeedsBrowser?"Требуется проверка в браузере.":"Сервер доступен.\nМожно подключить выбранный DNS.",
                                 report,(liveLocal?"Переключить на ":"Подключить ")+Dns.Name[best.Provider]);
@@ -2066,7 +2076,7 @@ namespace HbAi.XboxDns
             if(dialog.TestService==ResolverCheck.ServiceIndex){RunResolverTest(dialog,provider,cancel);return;}
             bool encrypted = secureDns || Dns.EncryptedOnly(provider); bool tls = encrypted && tlsDns;
             int service=dialog.TestService;
-            if (encrypted && (tls ? !DotDns.Available(provider) : EncryptedDns.Templates[provider] == null)) { dialog.ShowDnsTestStatus("Для этого провайдера HTTPS-тест пока недоступен. Выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS. Обычные DNS-запросы не отправлялись.", "Нет параметров DoH", false, true); return; }
+            if (encrypted && (tls ? !DotDns.Available(provider) : EncryptedDns.Templates[provider] == null)) { dialog.ShowDnsTestStatus("Выбранный провайдер не поддерживает " + (tls ? "DoT" : "DoH") + ". Выберите провайдер с поддержкой шифрования или режим «Обычный DNS». Обычные DNS-запросы не отправлялись.", "Нет параметров " + (tls ? "DoT" : "DoH"), false, true); return; }
             if (!NetworkCheck.HasConnection()) { dialog.ShowDnsTestStatus(NetworkCheck.OfflineMessage, "Нет подключения", false, true); return; }
             var vpn = VpnCheck.Scan();
             if (VpnBlocks(vpn))
@@ -2076,6 +2086,8 @@ namespace HbAi.XboxDns
             }
             dialog.ShowDnsTestStatus(service>=0?"Проверяем DNS, TLS и ответы "+ServiceAvailability.Targets[service].Name+"…":"Проверяем серверы " + Dns.Name[provider] + " и домены сервисов…", "Проверяем " + Dns.Name[provider], true, false);
             DohHttp2.ResetAddressHealth();
+            DotDns.ResetAddressHealth();
+            DirectDnsGuard.Reset();
             ThreadPool.QueueUserWorkItem(_ => {
                 DnsProbeResult[] results = null; ServiceAvailabilityResult availability=null; string failure = null;
                 try {

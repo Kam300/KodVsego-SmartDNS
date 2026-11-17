@@ -79,6 +79,29 @@ static class DotDnsTests
         policy=new FakeDotPolicy{FailSet=true};tx=new DotPolicyTransaction(policy);
         Fails(tx.Enable,"Policy write failure keeps recovery state");Check(policy.Saved==false,"Failed policy activation retains original state");
         policy=new FakeDotPolicy{Saved=false,On=false};tx=new DotPolicyTransaction(policy);tx.Restore();Check(policy.Writes==0&&!policy.Saved.HasValue,"External policy disable is preserved");
+        var dotClock=0L;var dotHealth=new DohAddressHealth(()=>dotClock);var dotServers=new[]{"203.0.113.10","203.0.113.11"};
+        var dotCalls=new System.Collections.Generic.List<string>();
+        var dotResolved=DotDns.Resolve("dot.test","example.com",dotServers,dotHealth,(ip,hostName,req)=>{
+            dotCalls.Add(ip);
+            if(ip=="203.0.113.10")throw new IOException("DoT: сервер не ответил за 3 с.");
+            byte[] a=new byte[req.Length+16];Buffer.BlockCopy(req,0,a,0,req.Length);
+            a[2]=0x81;a[3]=0x80;a[7]=1;
+            Buffer.BlockCopy(new byte[]{0xc0,12,0,1,0,1,0,0,0,60,0,4,93,184,216,34},0,a,req.Length,16);
+            return a;
+        });
+        Check(dotResolved.SequenceEqual(new[]{"93.184.216.34"})&&dotCalls.SequenceEqual(new[]{"203.0.113.10","203.0.113.11"}),"Timed-out DoT IP falls back to healthy alternate");
+        dotCalls.Clear();
+        dotResolved=DotDns.Resolve("dot.test","example.com",dotServers,dotHealth,(ip,hostName,req)=>{
+            dotCalls.Add(ip);
+            byte[] a=new byte[req.Length+16];Buffer.BlockCopy(req,0,a,0,req.Length);
+            a[2]=0x81;a[3]=0x80;a[7]=1;
+            Buffer.BlockCopy(new byte[]{0xc0,12,0,1,0,1,0,0,0,60,0,4,93,184,216,34},0,a,req.Length,16);
+            return a;
+        });
+        Check(dotCalls.SequenceEqual(new[]{"203.0.113.11"}),"Timed-out DoT IP stays skipped during cooldown");
+        var authCalls=0;
+        Fails(()=>DotDns.Resolve("dot.auth","example.com",dotServers,dotHealth,(ip,hostName,req)=>{authCalls++;throw new System.Security.Authentication.AuthenticationException("bad cert");}),"DoT authentication failure stops immediately");
+        Check(authCalls==1,"DoT certificate errors do not fail over to alternate server");
         if(args.Contains("--live")) {
             Console.WriteLine("READ-ONLY global TLS enabled="+new WindowsDotPolicy().Enabled());
             Parallel.ForEach(new[]{0,3,4,5,6},new ParallelOptions{MaxDegreeOfParallelism=3},provider=> {

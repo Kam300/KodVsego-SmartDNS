@@ -11,7 +11,8 @@
     "ipv6": [],
     "doh": "https://dns.comss.one/dns-query",
     "windowsDohServers": [
-      "195.133.25.16"
+      "94.250.253.55",
+      "212.109.195.93"
     ],
     "encryptedOnly": false,
     "services": [
@@ -40,13 +41,20 @@
     "url": "https://www.comss.ru/page.php?id=7315",
     "dot": "dns.comss.one",
     "windowsDotServers": [
-      "195.133.25.16",
       "94.250.253.55",
       "212.109.195.93"
     ],
     "legacyIpv4": [
       [
         "83.220.169.155",
+        "212.109.195.93"
+      ],
+      [
+        "195.133.25.16"
+      ],
+      [
+        "195.133.25.16",
+        "94.250.253.55",
         "212.109.195.93"
       ]
     ]
@@ -188,14 +196,14 @@
     "name": "Bezmezhau",
     "enabled": true,
     "ipv4": [
-      "181.215.40.49",
-      "31.58.216.201"
+      "31.58.216.201",
+      "181.215.40.49"
     ],
     "ipv6": [],
     "doh": "https://dns.bezmezhau.com/dns-query",
     "windowsDohServers": [
-      "181.215.40.49",
-      "31.58.216.201"
+      "31.58.216.201",
+      "181.215.40.49"
     ],
     "encryptedOnly": false,
     "services": [
@@ -222,12 +230,16 @@
     "url": "https://bezmezhau.com/ru/setup",
     "dot": "dns.bezmezhau.com",
     "windowsDotServers": [
-      "181.215.40.49",
-      "31.58.216.201"
+      "31.58.216.201",
+      "181.215.40.49"
     ],
     "legacyIpv4": [
       [
         "143.20.64.55",
+        "31.58.216.201"
+      ],
+      [
+        "181.215.40.49",
         "31.58.216.201"
       ]
     ]
@@ -409,7 +421,7 @@
     "id": 8,
     "key": "geohide-us",
     "name": "GeoHide US",
-    "enabled": true,
+    "enabled": false,
     "ipv4": [
       "192.255.159.240",
       "192.255.159.241",
@@ -516,7 +528,7 @@
     "id": 10,
     "key": "wlrus",
     "name": "WLrus DNS",
-    "enabled": true,
+    "enabled": false,
     "ipv4": [
       "95.85.240.254",
       "138.124.254.134"
@@ -618,7 +630,7 @@
     "id": 13,
     "key": "malw-cf",
     "name": "Malw · CF",
-    "enabled": true,
+    "enabled": false,
     "ipv4": [
       "162.159.36.20",
       "162.159.36.5"
@@ -672,26 +684,37 @@
       "153.80.200.170"
     ],
     "ipv6": [],
-    "doh": null,
+    "doh": "https://free.pereval.top/dns-query",
     "windowsDohServers": [
       "153.80.200.170"
     ],
     "encryptedOnly": false,
     "services": [
-      "Claude"
+      "ChatGPT",
+      "Claude",
+      "Gemini"
     ],
     "autoGoals": [
-      "Claude"
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "Antigravity"
     ],
     "testHosts": [
       "example.com",
-      "claude.ai"
+      "chatgpt.com",
+      "claude.ai",
+      "gemini.google.com",
+      "cloudcode-pa.googleapis.com",
+      "daily-cloudcode-pa.googleapis.com"
     ],
-    "description": "Claude · обычный DNS",
+    "description": "ChatGPT, Claude, Gemini",
     "site": "pereval.top",
     "url": "https://pereval.top/",
-    "dot": null,
-    "windowsDotServers": [],
+    "dot": "free.pereval.top",
+    "windowsDotServers": [
+      "153.80.200.170"
+    ],
     "legacyIpv4": []
   },
   {
@@ -731,6 +754,48 @@
     "description": "ChatGPT, Claude, ElevenLabs, Grok",
     "site": "geohide.ru",
     "url": "https://geohide.ru/",
+    "dot": null,
+    "windowsDotServers": [],
+    "legacyIpv4": []
+  },
+  {
+    "id": 16,
+    "key": "dns-ai-cf",
+    "name": "DNS-AI · CF",
+    "enabled": true,
+    "ipv4": [
+      "104.21.82.125",
+      "172.67.157.232"
+    ],
+    "ipv6": [],
+    "doh": "https://cf.dns-ai.ru/dns-query",
+    "windowsDohServers": [
+      "104.21.82.125",
+      "172.67.157.232"
+    ],
+    "encryptedOnly": true,
+    "services": [
+      "ChatGPT",
+      "Claude",
+      "Gemini"
+    ],
+    "autoGoals": [
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "Antigravity"
+    ],
+    "testHosts": [
+      "example.com",
+      "chatgpt.com",
+      "claude.ai",
+      "gemini.google.com",
+      "cloudcode-pa.googleapis.com",
+      "daily-cloudcode-pa.googleapis.com"
+    ],
+    "description": "AI-сервисы через Cloudflare · DoH",
+    "site": "dns-ai.ru",
+    "url": "https://dns-ai.ru/",
     "dot": null,
     "windowsDotServers": [],
     "legacyIpv4": []

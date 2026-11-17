@@ -15,7 +15,7 @@ using System.Web.Script.Serialization;
 
 namespace HbAi.XboxDns
 {
-    enum ServiceReply { Response, Login, BrowserCheck, Restricted, RateLimited, ServerError, Unknown, Failed }
+    enum ServiceReply { Response, Login, BrowserCheck, Restricted, Direct, RateLimited, ServerError, Unknown, Failed }
     sealed class ServiceEndpoint
     {
         internal string Name, Host, Path;
@@ -49,6 +49,7 @@ namespace HbAi.XboxDns
                     case ServiceReply.Login: return Endpoint.Api?"Запрос без ключа: требуется авторизация":"Требуется вход";
                     case ServiceReply.BrowserCheck:return "Требуется проверка в браузере";
                     case ServiceReply.Restricted:return "Сервис сообщил об ограничении региона";
+                    case ServiceReply.Direct:return "Без подмены DNS · прямой адрес сервиса";
                     case ServiceReply.RateLimited:return "Сервис ограничил частоту запросов";
                     case ServiceReply.ServerError:return "Ошибка сервера сервиса";
                     default:return "Ответ есть · доступ не подтверждён";
@@ -81,6 +82,89 @@ namespace HbAi.XboxDns
     {
         string[] Resolve(int provider,bool encrypted,string host,CancellationToken cancel);
         ServiceHttpReply Request(ServiceEndpoint endpoint,string address,CancellationToken cancel);
+    }
+    interface IDirectAddressGuard
+    {
+        bool IsDirectAddress(string host,string address,CancellationToken cancel);
+    }
+    static class DirectDnsGuard
+    {
+        sealed class Entry { internal HashSet<string> Prefixes; internal long ExpiresAt; }
+        static readonly object gate=new object();
+        static readonly Stopwatch Clock=Stopwatch.StartNew();
+        static readonly Dictionary<string,Entry> Cache=new Dictionary<string,Entry>(StringComparer.Ordinal);
+        static long generation;
+        internal static void Reset() { lock(gate) { Cache.Clear(); generation++; } }
+        static uint Ip4(byte a,byte b,byte c,byte d) { return ((uint)a<<24)|((uint)b<<16)|((uint)c<<8)|d; }
+        static bool InCidr(uint value,uint network,int prefix) { uint mask=prefix==0?0u:0xffffffffu<<(32-prefix); return (value&mask)==(network&mask); }
+        internal static bool KnownDirectRange(string address)
+        {
+            IPAddress ip;
+            if(!IPAddress.TryParse(address,out ip)||ip.AddressFamily!=AddressFamily.InterNetwork)return false;
+            byte[] b=ip.GetAddressBytes();
+            uint v=((uint)b[0]<<24)|((uint)b[1]<<16)|((uint)b[2]<<8)|b[3];
+            return InCidr(v,Ip4(142,250,0,0),15)||
+                InCidr(v,Ip4(172,217,0,0),16)||
+                InCidr(v,Ip4(216,58,192,0),19)||
+                InCidr(v,Ip4(173,194,0,0),16)||
+                InCidr(v,Ip4(74,125,0,0),16)||
+                InCidr(v,Ip4(104,16,0,0),12)||
+                InCidr(v,Ip4(172,64,0,0),13)||
+                InCidr(v,Ip4(162,158,0,0),15)||
+                InCidr(v,Ip4(188,114,96,0),20)||
+                InCidr(v,Ip4(198,41,128,0),17)||
+                InCidr(v,Ip4(141,101,64,0),18)||
+                InCidr(v,Ip4(108,162,192,0),18)||
+                InCidr(v,Ip4(160,79,104,0),22)||
+                InCidr(v,Ip4(151,101,0,0),16)||
+                InCidr(v,Ip4(199,232,0,0),16);
+        }
+        static string Prefix24(string address)
+        {
+            IPAddress ip;
+            if(!IPAddress.TryParse(address,out ip)||ip.AddressFamily!=AddressFamily.InterNetwork)return null;
+            byte[] b=ip.GetAddressBytes();
+            return b[0]+"."+b[1]+"."+b[2];
+        }
+        internal static bool IsDirect(string host,string address,CancellationToken cancel)
+        {
+            if(!AutoDnsProbe.PublicAddress(address))return false;
+            if(KnownDirectRange(address))return true;
+            string key=(host??"").Trim().ToLowerInvariant();
+            string prefix=Prefix24(address);
+            if(key.Length==0||prefix==null)return false;
+            long version;
+            lock(gate) {
+                version=generation;
+                Entry cached;
+                if(Cache.TryGetValue(key,out cached)&&cached.ExpiresAt>Clock.ElapsedMilliseconds)
+                    return cached.Prefixes.Contains(prefix);
+            }
+            var baseline=new HashSet<string>(StringComparer.Ordinal);
+            bool resolved=false;
+            var q=DnsProbe.Query(key);
+            foreach(string server in new[]{"94.140.14.14","94.140.15.15"}) {
+                cancel.ThrowIfCancellationRequested();
+                try {
+                    var resp=DohHttp2.Query("https://dns.adguard-dns.com/dns-query",q,2000,server);
+                    DnsProbe.Validate(q,resp);
+                    foreach(string ip in DnsProbe.Addresses(q,resp)) {
+                        string p24=Prefix24(ip);
+                        if(p24!=null)baseline.Add(p24);
+                    }
+                    resolved=true;
+                    break;
+                }catch(OperationCanceledException){throw;}catch{}
+            }
+            long ttl=resolved?300000L:30000L;
+            lock(gate) {
+                if(version==generation) {
+                    if(Cache.Count>=64)Cache.Clear();
+                    Cache[key]=new Entry{Prefixes=baseline,ExpiresAt=Clock.ElapsedMilliseconds+ttl};
+                }
+            }
+            return baseline.Contains(prefix);
+        }
     }
     static class ServiceAvailability
     {
@@ -115,8 +199,15 @@ namespace HbAi.XboxDns
                     var ready=health==null?addresses.Take(8).ToArray():health.Ready(endpoint.Host,addresses,out healthVersion);
                     trace.AppendLine("HTTPS plan="+string.Join(",",ready)+"; skipped="+string.Join(",",addresses.Except(ready)));
                     if(ready.Length==0){result.Suppressed=true;result.RegionSuppressed=health!=null&&health.OnlyRegionBlocked(endpoint.Host,addresses);throw new IOException("Все полученные IP временно исключены после предыдущих ошибок; повторите позже.");}
+                    var directGuard=CustomDns.IsCustom(provider)?null:probe as IDirectAddressGuard;
+                    bool sawDirect=false;string directAddress=null;
                     foreach(string address in ready) {
                         cancel.ThrowIfCancellationRequested();
+                        if(directGuard!=null&&directGuard.IsDirectAddress(endpoint.Host,address,cancel)) {
+                            sawDirect=true;if(directAddress==null)directAddress=address;
+                            trace.AppendLine("Direct origin/CDN IP skipped: "+address+" (no Smart DNS substitution)");
+                            continue;
+                        }
                         try {
                             reply=probe.Request(endpoint,address,cancel);result.Address=address;result.Connection=true;result.Tls=true;trace.AppendLine("HTTPS @ "+address+"; HTTP="+reply.Status);
                             var classification=Classify(endpoint,reply);
@@ -133,9 +224,15 @@ namespace HbAi.XboxDns
                             trace.AppendLine(stage+" @ "+address+": "+error.GetType().Name+"; "+(error.InnerException??error).Message);
                         }
                     }
-                    if(reply==null)throw last??new IOException("Нет ответа HTTPS");
-                    result.Status=reply.Status;result.Reply=Classify(endpoint,reply);
-                    trace.AppendLine("Classification="+result.Reply+"; no authentication or generation attempted");
+                    if(reply==null) {
+                        if(sawDirect&&last==null) {
+                            result.Address=directAddress;result.Reply=ServiceReply.Direct;
+                            trace.AppendLine("Classification=Direct; resolver returned unspoofed origin/CDN IP");
+                        } else throw last??new IOException("Нет ответа HTTPS");
+                    } else {
+                        result.Status=reply.Status;result.Reply=Classify(endpoint,reply);
+                        trace.AppendLine("Classification="+result.Reply+"; no authentication or generation attempted");
+                    }
                 }
                 catch(OperationCanceledException){throw;}
                 catch(Exception error){result.Error=result.Suppressed?"IP сервиса временно исключены после отказов":stage+": "+(stage=="DNS"?"нет ответа или ошибка адреса":stage=="TLS"?"защищённое соединение не подтверждено":stage=="HTTP"?"нет корректного ответа сервиса":"не удалось подключиться");trace.AppendLine(error.GetType().Name+": "+error.Message);}
@@ -183,11 +280,12 @@ namespace HbAi.XboxDns
             return ServiceReply.Unknown;
         }
     }
-    sealed class ServiceAvailabilityProbe : IServiceAvailabilityProbe
+    sealed class ServiceAvailabilityProbe : IServiceAvailabilityProbe, IDirectAddressGuard
     {
         readonly AutoDnsProbe dns;
         internal ServiceAvailabilityProbe(bool tls){dns=new AutoDnsProbe(tls);}
         public string[] Resolve(int provider,bool encrypted,string host,CancellationToken cancel){return dns.Resolve(provider,encrypted,host,cancel);}
+        public bool IsDirectAddress(string host,string address,CancellationToken cancel){return DirectDnsGuard.IsDirect(host,address,cancel);}
         public ServiceHttpReply Request(ServiceEndpoint endpoint,string address,CancellationToken cancel)
         {
             if(!AutoDnsProbe.PublicAddress(address))throw new IOException("Некорректный публичный адрес");

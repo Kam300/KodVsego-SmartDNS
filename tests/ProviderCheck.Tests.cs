@@ -31,7 +31,7 @@ static class ProviderCheckTests
             return;
         }
         Check(new ProviderCheckResult().State==ProviderCheckState.Inconclusive,"Default state cannot imply success");
-        Check(new[]{0,5,7,9,10,11,13}.All(ProviderCheck.Available)&&new[]{-1,1,2,3,4,6,8,12,999}.All(p=>!ProviderCheck.Available(p)),"Only reviewed checker contracts are enabled; hidden providers stay disabled");
+        Check(new[]{0,5,7,9,11,16}.All(ProviderCheck.Available)&&new[]{-1,1,2,3,4,6,8,10,12,13,14,15,999}.All(p=>!ProviderCheck.Available(p)),"Only reviewed enabled checker contracts are available; disabled and unsupported providers stay excluded");
         var comss=new Fake{Body=" \r\nComss.one DNS enabled\r\n"};var comssResult=Run(0,comss);
         Check(comssResult.State==ProviderCheckState.Confirmed&&comss.Urls.Count==1&&new Uri(comss.Urls[0]).Host=="check.comss.one"&&comssResult.Source.Contains("comss.ru"),"Comss accepts only the official exact marker via its special system-resolved hostname");
         foreach(string body in new[]{"",null,"direct","Comss.one DNS enabled extra","<html>Comss.one DNS enabled</html>","comss.one dns enabled",new string('x',33000)})
@@ -40,12 +40,16 @@ static class ProviderCheckTests
             Check(Run(0,new Fake{Status=code,Body="Comss.one DNS enabled"}).State==ProviderCheckState.Inconclusive,"Comss HTTP errors or redirects cannot confirm DNS "+code);
         Check(Run(0,new Fake{Fail=true}).State==ProviderCheckState.Inconclusive,"Unavailable Comss marker stays unknown instead of falling back to matching UDP nodes");
         Check(Run(0,new Fake{Changed=true,Body="Comss.one DNS enabled"}).State==ProviderCheckState.NetworkChanged,"Network change invalidates a Comss confirmation");
-        var fake=new Fake{Body="{\"via\":\"ours\",\"ip\":\"private-value\"}"};var r=Run(10,fake);
-        Check(r.State==ProviderCheckState.Confirmed&&r.Positive&&fake.Urls.Count==1,"WLrus requires its explicit ours marker");
-        Check(!r.Detail.Contains("private-value")&&r.Report.Contains("системный DNS Windows")&&r.Report.Contains("DoH браузера"),"Report states system scope and omits returned client data");
-        Check(Run(10,new Fake{Body="{\"via\":\"public\"}"}).State==ProviderCheckState.NotConfirmed,"WLrus public path is an explicit negative response");
-        foreach(string body in new[]{"{}","{\"via\":true}","{\"via\":\"unexpected\"}","<html>captive portal</html>","",new string('x',33000)})
-            Check(Run(10,new Fake{Body=body}).State==ProviderCheckState.Inconclusive,"Missing/invalid/oversized WLrus response cannot confirm or deny DNS");
+        Fake fake=null;ProviderCheckResult r=null;
+        bool savedWlrus=RuntimeProviders.All[10].enabled;RuntimeProviders.All[10].enabled=true;
+        try {
+            fake=new Fake{Body="{\"via\":\"ours\",\"ip\":\"private-value\"}"};r=Run(10,fake);
+            Check(r.State==ProviderCheckState.Confirmed&&r.Positive&&fake.Urls.Count==1,"WLrus requires its explicit ours marker");
+            Check(!r.Detail.Contains("private-value")&&r.Report.Contains("системный DNS Windows")&&r.Report.Contains("DoH браузера"),"Report states system scope and omits returned client data");
+            Check(Run(10,new Fake{Body="{\"via\":\"public\"}"}).State==ProviderCheckState.NotConfirmed,"WLrus public path is an explicit negative response");
+            foreach(string body in new[]{"{}","{\"via\":true}","{\"via\":\"unexpected\"}","<html>captive portal</html>","",new string('x',33000)})
+                Check(Run(10,new Fake{Body=body}).State==ProviderCheckState.Inconclusive,"Missing/invalid/oversized WLrus response cannot confirm or deny DNS");
+        } finally { RuntimeProviders.All[10].enabled=savedWlrus; }
         Check(Run(11,new Fake{Body="{\"connected\":true}"}).State==ProviderCheckState.Confirmed,"Webshift boolean true confirms its checker result");
         Check(Run(11,new Fake{Body="{\"connected\":false}"}).State==ProviderCheckState.NotConfirmed,"Webshift boolean false remains distinct from errors");
         foreach(string body in new[]{"{}","{\"connected\":\"true\"}","{\"connected\":1}","[]","true"})
@@ -62,16 +66,21 @@ static class ProviderCheckTests
         int polls=0;fake=new Fake{Response=url=>new ProviderCheckReply{Status=200,Body=++polls==2?"{\"seen\":true,\"protocol\":\"TLS\"}":"{\"seen\":false}"}};r=Run(7,fake);
         Check(r.State==ProviderCheckState.Confirmed&&polls==2&&r.Protocol=="DoT","Delayed observation can succeed without another system query");
         Check(Run(7,new Fake{Body="{\"seen\":\"true\"}"}).State==ProviderCheckState.Inconclusive,"Zapret rejects string truthiness");
-        fake=new Fake{Status=204};r=Run(5,fake);
-        Check(r.State==ProviderCheckState.Confirmed&&fake.Urls.Count==2&&new Uri(fake.Urls[0]).Host=="dns-ai.ru"&&new Uri(fake.Urls[1]).Host=="check.dns-ai.ru","DNS-AI requires control before the special-name probe");
-        fake=new Fake{Status=404};r=Run(5,fake);
-        Check(r.State==ProviderCheckState.Inconclusive&&fake.Urls.Count==1,"Absent DNS-AI control prevents a misleading negative verdict");
-        fake=new Fake{Response=url=>{if(new Uri(url).Host=="check.dns-ai.ru")throw new TimeoutException();return new ProviderCheckReply{Status=204};}};
-        Check(Run(5,fake).State==ProviderCheckState.Inconclusive,"Special-probe timeout is unknown rather than an asserted missing DNS setting");
-        foreach(int provider in new[]{9,13}) {
-            r=Run(provider,new Fake{Status=204});
-            Check(r.State==ProviderCheckState.ProbePassed&&r.Report.Contains("не различает")&&!r.Summary.Contains("чекер подтвердил"),"Malw probe does not claim to distinguish ordinary/Cloudflare profile "+provider);
+        foreach(int id in new[]{5,16}) {
+            fake=new Fake{Status=204};r=Run(id,fake);
+            Check(r.State==ProviderCheckState.Confirmed&&fake.Urls.Count==2&&new Uri(fake.Urls[0]).Host=="dns-ai.ru"&&new Uri(fake.Urls[1]).Host=="check.dns-ai.ru","DNS-AI requires control before the special-name probe "+id);
+            fake=new Fake{Status=404};r=Run(id,fake);
+            Check(r.State==ProviderCheckState.Inconclusive&&fake.Urls.Count==1,"Absent DNS-AI control prevents a misleading negative verdict "+id);
+            fake=new Fake{Response=url=>{if(new Uri(url).Host=="check.dns-ai.ru")throw new TimeoutException();return new ProviderCheckReply{Status=204};}};
+            Check(Run(id,fake).State==ProviderCheckState.Inconclusive,"Special-probe timeout is unknown rather than an asserted missing DNS setting "+id);
         }
+        bool savedMalwCf=RuntimeProviders.All[13].enabled;RuntimeProviders.All[13].enabled=true;
+        try {
+            foreach(int provider in new[]{9,13}) {
+                r=Run(provider,new Fake{Status=204});
+                Check(r.State==ProviderCheckState.ProbePassed&&r.Report.Contains("не различает")&&!r.Summary.Contains("чекер подтвердил"),"Malw probe does not claim to distinguish ordinary/Cloudflare profile "+provider);
+            }
+        } finally { RuntimeProviders.All[13].enabled=savedMalwCf; }
         Check(Run(9,new Fake{Status=404}).State==ProviderCheckState.Inconclusive,"Malformed Malw endpoint does not pass merely because fetch resolved");
         r=Run(11,new Fake{Fail=true});Check(r.State==ProviderCheckState.Inconclusive&&!r.Detail.Contains("private-body-and-id"),"Network failures preserve a neutral result and exclude raw server details");
         r=Run(11,new Fake{Changed=true,Body="{\"connected\":true}"});Check(r.State==ProviderCheckState.NetworkChanged&&!r.Positive,"Network change invalidates a formerly positive response");

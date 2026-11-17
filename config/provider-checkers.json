@@ -5,5 +5,6 @@
   "wlrus": {"kind":"wlrus","url":"https://probe.dns.wlrus.cfd/whoami"},
   "webshift": {"kind":"webshift","url":"https://dns.webshiftvpn.ru/api/dns-check"},
   "malw": {"kind":"malw","url":"https://test.dns.malw.link/"},
-  "malw-cf": {"kind":"malw","url":"https://test.dns.malw.link/"}
+  "malw-cf": {"kind":"malw","url":"https://test.dns.malw.link/"},
+  "dns-ai-cf": {"kind":"dns-ai","url":"https://dns-ai.ru/dnscheck","control":"https://check.dns-ai.ru/dnscheck"}
 }

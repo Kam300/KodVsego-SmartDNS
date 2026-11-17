@@ -22,7 +22,7 @@ public class DnsCoreTest {
     }
     static IpPacket tcp(long seq,long ack,int flags,byte[] data) throws Exception {byte[] p=packet(6,seq,ack,flags,data);return IpPacket.parse(p,p.length);}
     static final byte[] EMPTY=new byte[0];
-    @Test public void providersMatchWindows(){assertEquals(16,Provider.ALL.length);assertEquals("DNS-AI",Provider.at(5).name);assertArrayEquals(new String[]{"194.87.196.13","45.151.102.219"},Provider.at(5).servers);assertEquals("MagicDNS",Provider.at(6).name);assertArrayEquals(new String[]{"217.144.190.216","109.120.187.249"},Provider.at(6).servers);assertEquals("https://api.magicinfo.art/rpc",Provider.at(6).doh);}
+    @Test public void providersMatchWindows(){assertEquals(17,Provider.ALL.length);assertEquals("DNS-AI",Provider.at(5).name);assertArrayEquals(new String[]{"194.87.196.13","45.151.102.219"},Provider.at(5).servers);assertEquals("MagicDNS",Provider.at(6).name);assertArrayEquals(new String[]{"217.144.190.216","109.120.187.249"},Provider.at(6).servers);assertEquals("https://api.magicinfo.art/rpc",Provider.at(6).doh);}
     @Test public void invalidProviderRejected(){fails(()->Provider.at(-1));fails(()->Provider.at(Provider.ALL.length));}
     @Test public void encryptedOnlyCannotDowngrade(){assertTrue(new DnsConfig(5,false).encrypted);}
     @Test public void missingDohCannotDowngrade(){

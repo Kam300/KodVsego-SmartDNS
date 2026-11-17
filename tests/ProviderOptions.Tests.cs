@@ -65,7 +65,7 @@ static class ProviderOptionsTests
             Check(refused&&ProviderPreferences.Read(key).SequenceEqual(new[]{0,6}),"Hiding every provider is rejected without overwriting saved preferences");
         }}finally{Registry.CurrentUser.DeleteSubKey(keyName,false);}
         int goal=AutoDns.GoalIndex("Gemini");var probe=new Probe();
-        Check(Dns.IsAvailable(13)&&!LocalDnsRouting.Supports(13)&&!AutoDns.Candidates(AutoDns.GoalIndex("Antigravity"),true,false).Contains(13)&&AutoDns.Candidates(goal,true,false).Contains(13),"Malw CF remains available for Gemini but is excluded from Antigravity routes and Auto");
+        Check(Dns.IsAvailable(0)&&!LocalDnsRouting.Supports(0)&&!AutoDns.Candidates(AutoDns.GoalIndex("Antigravity"),true,false).Contains(0)&&AutoDns.Candidates(goal,true,false).Contains(0),"Comss remains available for Gemini but is excluded from Antigravity routes and Auto");
         Check(AutoDns.Candidates(goal,true,false,new[]{6}).SequenceEqual(new[]{6}),"Auto candidates respect the visible-provider snapshot");
         var result=AutoDns.Search(goal,true,probe,CancellationToken.None,null,null,false,new[]{6});
         Check(result.Length==1&&result[0].Provider==6&&probe.Calls==1,"Gemini Auto checks the website only for allowed providers");
@@ -125,12 +125,12 @@ static class ProviderOptionsTests
                     settings.StartPosition=FormStartPosition.Manual;settings.Location=new Point(-10000,-10000);settings.ShowInTaskbar=false;settings.Show();settings.SelectSettingsTab(true);Application.DoEvents();
                     var checks=Get<Dictionary<int,CheckBox>>(settings,"providerChecks");Check(checks.Count==Dns.AvailableProviders.Length&&!checks[7].Checked,"Provider tab reflects per-provider saved visibility, dark="+dark);
                     var panel=Get<Panel>(settings,"providerPanel");var footer=Get<Button>(settings,"primaryAction");Check(panel.Visible&&panel.Bottom<footer.Top&&checks.Values.All(c=>c.Width>0),"Provider list scrolls above the shared Save footer, dark="+dark);
-                    var badges=Get<Dictionary<int,Label>>(settings,"providerAntigravityBadges");Check(badges.Keys.OrderBy(id=>id).SequenceEqual(LocalDnsRouting.Providers)&&!badges.ContainsKey(13)&&checks.ContainsKey(13),"AG badges match supported routes while Malw CF keeps its ordinary row, dark="+dark);
+                    var badges=Get<Dictionary<int,Label>>(settings,"providerAntigravityBadges");Check(badges.Keys.OrderBy(id=>id).SequenceEqual(LocalDnsRouting.Providers)&&!badges.ContainsKey(0)&&checks.ContainsKey(0),"AG badges match supported routes while Comss keeps its ordinary row, dark="+dark);
                     settings.SelectAntigravitySettingsTab();Application.DoEvents();
                     var agPanel=Get<Panel>(settings,"antigravitySettingsPanel");var agChoice=Get<DialogServicePicker>(settings,"antigravitySettingsProvider");var agEnabled=Get<CheckBox>(settings,"antigravitySettingsEnabled");
                     Check(agPanel.Visible&&!panel.Visible&&agPanel.Bottom<footer.Top&&agChoice.Width>0&&agChoice.Text=="DNS: MagicDNS","Dedicated Antigravity tab has the current provider and fits above Save, dark="+dark);
                     Check(!agEnabled.Enabled&&agChoice.Enabled,"Running local DNS permits provider switching but protects the enable flag, dark="+dark);
-                    Check(!Get<int[]>(settings,"antigravitySettingsIds").Contains(13),"Malw CF is absent from the Antigravity settings picker, dark="+dark);
+                    Check(!Get<int[]>(settings,"antigravitySettingsIds").Contains(0),"Comss is absent from the Antigravity settings picker, dark="+dark);
                     int original=form.LocalAntigravityProvider;agChoice.SelectedIndex=Array.IndexOf(Get<int[]>(settings,"antigravitySettingsIds"),5);
                     Check(settings.AntigravityRouteProvider==5&&form.LocalAntigravityProvider==original,"Editing Antigravity settings is a draft until Save, dark="+dark);
                     using(var image=new Bitmap(settings.Width,settings.Height)){settings.DrawToBitmap(image,new Rectangle(Point.Empty,image.Size));image.Save(Path.Combine(Path.GetTempPath(),"SmartDNS-antigravity-options-"+dark+".png"));}
@@ -160,7 +160,7 @@ static class ProviderOptionsTests
                 Check(!Get<bool>(form,"localAntigravity")&&form.LocalAntigravityProvider==5,"Unconfirmed idle preferences leave the form unchanged");
             }
             form.ApplyAntigravitySettings(true,6);Check(Get<bool>(form,"localAntigravity")&&form.LocalAntigravityProvider==6&&!Get<bool>(form,"active"),"Saving idle preferences remembers the separate route without starting DNS");
-            bool unsupported=false;try{form.ApplyAntigravitySettings(true,13);}catch(IOException){unsupported=true;}Check(unsupported&&form.LocalAntigravityProvider==6,"Settings cannot enable Malw CF for Antigravity");
+            bool unsupported=false;try{form.ApplyAntigravitySettings(true,0);}catch(IOException){unsupported=true;}Check(unsupported&&form.LocalAntigravityProvider==6,"Settings cannot enable Comss for Antigravity");
         }
         Console.WriteLine("All "+passed+" provider options and live-switch checks passed; fake upstreams/workers, loopback-free, isolated test registry only.");
     }

@@ -27,7 +27,7 @@ namespace HbAi.XboxDns
         internal static string Run(int provider, bool keepAntigravity = false, bool tls = false)
         {
             if(provider>=0&&provider<Templates.Length&&!Dns.IsAvailable(provider))return "Провайдер временно недоступен. Выберите другой DNS.";
-            if (provider < 0 || provider >= Templates.Length || (tls ? !DotDns.Available(provider) : Templates[provider] == null)) return "Для DoH выберите Comss.one, Bezmezhau, DNS-AI или MagicDNS.";
+            if (provider < 0 || provider >= Templates.Length || (tls ? !DotDns.Available(provider) : Templates[provider] == null)) return "Выбранный провайдер не поддерживает " + (tls ? "DoT" : "DoH") + ".";
             try
             {
                 // Inspect persisted local AND organization policies, without depending on

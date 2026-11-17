@@ -4,22 +4,20 @@
     "bezmezhau": {
       "source": "https://bezmezhau.com/ru/setup",
       "ipv4": [
-        "1.1.1.1",
-        "181.215.40.49",
-        "31.58.216.201",
-        "8.8.8.8"
+        "143.20.64.55",
+        "31.58.216.201"
       ],
       "ipv6": [],
       "doh": [
         "https://dns.bezmezhau.com/dns-query"
       ],
-      "explicitDot": []
+      "explicitDot": [
+        "dns.bezmezhau.com"
+      ]
     },
     "dns-ai": {
       "source": "https://dns-ai.ru/",
       "ipv4": [
-        "1.1.1.2",
-        "1.1.1.3",
         "194.87.196.13",
         "45.151.102.219"
       ],
@@ -28,6 +26,7 @@
         "2a12:5940:d4ef::219"
       ],
       "doh": [
+        "https://cf.dns-ai.ru/dns-query",
         "https://dns.dns-ai.ru/dns-query"
       ],
       "explicitDot": [
@@ -37,27 +36,23 @@
     "magicdns": {
       "source": "https://magicdns.ru/",
       "ipv4": [
-        "1.1.1.1",
-        "109.120.132.43",
-        "8.8.8.8",
-        "94.249.177.102"
+        "109.120.187.249",
+        "217.144.190.216"
       ],
       "ipv6": [],
       "doh": [
-        "https://dns.magicdns.ru/dns-query"
+        "https://api.magicinfo.art/rpc"
       ],
       "explicitDot": []
     },
     "zapret": {
       "source": "https://dns.zapret.moe/",
-      "ipv4": [
-        "83.217.211.149"
-      ],
-      "ipv6": [
-        "2a03:afc0:9::235d"
-      ],
+      "ipv4": [],
+      "ipv6": [],
       "doh": [
-        "https://dns.zapret.moe/dns-query"
+        "https://dns.zapret.moe/dns-query",
+        "https://doh.osjcpjzipyb.click/dns-query",
+        "https://doh.zapret.moe/dns-query"
       ],
       "explicitDot": []
     },
@@ -83,7 +78,9 @@
       "doh": [
         "https://dns.malw.link/dns-query"
       ],
-      "explicitDot": []
+      "explicitDot": [
+        "dns.malw.link"
+      ]
     },
     "adguard": {
       "source": "https://adguard-dns.io/ru/public-dns.html",
@@ -125,11 +122,7 @@
     },
     "comss": {
       "source": "https://www.comss.ru/page.php?id=7315",
-      "ipv4": [
-        "195.133.25.16",
-        "212.109.195.93",
-        "94.250.253.55"
-      ],
+      "ipv4": [],
       "ipv6": [],
       "doh": [
         "https://dns.comss.one/dns-query"
@@ -150,14 +143,46 @@
     "webshift": {
       "source": "https://dns.webshiftvpn.ru/",
       "ipv4": [
-        "31.31.207.68",
-        "8.8.8.8"
+        "31.31.207.68"
       ],
       "ipv6": [],
       "doh": [
-        "https://d.webshiftvpn.ru/dns-query`,Vd=`/webshift-dns.mobileconfig`,Hd=`https://t.me/webshiftvpn`,Ud=`https://app.webshiftvpn.ru`,Wd=`https://webshiftvpn.ru`;function"
+        "https://d.webshiftvpn.ru/dns-query"
       ],
-      "explicitDot": []
+      "explicitDot": [
+        "d.webshiftvpn.ru"
+      ]
+    },
+    "pereval": {
+      "source": "https://pereval.top/",
+      "ipv4": [
+        "153.80.200.170"
+      ],
+      "ipv6": [],
+      "doh": [
+        "https://free.pereval.top/dns-query"
+      ],
+      "explicitDot": [
+        "free.pereval.top"
+      ]
+    },
+    "dns-ai-cf": {
+      "source": "https://dns-ai.ru/",
+      "ipv4": [
+        "194.87.196.13",
+        "45.151.102.219"
+      ],
+      "ipv6": [
+        "2a00:b700:5::3:62",
+        "2a12:5940:d4ef::219"
+      ],
+      "doh": [
+        "https://cf.dns-ai.ru/dns-query",
+        "https://dns.dns-ai.ru/dns-query"
+      ],
+      "explicitDot": [
+        "dns.dns-ai.ru"
+      ]
     }
   }
 }

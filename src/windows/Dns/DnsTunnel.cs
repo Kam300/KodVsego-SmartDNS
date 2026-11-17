@@ -241,7 +241,7 @@ namespace HbAi.XboxDns
         internal byte[] Query(byte[] query)
         {
             TunnelWire.QuestionEnd(query);Exception last=null;string host=TunnelDiagnostics.LogHost(query);int type=TunnelPacket.U16(query,TunnelWire.QuestionEnd(query)-4);
-            foreach(string address in (tls?DotDns.Servers(provider):EncryptedDns.ServersFor(provider)).OrderBy(a=>a==preferred?0:1).Take(2)) {
+            foreach(string address in (tls?DotDns.Servers(provider):EncryptedDns.ServersFor(provider)).OrderBy(a=>a==preferred?0:1).Take(4)) {
                 var clock=Stopwatch.StartNew();string context="DNS host="+host+"; qtype="+type+"; upstream="+address+"; protocol="+(tls?"DoT":"DoH");
                 try {
                     byte[] answer=exchange!=null?exchange(address,query):tls?DotDns.Exchange(address,DotDns.Host(provider),query):DohHttp2.Query(EncryptedDns.Templates[provider],query,5000,address);

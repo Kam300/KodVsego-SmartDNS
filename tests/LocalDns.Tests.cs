@@ -61,7 +61,7 @@ static class LocalDnsTests
         var messages=new List<string>();routes.Probe(messages.Add);Check(messages.Count==2&&messages.All(s=>s.Contains("model/account NOT verified")),"Both Antigravity DNS names must pass preflight without claiming account/model availability");
         Reject(()=>new LocalDnsRouting(Reply,q=>TunnelWire.Error(q)).Probe(s=>{}),"Failed Antigravity DNS preflight rejects activation instead of silently using the common provider");
         int normal=0;new LocalDnsRouting(q=>{normal++;return Reply(q);}).Query(DnsProbe.Query(AntigravityDns.Domains[0]));Check(normal==1,"Disabling the special route returns Antigravity names to the common DNS path");
-        Check(LocalDnsRouting.Providers.SequenceEqual(new[]{4,5,6,9})&&!LocalDnsRouting.Supports(0)&&!LocalDnsRouting.Supports(1)&&!LocalDnsRouting.Supports(3),"Only enabled catalog providers with declared Antigravity goal and DoH are offered");
+        Check(LocalDnsRouting.Providers.SequenceEqual(new[]{4,5,6,9,14,16})&&!LocalDnsRouting.Supports(0)&&!LocalDnsRouting.Supports(1)&&!LocalDnsRouting.Supports(3),"Only enabled catalog providers with declared Antigravity goal and DoH are offered");
         using(var proxy=new LocalDnsProxy(Reply)){
             proxy.Start(0);Check(proxy.Port>0,"Tests bind a free loopback port instead of changing adapter DNS or taking port 53");
             proxy.Probe();Check(proxy.Error==null,"Local UDP/TCP self-check works before DNS is applied");
@@ -91,7 +91,7 @@ static class LocalDnsTests
         using(var proxy=new LocalDnsProxy(q=>{var a=Reply(q);a[0]^=1;return a;})){proxy.Start(0,false);Check((Udp(proxy.Port,IPAddress.Loopback,query)[3]&15)==2,"Mismatched upstream transaction is rejected");}
         using(var proxy=new LocalDnsProxy(q=>{var a=Reply(q);a[3]=131;TunnelPacket.Put16(a,6,0);return a.Take(q.Length).ToArray();})){proxy.Start(0,false);Check((Udp(proxy.Port,IPAddress.Loopback,query)[3]&15)==3,"NXDOMAIN is retained rather than converted to connectivity success");}
         int attempts=0;var slowTrace=new List<string>();
-        var delayed=new TunnelUpstream(8,false,slowTrace.Add,(ip,q)=>{
+        var delayed=new TunnelUpstream(0,false,slowTrace.Add,(ip,q)=>{
             int attempt=Interlocked.Increment(ref attempts);
             if(attempt==1){Thread.Sleep(8000);throw new System.ComponentModel.Win32Exception(12002,"WinHTTP: send; code=12002");}
             if(attempt==2)Thread.Sleep(2500);
@@ -105,12 +105,12 @@ static class LocalDnsTests
         }
         Exception nativeFailure=new IOException("Encrypted resolver failed",new System.ComponentModel.Win32Exception(12002,"WinHTTP send timeout"));
         using(var proxy=new LocalDnsProxy(q=>{throw nativeFailure;})){
-            proxy.Start(0,false);try{LocalDnsPreflightException.Verify("Основной DNS",8,false,()=>proxy.Probe());throw new Exception("Unexpected success");}
-            catch(LocalDnsPreflightException failure){Check(failure.Message.Contains("GeoHide US")&&failure.Message.Contains("DoH")&&failure.Message.Contains("ожидания")&&!failure.Message.Contains("DNS-код 2")&&object.ReferenceEquals(failure.InnerException,nativeFailure),"Startup preserves original transport failure instead of its synthesized SERVFAIL");}
+            proxy.Start(0,false);try{LocalDnsPreflightException.Verify("Основной DNS",0,false,()=>proxy.Probe());throw new Exception("Unexpected success");}
+            catch(LocalDnsPreflightException failure){Check(failure.Message.Contains("Comss.one")&&failure.Message.Contains("DoH")&&failure.Message.Contains("ожидания")&&!failure.Message.Contains("DNS-код 2")&&object.ReferenceEquals(failure.InnerException,nativeFailure),"Startup preserves original transport failure instead of its synthesized SERVFAIL");}
         }
         try{LocalDnsPreflightException.Verify("Отдельный DNS Antigravity",6,false,()=>{throw new IOException("DoH HTTP 403");});throw new Exception("Unexpected success");}
         catch(LocalDnsPreflightException failure){Check(failure.Message.Contains("Antigravity")&&failure.Message.Contains("MagicDNS")&&failure.Message.Contains("HTTP 403"),"Separate Antigravity failure identifies its own provider and HTTP status");}
-        try{LocalDnsPreflightException.Verify("Основной DNS",8,true,()=>{throw new IOException("DoT: сервер не ответил за 3 с.");});throw new Exception("Unexpected success");}
+        try{LocalDnsPreflightException.Verify("Основной DNS",0,true,()=>{throw new IOException("DoT: сервер не ответил за 3 с.");});throw new Exception("Unexpected success");}
         catch(LocalDnsPreflightException failure){Check(failure.Message.Contains("DoT")&&failure.Message.Contains("ожидания"),"DoT timeout has a readable provider-scoped explanation");}
         using(var proxy=new LocalDnsProxy(q=>TunnelWire.Error(q))){proxy.Start(0,false);try{LocalDnsPreflightException.Verify("Основной DNS",7,false,()=>proxy.Probe());throw new Exception("Unexpected success");}
             catch(LocalDnsPreflightException failure){Check(failure.Message.Contains("SERVFAIL"),"Real upstream SERVFAIL is still reported as a server DNS error");}}

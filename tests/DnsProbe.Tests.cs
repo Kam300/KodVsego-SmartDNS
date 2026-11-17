@@ -11,8 +11,8 @@ static class ProbeTests
         byte[] q = DnsProbe.Query("example.com");
         bool resolved=false;
         var pinned=DohHttp2.ResolverAddresses(EncryptedDns.Templates[0],host=>{resolved=true;return new[]{"127.0.1.1"};});
-        Check(!resolved&&pinned.SequenceEqual(new[]{"195.133.25.16"}),"Comss test uses configured Windows DoH IP without resolving its poisoned hostname");
-        var geo=DohHttp2.ResolverAddresses(EncryptedDns.Templates[1],host=>new[]{"127.0.1.1","193.233.112.68"});
+        Check(!resolved&&pinned.SequenceEqual(new[]{"94.250.253.55","212.109.195.93"}),"Comss test uses configured Windows DoH IPs without resolving its poisoned hostname");
+        var geo=DohHttp2.ResolverAddresses("https://resolver.test/dns-query",host=>new[]{"127.0.1.1","193.233.112.68"});
         Check(geo.SequenceEqual(new[]{"193.233.112.68"}),"Other provider addresses are resolved separately and local targets are rejected");
         Check(!DohHttp2.CanRetry(new System.Security.Authentication.AuthenticationException("wrong hostname certificate")),"Direct HTTPS never retries around a certificate validation failure");
         int attempts=0;var trace=new System.Collections.Generic.List<string>();
@@ -42,10 +42,10 @@ static class ProbeTests
         Check(Dns.V4.Length == Dns.V6.Length && Dns.Name.Length == Dns.Opens.Length && Dns.Name.Length == Dns.Url.Length, "Provider catalog aligned");
         for(int k=0;k<Dns.V4.Length;k++) Check(Dns.MatchProvider(Dns.V4[k]) == k, "Complete configured pair maps to provider " + k);
         Check(Dns.MatchProvider(new[] { Dns.V4[0][0], Dns.V4[4][0] }) == -1, "Mixed old and new servers do not select first provider");
-        Check(EncryptedDns.Templates[0] == "https://dns.comss.one/dns-query" && EncryptedDns.ServersFor(0).SequenceEqual(new[] {"195.133.25.16"}), "Comss DoH uses its published dedicated address and endpoint");
+        Check(EncryptedDns.Templates[0] == "https://dns.comss.one/dns-query" && EncryptedDns.ServersFor(0).SequenceEqual(new[] {"94.250.253.55", "212.109.195.93"}), "Comss DoH uses its published working addresses and endpoint");
         Check(Dns.MatchProvider(EncryptedDns.ServersFor(0)) == 0, "Comss encrypted address is recognized after apply and restart");
-        Check(Dns.MatchProvider(new[] {"195.133.25.16", "192.0.2.53"}) == -1, "Mixed encrypted Comss and custom resolver is rejected");
-        Check(Dns.V4[0].SequenceEqual(new[] {"94.250.253.55", "212.109.195.93"}), "Comss plain DNS remains separate from its encrypted address");
+        Check(Dns.MatchProvider(new[] {"94.250.253.55", "192.0.2.53"}) == -1, "Mixed encrypted Comss and custom resolver is rejected");
+        Check(Dns.V4[0].SequenceEqual(new[] {"94.250.253.55", "212.109.195.93"}) && Dns.MatchProvider(new[] {"195.133.25.16"}) == 0, "Comss plain and encrypted share current addresses while retired encrypted IP remains recognized for recovery");
         Check(Dns.MatchProvider(new[]{"83.220.169.155","212.109.195.93"})==0,"Retired Comss pair remains recognized for recovery");
         Check(Dns.EncryptedOnly(5) && EncryptedDns.Templates[5] == "https://dns.dns-ai.ru/dns-query" && Dns.V4[5].SequenceEqual(new[]{"194.87.196.13","45.151.102.219"}) && EncryptedDns.ServersFor(5).SequenceEqual(Dns.V4[5]), "DNS-AI uses current published addresses and requires encryption");
         Check(Dns.MatchProvider(new[]{"194.87.196.13","186.246.49.127"})==5 && Dns.KnownServers.Contains("186.246.49.127"),"Retired DNS-AI pair remains recognized and recoverable");

@@ -81,6 +81,7 @@ namespace HbAi.XboxDns
                         if(!result.Availability.CanRecommend)result.Error=result.Availability.EndpointSummary;
                     }
                     else {
+                    var directGuard=CustomDns.IsCustom(provider)?null:probe as IDirectAddressGuard;
                     foreach(string host in Goals[goal].Hosts) {
                         operationToken.ThrowIfCancellationRequested();
                         trace.AppendLine(watch.ElapsedMilliseconds+" ms DNS query "+host+"; servers="+(result.Encrypted?(tls?DotDns.Host(provider):EncryptedDns.Templates[provider]):string.Join(",",Dns.V4[provider]))+"; timeout="+(result.Encrypted?DohHttp2.RequestTimeoutMilliseconds:2000)+" ms");
@@ -91,6 +92,11 @@ namespace HbAi.XboxDns
                         if(ready.Length==0)throw new IOException(host+": полученные IP временно исключены после отказов");
                         foreach(string address in ready) {
                             operationToken.ThrowIfCancellationRequested();
+                            if(directGuard!=null&&directGuard.IsDirectAddress(host,address,operationToken)) {
+                                error="Без подмены DNS · прямой адрес сервиса ("+address+")";
+                                trace.AppendLine(watch.ElapsedMilliseconds+" ms Direct IP rejected: "+host+" -> "+address);
+                                continue;
+                            }
                             trace.AppendLine(watch.ElapsedMilliseconds+" ms HTTPS "+host+" @ "+address+"; connect/TLS timeout="+(probe is AutoDnsProbe?((AutoDnsProbe)probe).HttpsTimeout:3500)+" ms");
                             try {probe.Https(host,address,Goals[goal].Api,operationToken);trace.AppendLine(watch.ElapsedMilliseconds+" ms HTTPS OK");reachable=true;result.EndpointAddresses[host]=address;health.Reachable(host,address,healthVersion);break;}
                             catch(OperationCanceledException){throw;}
@@ -121,11 +127,13 @@ namespace HbAi.XboxDns
                 "\n\nПроверено соединение с адресом от выбранного DNS. Вход в аккаунт и работа модели не проверялись. Применяется общий DNS компьютера.";
         }
     }
-    sealed class AutoDnsProbe : IAutoDnsProbe
+    sealed class AutoDnsProbe : IAutoDnsProbe, IDirectAddressGuard
     {
         readonly bool tls;
         readonly bool pinned;internal readonly int HttpsTimeout;
         internal AutoDnsProbe(bool tls = false,int httpsTimeout=3500,bool pinned=false) { this.tls = tls;HttpsTimeout=httpsTimeout;this.pinned=pinned; }
+        public bool IsDirectAddress(string host,string address,CancellationToken cancel)
+        {return DirectDnsGuard.IsDirect(host,address,cancel);}
         public ServiceHttpReply Request(ServiceEndpoint endpoint,string address,CancellationToken cancel)
         {return new ServiceAvailabilityProbe(tls).Request(endpoint,address,cancel);}
         public string[] Resolve(int provider, bool encrypted, string host, CancellationToken cancel)

@@ -118,12 +118,12 @@ static class NativeDnsTests
             Assert(system.Encryption[system.Id + "/IPv4"].Length == 2 && system.Encryption[system.Id + "/IPv4"].All(d => d.Flags == 2), "UDP fallback allowed");
             Assert(RegistryDnsBackupStore.SnapshotVersion(store.Load()) == 2, "Old app could discard IPv6/DoH recovery metadata");
         });
-        Test("Comss DoH sets one dedicated address and restores the original DNS", () => {
+        Test("Comss DoH sets its current addresses and restores the original DNS", () => {
             system.CaptureDoh = true;
             engine.Change(true, EncryptedDns.ServersFor(0), EncryptedDns.Templates[0]);
-            Assert(system.Values[system.Id + "/IPv4"].SequenceEqual(new[] {"195.133.25.16"}), "Plain Comss addresses used for encryption");
+            Assert(system.Values[system.Id + "/IPv4"].SequenceEqual(new[] {"94.250.253.55", "212.109.195.93"}), "Comss DoH addresses applied");
             var doh = system.Encryption[system.Id + "/IPv4"];
-            Assert(doh.Length == 1 && doh[0].Index == 0 && doh[0].Flags == 2 && doh[0].Template == EncryptedDns.Templates[0], "Wrong encrypted settings");
+            Assert(doh.Length == 2 && doh.All(d => d.Flags == 2 && d.Template == EncryptedDns.Templates[0]), "Wrong encrypted settings");
             new DnsSettingsEngine(system, store).Change(false, new string[0]);
             Original(); Assert(system.Ipv6Enabled, "IPv6 binding not restored");
         });
