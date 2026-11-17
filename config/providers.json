@@ -31,7 +31,6 @@
       "chatgpt.com",
       "gemini.google.com",
       "claude.ai",
-      "generativelanguage.googleapis.com",
       "api.elevenlabs.io",
       "cloudcode-pa.googleapis.com",
       "daily-cloudcode-pa.googleapis.com"
@@ -86,7 +85,6 @@
       "chatgpt.com",
       "gemini.google.com",
       "claude.ai",
-      "generativelanguage.googleapis.com",
       "api.elevenlabs.io",
       "cloudcode-pa.googleapis.com",
       "daily-cloudcode-pa.googleapis.com"
@@ -134,7 +132,6 @@
       "chatgpt.com",
       "gemini.google.com",
       "claude.ai",
-      "generativelanguage.googleapis.com",
       "api.elevenlabs.io",
       "cloudcode-pa.googleapis.com",
       "daily-cloudcode-pa.googleapis.com"
@@ -216,7 +213,6 @@
       "example.com",
       "chatgpt.com",
       "gemini.google.com",
-      "generativelanguage.googleapis.com",
       "open.spotify.com",
       "cloudcode-pa.googleapis.com",
       "daily-cloudcode-pa.googleapis.com"
@@ -276,7 +272,6 @@
       "chatgpt.com",
       "claude.ai",
       "gemini.google.com",
-      "generativelanguage.googleapis.com",
       "api.elevenlabs.io",
       "cloudcode-pa.googleapis.com",
       "daily-cloudcode-pa.googleapis.com"
@@ -296,14 +291,14 @@
     "name": "MagicDNS",
     "enabled": true,
     "ipv4": [
-      "109.120.177.170",
-      "45.88.163.92"
+      "217.144.190.216",
+      "109.120.187.249"
     ],
     "ipv6": [],
-    "doh": "https://api.magicdns.ru/sync",
+    "doh": "https://api.magicinfo.art/rpc",
     "windowsDohServers": [
-      "109.120.177.170",
-      "45.88.163.92"
+      "217.144.190.216",
+      "109.120.187.249"
     ],
     "encryptedOnly": false,
     "services": [
@@ -311,7 +306,15 @@
       "Claude",
       "Gemini",
       "ElevenLabs",
-      "Antigravity"
+      "Antigravity",
+      "Grok",
+      "Perplexity",
+      "Copilot",
+      "Sora",
+      "NotebookLM",
+      "AI Studio",
+      "OpenRouter",
+      "Notion"
     ],
     "autoGoals": [
       "ChatGPT",
@@ -323,25 +326,36 @@
     "testHosts": [
       "example.com",
       "chatgpt.com",
-      "generativelanguage.googleapis.com",
-      "claude.ai",
       "gemini.google.com",
+      "claude.ai",
       "elevenlabs.io",
       "cloudcode-pa.googleapis.com",
-      "daily-cloudcode-pa.googleapis.com"
+      "daily-cloudcode-pa.googleapis.com",
+      "grok.com",
+      "www.perplexity.ai",
+      "copilot.com",
+      "sora.chatgpt.com",
+      "notebooklm.google.com",
+      "aistudio.google.com",
+      "openrouter.ai",
+      "www.notion.so"
     ],
     "description": "ChatGPT, Claude, Gemini, ElevenLabs, Antigravity",
     "site": "magicdns.ru",
     "url": "https://magicdns.ru/",
-    "dot": "api.magicdns.ru",
+    "dot": "api.magicinfo.art",
     "windowsDotServers": [
-      "45.88.163.92",
-      "109.120.177.170"
+      "217.144.190.216",
+      "109.120.187.249"
     ],
     "legacyIpv4": [
       [
         "109.120.132.43",
         "94.249.177.102"
+      ],
+      [
+        "109.120.177.170",
+        "45.88.163.92"
       ]
     ]
   },
@@ -380,7 +394,6 @@
       "chatgpt.com",
       "claude.ai",
       "gemini.google.com",
-      "generativelanguage.googleapis.com",
       "api.elevenlabs.io",
       "open.spotify.com"
     ],
@@ -431,7 +444,6 @@
       "chatgpt.com",
       "claude.ai",
       "gemini.google.com",
-      "generativelanguage.googleapis.com",
       "api.elevenlabs.io",
       "open.spotify.com"
     ],
@@ -486,7 +498,6 @@
       "chatgpt.com",
       "claude.ai",
       "gemini.google.com",
-      "generativelanguage.googleapis.com",
       "api.elevenlabs.io",
       "open.spotify.com",
       "cloudcode-pa.googleapis.com",
@@ -534,7 +545,6 @@
       "chatgpt.com",
       "claude.ai",
       "gemini.google.com",
-      "generativelanguage.googleapis.com",
       "open.spotify.com"
     ],
     "description": "ChatGPT, Claude, Gemini, Spotify",
@@ -639,7 +649,6 @@
       "chatgpt.com",
       "claude.ai",
       "gemini.google.com",
-      "generativelanguage.googleapis.com",
       "api.elevenlabs.io",
       "open.spotify.com",
       "cloudcode-pa.googleapis.com",
@@ -653,5 +662,77 @@
       "162.159.36.20",
       "162.159.36.5"
     ]
+  },
+  {
+    "id": 14,
+    "key": "pereval",
+    "name": "Перевал",
+    "enabled": true,
+    "ipv4": [
+      "153.80.200.170"
+    ],
+    "ipv6": [],
+    "doh": null,
+    "windowsDohServers": [
+      "153.80.200.170"
+    ],
+    "encryptedOnly": false,
+    "services": [
+      "Claude"
+    ],
+    "autoGoals": [
+      "Claude"
+    ],
+    "testHosts": [
+      "example.com",
+      "claude.ai"
+    ],
+    "description": "Claude · обычный DNS",
+    "site": "pereval.top",
+    "url": "https://pereval.top/",
+    "dot": null,
+    "windowsDotServers": [],
+    "legacyIpv4": []
+  },
+  {
+    "id": 15,
+    "key": "geohide-eu-current",
+    "name": "GeoHide EU",
+    "enabled": true,
+    "ipv4": [
+      "5.175.161.40",
+      "143.20.64.192"
+    ],
+    "ipv6": [],
+    "doh": null,
+    "windowsDohServers": [
+      "5.175.161.40",
+      "143.20.64.192"
+    ],
+    "encryptedOnly": false,
+    "services": [
+      "ChatGPT",
+      "Claude",
+      "ElevenLabs",
+      "Grok"
+    ],
+    "autoGoals": [
+      "ChatGPT",
+      "Claude",
+      "ElevenLabs"
+    ],
+    "testHosts": [
+      "example.com",
+      "chatgpt.com",
+      "claude.ai",
+      "elevenlabs.io",
+      "grok.com"
+    ],
+    "description": "ChatGPT, Claude, ElevenLabs, Grok",
+    "site": "geohide.ru",
+    "url": "https://geohide.ru/",
+    "dot": null,
+    "windowsDotServers": [],
+    "legacyIpv4": []
   }
 ]

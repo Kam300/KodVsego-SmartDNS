@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -90,6 +90,30 @@ static class LocalDnsTests
         using(var proxy=new LocalDnsProxy(q=>{throw new IOException("offline");})){proxy.Start(0,false);var fail=Udp(proxy.Port,IPAddress.Loopback,query);Check((fail[3]&15)==2&&fail[0]==query[0]&&fail[1]==query[1],"Encrypted upstream failure yields SERVFAIL with original transaction, no plaintext fallback");Reject(()=>proxy.Probe(),"Failed upstream cannot pass local preflight");}
         using(var proxy=new LocalDnsProxy(q=>{var a=Reply(q);a[0]^=1;return a;})){proxy.Start(0,false);Check((Udp(proxy.Port,IPAddress.Loopback,query)[3]&15)==2,"Mismatched upstream transaction is rejected");}
         using(var proxy=new LocalDnsProxy(q=>{var a=Reply(q);a[3]=131;TunnelPacket.Put16(a,6,0);return a.Take(q.Length).ToArray();})){proxy.Start(0,false);Check((Udp(proxy.Port,IPAddress.Loopback,query)[3]&15)==3,"NXDOMAIN is retained rather than converted to connectivity success");}
+        int attempts=0;var slowTrace=new List<string>();
+        var delayed=new TunnelUpstream(8,false,slowTrace.Add,(ip,q)=>{
+            int attempt=Interlocked.Increment(ref attempts);
+            if(attempt==1){Thread.Sleep(8000);throw new System.ComponentModel.Win32Exception(12002,"WinHTTP: send; code=12002");}
+            if(attempt==2)Thread.Sleep(2500);
+            return Reply(q);
+        });
+        using(var proxy=new LocalDnsProxy(delayed.Query)){
+            proxy.Start(0);var clock=Stopwatch.StartNew();proxy.Probe();
+            Check(clock.ElapsedMilliseconds>=10000&&attempts==2,"Preflight waits beyond the old 10-second loopback deadline for a working second address");
+            Check(slowTrace.Any(line=>line.Contains("12002"))&&slowTrace.Any(line=>line.Contains("NOERROR")),"Failed first address and successful alternate remain visible in diagnostics");
+            Check(Udp(proxy.Port,IPAddress.Loopback,query).SequenceEqual(Reply(query))&&attempts==3,"Validated sample is removed after preflight; live requests still reach encrypted upstream");
+        }
+        Exception nativeFailure=new IOException("Encrypted resolver failed",new System.ComponentModel.Win32Exception(12002,"WinHTTP send timeout"));
+        using(var proxy=new LocalDnsProxy(q=>{throw nativeFailure;})){
+            proxy.Start(0,false);try{LocalDnsPreflightException.Verify("Основной DNS",8,false,()=>proxy.Probe());throw new Exception("Unexpected success");}
+            catch(LocalDnsPreflightException failure){Check(failure.Message.Contains("GeoHide US")&&failure.Message.Contains("DoH")&&failure.Message.Contains("ожидания")&&!failure.Message.Contains("DNS-код 2")&&object.ReferenceEquals(failure.InnerException,nativeFailure),"Startup preserves original transport failure instead of its synthesized SERVFAIL");}
+        }
+        try{LocalDnsPreflightException.Verify("Отдельный DNS Antigravity",6,false,()=>{throw new IOException("DoH HTTP 403");});throw new Exception("Unexpected success");}
+        catch(LocalDnsPreflightException failure){Check(failure.Message.Contains("Antigravity")&&failure.Message.Contains("MagicDNS")&&failure.Message.Contains("HTTP 403"),"Separate Antigravity failure identifies its own provider and HTTP status");}
+        try{LocalDnsPreflightException.Verify("Основной DNS",8,true,()=>{throw new IOException("DoT: сервер не ответил за 3 с.");});throw new Exception("Unexpected success");}
+        catch(LocalDnsPreflightException failure){Check(failure.Message.Contains("DoT")&&failure.Message.Contains("ожидания"),"DoT timeout has a readable provider-scoped explanation");}
+        using(var proxy=new LocalDnsProxy(q=>TunnelWire.Error(q))){proxy.Start(0,false);try{LocalDnsPreflightException.Verify("Основной DNS",7,false,()=>proxy.Probe());throw new Exception("Unexpected success");}
+            catch(LocalDnsPreflightException failure){Check(failure.Message.Contains("SERVFAIL"),"Real upstream SERVFAIL is still reported as a server DNS error");}}
         var opt=query.Concat(new byte[]{0,0,41,4,208,0,0,0,0,0,0}).ToArray();TunnelPacket.Put16(opt,10,1);
         Check(LocalDnsProxy.UdpLimit(query)==512&&LocalDnsProxy.UdpLimit(opt)==1232,"UDP size follows EDNS with a conservative classic-DNS default");
         using(var proxy=new LocalDnsProxy(q=>Reply(q).Concat(new byte[1000]).ToArray())){proxy.Start(0,false);var shortReply=Udp(proxy.Port,IPAddress.Loopback,query);Check((shortReply[2]&2)!=0&&shortReply.Length==query.Length,"Oversized UDP response requests a TCP retry instead of exceeding the client limit");using(var tcp=new TcpClient()){tcp.Connect(IPAddress.Loopback,proxy.Port);tcp.ReceiveTimeout=3000;Check(Tcp(tcp.GetStream(),query).Length>512,"TCP retains the complete large upstream response");}}

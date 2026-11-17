@@ -71,6 +71,7 @@ namespace HbAi.XboxDns
         void Log(string line){DiagnosticReport.Record(local?"Локальный DNS":"Gemini / NotebookLM",TunnelDiagnostics.Line(line));}
         public void SetAntigravity(int provider){if(!local||running)throw new IOException("Сначала остановите локальный DNS.");if(provider!=-1&&!LocalDnsRouting.Supports(provider))throw new IOException("Провайдер Antigravity недоступен.");localAntigravity=provider;localAntigravityTls=false;}
         public void SetAntigravity(int provider,bool tls){SetAntigravity(provider);if(provider>=0&&tls&&!DotDns.Available(provider))throw new IOException("У DNS нет DoT.");localAntigravityTls=tls;}
+        internal bool VpnCompatibility;
         public void Start(int provider,bool tls)
         {
             if(running)return;
@@ -80,7 +81,7 @@ namespace HbAi.XboxDns
             try {
                 Guid token=Guid.NewGuid();channel=DnsTunnel.Server(token);pending=channel.BeginWaitForConnection(null,null);pipe=channel;
                 bool elevated=!DnsElevation.IsAdministrator();
-                var start=new ProcessStartInfo(Assembly.GetExecutingAssembly().Location,(local?"--dns-local-worker ":"--dns-tunnel-worker ")+Process.GetCurrentProcess().Id+" "+token.ToString("N")+" "+provider+" "+(tls?"tls":"https")+(local?" "+localAntigravity+" "+(localAntigravityTls?"tls":"https"):"")){UseShellExecute=elevated,CreateNoWindow=true,WorkingDirectory=Environment.GetFolderPath(Environment.SpecialFolder.System)};
+                var start=new ProcessStartInfo(Assembly.GetExecutingAssembly().Location,(local?"--dns-local-worker ":"--dns-tunnel-worker ")+Process.GetCurrentProcess().Id+" "+token.ToString("N")+" "+provider+" "+(tls?"tls":"https")+(local?" "+localAntigravity+" "+(localAntigravityTls?"tls":"https")+(VpnCompatibility?" vpn":""):"")){UseShellExecute=elevated,CreateNoWindow=true,WorkingDirectory=Environment.GetFolderPath(Environment.SpecialFolder.System)};
                 if(elevated)start.Verb="runas";
                 Log("START provider="+Dns.Name[provider]+"; protocol="+(tls?"DoT":"DoH")+"; scope=system DNS; separate window=false");
                 child=launch(start);if(child==null)throw new IOException("Обработчик не запущен.");
@@ -341,9 +342,9 @@ namespace HbAi.XboxDns
         }
         static TunnelBackupStore RecoveryStore()
         {using(var key=Registry.LocalMachine.OpenSubKey(RegistryDnsBackupStore.Key))return new TunnelBackupStore(new RegistryDnsBackupStore(),TunnelBackupStore.ParseIds(key==null?null:key.GetValue("TunnelAdapters")));}
-        internal static string RestoreSnapshot(DnsSettingsEngine engine,IDnsBackupStore store)
+        internal static string RestoreSnapshot(DnsSettingsEngine engine,IDnsBackupStore store,bool vpn=false)
         {
-            try{if(store.Load().Count>0)engine.Change(false,new string[0]);if(store.Load().Count==0){Mark(false);return null;}return "Копия недоступного адаптера этого туннеля сохранена. Повторите восстановление после подключения.";}
+            try{if(vpn)VpnDnsPolicy.Remove();if(store.Load().Count>0)engine.Change(false,new string[0]);if(store.Load().Count==0){Mark(false);return null;}return "Копия недоступного адаптера этого туннеля сохранена. Повторите восстановление после подключения.";}
             catch(Exception error){return "Восстановление не завершено: "+DiagnosticReport.Scrub(error.Message).Replace('\n',' ');}
         }
         internal static string Recover()
@@ -352,6 +353,7 @@ namespace HbAi.XboxDns
                 try{locked=mutex.WaitOne(0);}catch(AbandonedMutexException){locked=true;}
                 if(!locked)return "Туннель ещё завершает работу. Подождите и повторите восстановление.";
                 if(!Pending)return null;
+                VpnDnsPolicy.Remove();
                 if(new RegistryDnsBackupStore().Load().Count==0){Mark(false);return null;}
                 var store=RecoveryStore();if(store.Load().Count>0)new DnsSettingsEngine(new NativeDnsSystem(),store).Change(false,new string[0]);
                 if(store.Load().Count>0)return "Копия недоступного адаптера сохранена. Подключите его и повторите восстановление.";

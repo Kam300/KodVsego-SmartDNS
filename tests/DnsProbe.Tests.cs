@@ -50,14 +50,14 @@ static class ProbeTests
         Check(Dns.EncryptedOnly(5) && EncryptedDns.Templates[5] == "https://dns.dns-ai.ru/dns-query" && Dns.V4[5].SequenceEqual(new[]{"194.87.196.13","45.151.102.219"}) && EncryptedDns.ServersFor(5).SequenceEqual(Dns.V4[5]), "DNS-AI uses current published addresses and requires encryption");
         Check(Dns.MatchProvider(new[]{"194.87.196.13","186.246.49.127"})==5 && Dns.KnownServers.Contains("186.246.49.127"),"Retired DNS-AI pair remains recognized and recoverable");
         Check(!EncryptedDns.ServersFor(5).Contains("186.246.49.127") && Dns.MatchProvider(new[]{"186.246.49.127","45.151.102.219"})==-1 && Dns.MatchProvider(new[]{"186.246.49.127"})==-1,"Retired address is never newly applied; partial and mixed legacy sets are not attributed to DNS-AI");
-        Check(Dns.Name[6]=="MagicDNS" && Dns.V4[6].SequenceEqual(new[]{"109.120.177.170","45.88.163.92"}) && EncryptedDns.Templates[6]=="https://api.magicdns.ru/sync" && !Dns.EncryptedOnly(6), "MagicDNS supports published plain and HTTPS endpoints");
+        Check(Dns.Name[6]=="MagicDNS" && Dns.V4[6].SequenceEqual(new[]{"217.144.190.216","109.120.187.249"}) && EncryptedDns.Templates[6]=="https://api.magicinfo.art/rpc" && !Dns.EncryptedOnly(6), "MagicDNS supports published plain and HTTPS endpoints");
         var magicSecure=new FamilyBackup{Family="IPv4",Manual=true,Servers=EncryptedDns.ServersFor(6),DohCaptured=true,Doh=EncryptedDns.Strict(2,EncryptedDns.Templates[6])};
         Check(magicSecure.Servers.SequenceEqual(Dns.V4[6])&&EncryptedDns.ExplicitlyConfigured(magicSecure,6),"MagicDNS configures strict DoH for both published servers");
         magicSecure.Doh[1].Flags=6;
         Check(!EncryptedDns.ExplicitlyConfigured(magicSecure,6),"MagicDNS with plaintext fallback is not reported as strict DoH");
         Check(new[]{Dns.V4.Length,Dns.V6.Length,Dns.Site.Length,Dns.Url.Length,Dns.Opens.Length,EncryptedDns.Templates.Length}.All(n=>n==Dns.Name.Length), "Provider metadata stays aligned for DNS changes and restoration");
         Check(DnsProbe.Targets(5).SequenceEqual(new[]{EncryptedDns.Templates[5]}), "DNS-AI tests target HTTPS only, not port 53");
-        Check(DnsProbe.HostsForProvider(5).Contains("gemini.google.com") && DnsProbe.HostsForProvider(5).Contains("generativelanguage.googleapis.com"), "DNS-AI checks both Gemini website and API");
+        Check(DnsProbe.HostsForProvider(5).Contains("gemini.google.com") && !DnsProbe.HostsForProvider(5).Contains("generativelanguage.googleapis.com"), "DNS-AI checks Gemini website only");
         var geminiResults = DnsProbe.CheckProvider(5,(server,host)=>new DnsProbeResult{Server=server,Host=host,Milliseconds=15,Error=host=="gemini.google.com"?"Gemini test failure":null});
         Check(geminiResults.Count(r=>r.Host=="gemini.google.com")==1 && DnsProbe.Report(5,geminiResults).Contains("✕ gemini.google.com — Gemini test failure"), "DNS-AI Gemini failure is tested through DoH and shown in report");
         var secure=new FamilyBackup{Family="IPv4",Manual=true,Servers=Dns.V4[5],DohCaptured=true,Doh=EncryptedDns.Strict(2,EncryptedDns.Templates[5])};
@@ -113,7 +113,7 @@ static class ProbeTests
             var hosts = DnsProbe.HostsForProvider(k);
             Check(hosts.Contains("example.com") && hosts.Distinct().Count() == hosts.Length, Dns.Name[k] + " has a unique test suite and baseline");
             var goals=ProviderCatalog.All[k].autoGoals;
-            Check((!goals.Contains("ChatGPT")||hosts.Contains("chatgpt.com"))&&(!goals.Contains("Claude")||hosts.Contains("claude.ai"))&&(!goals.Contains("Gemini")||hosts.Contains("generativelanguage.googleapis.com")||hosts.Contains("gemini.google.com"))&&(!goals.Contains("Antigravity")||AntigravityDns.Domains.All(hosts.Contains))&&(!goals.Contains("Xbox")||hosts.Contains("xsts.auth.xboxlive.com")),Dns.Name[k]+" tests its declared services without assuming every DNS supports AI");
+            Check((!goals.Contains("ChatGPT")||hosts.Contains("chatgpt.com"))&&(!goals.Contains("Claude")||hosts.Contains("claude.ai"))&&(!goals.Contains("Gemini")||hosts.Contains("gemini.google.com"))&&(!goals.Contains("Antigravity")||AntigravityDns.Domains.All(hosts.Contains))&&(!goals.Contains("Xbox")||hosts.Contains("xsts.auth.xboxlive.com")),Dns.Name[k]+" tests its declared services without assuming every DNS supports AI");
             var results = DnsProbe.CheckProvider(k, (server,host) => new DnsProbeResult {Server=server,Host=host,Milliseconds=12,Error=hosts.Length>1&&host=="example.com"?null:"simulated failure"});
             Check(results.Length == hosts.Length * DnsProbe.Targets(k).Length && DnsProbe.Targets(k).All(server => results.Count(r=>r.Server==server) == hosts.Length), Dns.Name[k] + " tests every host on each selected transport target");
             string report = DnsProbe.Report(k,results);
@@ -124,7 +124,7 @@ static class ProbeTests
             var result=DnsProbe.CheckHttps(template,"example.com");
             Check(result.Ok,"HTTPS probe: " + template + (result.Error==null?"":" · "+result.Error));
         }
-        if(args.Contains("--https")) foreach(string host in new[]{"gemini.google.com","generativelanguage.googleapis.com"}) {
+        if(args.Contains("--https")) foreach(string host in new[]{"gemini.google.com"}) {
             var result=DnsProbe.CheckHttps(EncryptedDns.Templates[5],host);
             Check(result.Ok,"DNS-AI live Gemini HTTPS: "+host+" · "+(result.Error??result.Milliseconds+" ms"));
         }

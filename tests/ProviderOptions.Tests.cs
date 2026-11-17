@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -44,6 +44,21 @@ static class ProviderOptionsTests
         Check(ProviderPreferences.Normalize(new[]{0,0,-1,1,3,999,6}).SequenceEqual(new[]{0,6}),"Preferences retain stable enabled IDs only");
         string keyName=@"Software\KodVsego\Tests\ProviderOptions-"+Guid.NewGuid().ToString("N");
         try{using(var key=Registry.CurrentUser.CreateSubKey(keyName)){
+            const string first = "https://resolver.example/DNS";
+            const string second = "https://resolver.example/dns";
+            DnsRatings.Save(key, DnsTransport.Https, first, DnsVote.Works);
+            DnsRatings.Save(key, DnsTransport.Https, second, DnsVote.Fails);
+            Check(DnsRatings.Read(key, DnsTransport.Https, first) == DnsVote.Works &&
+                DnsRatings.Read(key, DnsTransport.Https, second) == DnsVote.Fails &&
+                DnsRatings.Read(key, DnsTransport.Tls, first) == DnsVote.None,
+                "Votes remain separate for endpoint paths and transports");
+            DnsRatings.Save(key, DnsTransport.Https, first, DnsVote.Fails);
+            Check(DnsRatings.Read(key, DnsTransport.Https, first) == DnsVote.Fails,
+                "Changing a vote replaces the old choice");
+            DnsRatings.Save(key, DnsTransport.Https, first, DnsVote.None);
+            Check(DnsRatings.Read(key, DnsTransport.Https, first) == DnsVote.None &&
+                DnsRatings.Read(key, DnsTransport.Https, second) == DnsVote.Fails,
+                "Reset removes only the selected vote");
             Check(ProviderPreferences.Read(key).Length==0,"Missing preference preserves the complete provider list");
             ProviderPreferences.Save(key,new[]{0,6});Check(ProviderPreferences.Read(key).SequenceEqual(new[]{0,6}),"Visibility survives a settings round trip in an isolated test key");
             bool refused=false;try{ProviderPreferences.Save(key,Dns.AvailableProviders);}catch(InvalidOperationException){refused=true;}
@@ -53,7 +68,7 @@ static class ProviderOptionsTests
         Check(Dns.IsAvailable(13)&&!LocalDnsRouting.Supports(13)&&!AutoDns.Candidates(AutoDns.GoalIndex("Antigravity"),true,false).Contains(13)&&AutoDns.Candidates(goal,true,false).Contains(13),"Malw CF remains available for Gemini but is excluded from Antigravity routes and Auto");
         Check(AutoDns.Candidates(goal,true,false,new[]{6}).SequenceEqual(new[]{6}),"Auto candidates respect the visible-provider snapshot");
         var result=AutoDns.Search(goal,true,probe,CancellationToken.None,null,null,false,new[]{6});
-        Check(result.Length==1&&result[0].Provider==6&&probe.Calls==2,"Auto performs website and API checks only for allowed providers");
+        Check(result.Length==1&&result[0].Provider==6&&probe.Calls==1,"Gemini Auto checks the website only for allowed providers");
         Check(AutoDns.Search(goal,true,new Probe(),CancellationToken.None,null,null,false,new int[0]).Length==0,"Empty compatible selection starts no network probes");
         probe=new Probe();var latency=ProviderLatency.Measure(5,DnsTransport.Plain,CancellationToken.None,probe);
         Check(latency.Error==null&&latency.Protocol==DnsTransport.Https&&probe.Encrypted&&probe.Calls==1&&latency.MeasuredUtc!=default(DateTime),"Latency measures a DNS transaction and never downgrades encryption-only providers");

@@ -73,6 +73,8 @@ def extract_text(text):
     # MagicDNS publishes a nonstandard DoH path. Only recognize it on its official domain.
     if re.search(r'''https://api[.]magicdns[.]ru/sync(?=$|[\s<>"'.,;)])''', text):
         endpoints = sorted(set(endpoints + ['https://api.magicdns.ru/sync']))[:32]
+    if re.search(r'''https://api[.]magicinfo[.]art/rpc(?=$|[\s<>"'.,;)])''', text):
+        endpoints = sorted(set(endpoints + ['https://api.magicinfo.art/rpc']))[:32]
     dot = sorted({host.rstrip('.,;)') for host in re.findall(r'tls://([A-Za-z0-9.-]+)', text) if public_host(host.rstrip('.,;)'))})[:32]
     return dict(ipv4=ips, ipv6=v6, doh=endpoints, explicitDot=dot)
 

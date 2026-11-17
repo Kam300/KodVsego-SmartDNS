@@ -16,7 +16,10 @@ public final class Provider {
     }
     Provider(String name,String[] servers,String doh,boolean encryptedOnly,String[] services,String[] hosts,String dot,String[] dotServers,String url,String[] dohServers) {
         this.name = name; this.servers = servers; this.doh = doh;
-        this.encryptedOnly = encryptedOnly; this.services = java.util.Arrays.stream(services).filter(s->!s.equals("Antigravity")).toArray(String[]::new); this.hosts=java.util.Arrays.stream(hosts).filter(h->!h.endsWith("cloudcode-pa.googleapis.com")).toArray(String[]::new);
+        this.encryptedOnly = encryptedOnly; this.services = java.util.Arrays.stream(services).filter(s->!s.equals("Antigravity")).toArray(String[]::new); this.hosts = java.util.Arrays.stream(hosts)
+                .filter(h -> !h.endsWith("cloudcode-pa.googleapis.com"))
+                .map(h -> h.equalsIgnoreCase("generativelanguage.googleapis.com") ? "gemini.google.com" : h)
+                .distinct().toArray(String[]::new);
         this.dot=dot;this.dotServers=dotServers==null?new String[0]:dotServers.clone();this.url=url;
         this.dohServers=dohServers==null?new String[0]:dohServers.clone();
     }

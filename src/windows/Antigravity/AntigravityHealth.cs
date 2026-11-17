@@ -13,7 +13,7 @@ namespace HbAi.XboxDns
     enum AgHealthKind { Other, Transport, Region, Capacity, Quota, Authentication, Server, Answer }
     sealed class AgHealthEvent
     {
-        internal AgHealthKind Kind;internal DateTime When;internal string Host,Detail,Key,Source,Request;internal bool LocalProxy;
+        internal AgHealthKind Kind;internal DateTime When;internal string Host,Detail,Key,Source,Request,PeerAddress;internal bool LocalProxy;
         internal bool CanSwitch {get{return Source=="language_server.log"&&!LocalProxy&&(Kind==AgHealthKind.Transport||Kind==AgHealthKind.Region)&&AntigravityDns.Domains.Contains(Host);}}
     }
     static class AgHealthParser
@@ -44,7 +44,8 @@ namespace HbAi.XboxDns
             else if(network&&(bootstrap||lower.Contains("attempt ")&&lower.Contains("failed (")&&(lower.Contains("streamgeneratecontent")||lower.Contains("stream reading error"))))kind=AgHealthKind.Transport;
             var attempt=Regex.Match(lower,@"attempt (\d+)").Groups[1].Value;
             var socket=Regex.Match(lower,@"\b(?:read|write|dial) (?:tcp|udp) (\S+->\S+)");
-            return new AgHealthEvent{Kind=kind,When=when,Host=lastHost,Source=source,Request=bootstrap?lastHost+":"+(socket.Success?socket.Groups[1].Value.TrimEnd(':'):Regex.Match(lower,@"/v1internal:([a-z]+)").Groups[1].Value):null,LocalProxy=lower.Contains("->127.")||lower.Contains("->[::1]:"),Key=source+":"+when.Ticks+":"+kind+":"+attempt+":"+lastHost+":"+socket.Value,Detail=SafeDetail(text)};
+            var peer=Regex.Match(socket.Value,@"->((?:\d{1,3}\.){3}\d{1,3}):443\b");string peerAddress=peer.Success&&AutoDnsProbe.PublicAddress(peer.Groups[1].Value)?peer.Groups[1].Value:null;
+            return new AgHealthEvent{Kind=kind,When=when,Host=lastHost,Source=source,PeerAddress=peerAddress,Request=bootstrap?lastHost+":"+(socket.Success?socket.Groups[1].Value.TrimEnd(':'):Regex.Match(lower,@"/v1internal:([a-z]+)").Groups[1].Value):null,LocalProxy=lower.Contains("->127.")||lower.Contains("->[::1]:"),Key=source+":"+when.Ticks+":"+kind+":"+attempt+":"+lastHost+":"+socket.Value,Detail=SafeDetail(text)};
         }
         internal static string SafeDetail(string text)
         {
@@ -103,8 +104,8 @@ namespace HbAi.XboxDns
     }
     sealed class AgFailoverPolicy
     {
-        readonly Dictionary<int,DateTime> excluded=new Dictionary<int,DateTime>();readonly Queue<DateTime> searches=new Queue<DateTime>();readonly Queue<string> seen=new Queue<string>();readonly Dictionary<string,DateTime> requests=new Dictionary<string,DateTime>();
-        DateTime first,last,next,lastRegion;int failures;int workingRoute=-1;
+        readonly Dictionary<int,DateTime> excluded=new Dictionary<int,DateTime>(),regionExcluded=new Dictionary<int,DateTime>();readonly Queue<DateTime> searches=new Queue<DateTime>();readonly Queue<string> seen=new Queue<string>();readonly Dictionary<string,DateTime> requests=new Dictionary<string,DateTime>();
+        DateTime first,last,next,lastRegion;int failures;int workingRoute=-1,workingCommon=-1;bool workingCommonTls;
         internal static int Route(int provider,bool tls){return provider*2+(tls?1:0);}
         internal void ResetSignal(){failures=0;}
         internal bool Observe(AgHealthEvent item,int provider,DateTime now,bool tls=false)
@@ -117,15 +118,15 @@ namespace HbAi.XboxDns
             if(failures<2||now<next)return false;
             while(searches.Count>0&&now-searches.Peek()>TimeSpan.FromMinutes(10))searches.Dequeue();
             if(searches.Count>=3)return false;
-            searches.Enqueue(now);next=now.AddMinutes(1);excluded[Route(provider,tls)]=now.AddMinutes(1);ResetSignal();return true;
+            searches.Enqueue(now);next=now.AddMinutes(1);excluded[Route(provider,tls)]=now.AddMinutes(1);if(item.Kind==AgHealthKind.Region)regionExcluded[Route(provider,tls)]=now.AddMinutes(5);ResetSignal();return true;
         }
         internal int[] Candidates(IEnumerable<int> visible,int current,DateTime now)
         {return visible.Where(id=>id!=current&&LocalDnsRouting.Supports(id)&&(CanProbe(id,false,now)||DotDns.Available(id)&&CanProbe(id,true,now))).Distinct().ToArray();}
-        internal bool CanProbe(int provider,bool tls,DateTime now){DateTime until;return !excluded.TryGetValue(Route(provider,tls),out until)||now>=until;}
+        internal bool CanProbe(int provider,bool tls,DateTime now){DateTime until,region;int route=Route(provider,tls);return (!excluded.TryGetValue(route,out until)||now>=until)&&(!regionExcluded.TryGetValue(route,out region)||now>=region);}
         internal void Failed(int provider,DateTime now,bool tls=false){excluded[Route(provider,tls)]=now.AddSeconds(30);}
-        internal void Answer(int provider,bool tls=false){workingRoute=Route(provider,tls);excluded.Remove(workingRoute);ResetSignal();}
-        internal AutoDnsResult Best(IEnumerable<AutoDnsResult> results)
-        {return results.Where(r=>r.Ok&&!r.NeedsBrowser).OrderBy(r=>Route(r.Provider,r.Tls)==workingRoute?0:1).ThenBy(r=>r.Milliseconds).ThenBy(r=>r.Provider).FirstOrDefault();}
+        internal void Answer(int provider,bool tls=false,int common=-1,bool commonTls=false){workingRoute=Route(provider,tls);workingCommon=common;workingCommonTls=commonTls;excluded.Remove(workingRoute);regionExcluded.Remove(workingRoute);ResetSignal();}
+        internal AutoDnsResult Best(IEnumerable<AutoDnsResult> results,int common=-1,bool commonTls=false)
+        {return results.Where(r=>r.Ok&&!r.NeedsBrowser).OrderBy(r=>Route(r.Provider,r.Tls)==workingRoute&&(common<0||common==workingCommon&&commonTls==workingCommonTls)?0:1).ThenBy(r=>r.Milliseconds).ThenBy(r=>r.Provider).FirstOrDefault();}
     }
     static class AgFailoverPreference
     {

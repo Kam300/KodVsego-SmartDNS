@@ -21,11 +21,12 @@ namespace HbAi.XboxDns
         internal LocalDnsRouting(Func<byte[],byte[]> common,Func<byte[],byte[]> antigravity=null){this.common=common;this.antigravity=antigravity;}
         internal static int[] Providers {get{return Dns.AvailableProviders.Where(Supports).ToArray();}}
         internal static bool Supports(int provider){return Dns.IsAvailable(provider)&&RuntimeProviders.All[provider].autoGoals.Contains("Antigravity")&&EncryptedDns.Templates[provider]!=null;}
-        internal static bool IsAntigravity(byte[] query)
+        internal static bool IsAntigravity(byte[] query){return AntigravityDns.Domains.Contains(Host(query),StringComparer.OrdinalIgnoreCase);}
+        internal static string Host(byte[] query)
         {
             int end=TunnelWire.QuestionEnd(query),offset=12;var labels=new List<string>();
             while(offset<end-4){int length=query[offset++];if(length==0)break;labels.Add(Encoding.ASCII.GetString(query,offset,length));offset+=length;}
-            return AntigravityDns.Domains.Contains(string.Join(".",labels),StringComparer.OrdinalIgnoreCase);
+            return string.Join(".",labels).ToLowerInvariant();
         }
         internal byte[] Query(byte[] query){var special=Volatile.Read(ref antigravity);return special!=null&&IsAntigravity(query)?special(query):Volatile.Read(ref common)(query);}
         internal void ReplaceAntigravity(Func<byte[],byte[]> next,Action flush)
@@ -46,6 +47,27 @@ namespace HbAi.XboxDns
             foreach(string host in AntigravityDns.Domains){var query=DnsProbe.Query(host);var response=Query(query);DnsProbe.Validate(query,response);trace("ANTIGRAVITY DNS preflight host="+host+"; rcode=NOERROR; IPv4="+string.Join(",",DnsProbe.Addresses(query,response))+"; model/account NOT verified");}
         }
     }
+    sealed class LocalDnsPreflightException : IOException
+    {
+        LocalDnsPreflightException(string message,Exception cause):base(message,cause){}
+        internal static void Verify(string role,int provider,bool tls,Action probe)
+        {
+            try{probe();}catch(Exception problem){
+                string reason="Не удалось проверить DNS. Подробности в журнале.";
+                for(var error=problem;error!=null;error=error.InnerException){
+                    var native=error as System.ComponentModel.Win32Exception;
+                    var socket=error as SocketException;
+                    if(error is TimeoutException||native!=null&&native.NativeErrorCode==12002||socket!=null&&socket.SocketErrorCode==SocketError.TimedOut||error.Message=="DoT: сервер не ответил за 3 с."||error.Message=="DoT: время ожидания TLS истекло."){reason="Время ожидания ответа истекло.";break;}
+                    if(error is System.Security.Authentication.AuthenticationException){reason="Не удалось проверить защищённое соединение.";break;}
+                    if(error.Message.StartsWith("DoH HTTP ",StringComparison.Ordinal)){reason="Сервер отклонил запрос (HTTP "+error.Message.Substring(9)+").";break;}
+                    if(error.Message=="DNS-код 2"){reason="DNS-сервер вернул SERVFAIL (код 2).";break;}
+                    if(error.Message=="DNS-код 5"){reason="DNS-сервер отказал в запросе (REFUSED, код 5).";break;}
+                    if(native!=null&&(native.NativeErrorCode==12030||native.NativeErrorCode==12031)){reason="Соединение с DNS-сервером прервано.";break;}
+                }
+                throw new LocalDnsPreflightException(role+": "+Dns.Name[provider]+" · "+(tls?"DoT":"DoH")+". "+reason,problem);
+            }
+        }
+    }
     // Independent implementation using our existing encrypted transport and backup engine.
     // Listeners are loopback-only; no packet driver, routing changes or plaintext upstream.
     sealed class LocalDnsProxy : IDisposable
@@ -58,7 +80,12 @@ namespace HbAi.XboxDns
         readonly HashSet<TcpClient> clients=new HashSet<TcpClient>();
         readonly SemaphoreSlim slots=new SemaphoreSlim(32,32);
         readonly object gate=new object();
+        sealed class ProbeSample {internal readonly byte[] Question,Answer;internal ProbeSample(byte[] question,byte[] answer){Question=question.ToArray();Answer=answer.ToArray();}}
+        ProbeSample probeSample;int probing;
         volatile bool stopped;volatile string failure;
+        volatile string watchedHost;volatile bool hostObserved;
+        internal void WatchHost(string host){hostObserved=false;watchedHost=host;}
+        internal bool HostObserved {get{return hostObserved;}}
         long answers,errors,rejected;int pending;
         internal string Error {get{return failure;}}
         internal int Port {get;private set;}
@@ -128,7 +155,8 @@ namespace HbAi.XboxDns
         byte[] Answer(byte[] query)
         {
             try{TunnelWire.QuestionEnd(query);}catch(IOException){Interlocked.Increment(ref rejected);return null;}
-            try{var reply=exchange(query);TunnelWire.Validate(query,reply);Interlocked.Increment(ref answers);return reply;}
+            if(watchedHost!=null&&LocalDnsRouting.Host(query)==watchedHost)hostObserved=true;
+            try{var sample=Volatile.Read(ref probeSample);var reply=sample!=null&&query.SequenceEqual(sample.Question)?sample.Answer:exchange(query);TunnelWire.Validate(query,reply);Interlocked.Increment(ref answers);return reply;}
             catch(Exception problem){Interlocked.Increment(ref errors);if(Interlocked.Read(ref errors)<=20)trace("LOCAL upstream error: "+TunnelDiagnostics.Error(problem));return TunnelWire.Error(query);}
         }
         internal static int UdpLimit(byte[] query)
@@ -150,18 +178,29 @@ namespace HbAi.XboxDns
         }
         internal void Probe()
         {
-            foreach(var address in Ipv6?new[]{IPAddress.Loopback,IPAddress.IPv6Loopback}:new[]{IPAddress.Loopback}){
-                byte[] query=DnsProbe.Query("example.com");
-                using(var udp=new UdpClient(address.AddressFamily)){udp.Client.ReceiveTimeout=10000;udp.Connect(address,Port);udp.Send(query,query.Length);IPEndPoint from=null;DnsProbe.Validate(query,udp.Receive(ref from));}
-                using(var client=new TcpClient(address.AddressFamily)){
-                    client.Connect(address,Port);client.ReceiveTimeout=10000;client.SendTimeout=10000;
-                    using(var stream=client.GetStream()){
-                        stream.WriteByte((byte)(query.Length>>8));stream.WriteByte((byte)query.Length);stream.Write(query,0,query.Length);
-                        int hi=stream.ReadByte(),lo=stream.ReadByte();if(hi<0||lo<0||hi*256+lo<12)throw new IOException("Локальный TCP DNS не ответил.");
-                        var reply=new byte[hi*256+lo];int offset=0;while(offset<reply.Length){int read=stream.Read(reply,offset,reply.Length-offset);if(read==0)throw new IOException("Неполный ответ локального DNS.");offset+=read;}DnsProbe.Validate(query,reply);
+            if(Interlocked.CompareExchange(ref probing,1,0)!=0)throw new IOException("Проверка локального DNS уже выполняется.");
+            try{
+                if(stopped)throw new IOException("Проверка локального DNS отменена.");
+                // Await the encrypted resolver's complete address sequence directly.
+                // Its own transport timeouts remain in force; a loopback receive deadline
+                // must not cut off the second remote address or synthesize SERVFAIL here.
+                byte[] query=DnsProbe.Query("example.com");var reply=exchange(query);DnsProbe.Validate(query,reply);
+                if(stopped)throw new IOException("Проверка локального DNS отменена.");
+                Volatile.Write(ref probeSample,new ProbeSample(query,reply));
+                trace("LOCAL PREFLIGHT encrypted upstream validated; UDP/TCP self-test reuses this exact probe response");
+                foreach(var address in Ipv6?new[]{IPAddress.Loopback,IPAddress.IPv6Loopback}:new[]{IPAddress.Loopback}){
+                    if(stopped)throw new IOException("Проверка локального DNS отменена.");
+                    using(var udp=new UdpClient(address.AddressFamily)){udp.Client.ReceiveTimeout=3000;udp.Connect(address,Port);udp.Send(query,query.Length);IPEndPoint from=null;DnsProbe.Validate(query,udp.Receive(ref from));}
+                    using(var client=new TcpClient(address.AddressFamily)){
+                        client.Connect(address,Port);client.ReceiveTimeout=3000;client.SendTimeout=3000;
+                        using(var stream=client.GetStream()){
+                            stream.WriteByte((byte)(query.Length>>8));stream.WriteByte((byte)query.Length);stream.Write(query,0,query.Length);
+                            int hi=stream.ReadByte(),lo=stream.ReadByte();if(hi<0||lo<0||hi*256+lo<12)throw new IOException("Локальный TCP DNS не ответил.");
+                            var answer=new byte[hi*256+lo];int offset=0;while(offset<answer.Length){int read=stream.Read(answer,offset,answer.Length-offset);if(read==0)throw new IOException("Неполный ответ локального DNS.");offset+=read;}DnsProbe.Validate(query,answer);
+                        }
                     }
                 }
-            }
+            }finally{Volatile.Write(ref probeSample,null);Interlocked.Exchange(ref probing,0);}
         }
     }
     static class LocalDnsLifecycle
@@ -199,6 +238,7 @@ namespace HbAi.XboxDns
         }
         internal static int Run(string[] args)
         {
+            bool vpn=args!=null&&args.Length==8&&args[7]=="vpn";if(vpn)args=args.Take(7).ToArray();
             int parent,provider,antigravity;Guid token;bool tls,specialTls;if(!TryArgs(args,out parent,out token,out provider,out tls,out antigravity,out specialTls)||!DnsElevation.IsAdministrator())return 5;
             try{using(var pipe=new NamedPipeClientStream(".",DnsTunnel.PipeName(token),PipeDirection.InOut,PipeOptions.Asynchronous)){
                 pipe.Connect(10000);if(!DnsTunnel.ServerMatches(pipe,parent))return 5;
@@ -213,25 +253,26 @@ namespace HbAi.XboxDns
                             phase("guard-and-snapshot");try{locked=mutex.WaitOne(0);}catch(AbandonedMutexException){locked=true;}if(!locked)throw new IOException("Другая операция DNS ещё выполняется.");
                             if(DnsTunnel.Pending){phase("recover-previous-session");string recovery=DnsTunnel.Recover();if(recovery!=null)throw new IOException(recovery);}
                             phase("check-network-and-original-dns");
-                            if(VpnCheck.Scan().NeedsAttention)throw new IOException("Сначала выключите другой VPN.");
-                            string conflict=EncryptedDns.PolicyConflict(NrptRegistryReader.Read(true));if(conflict!=null)throw new IOException(conflict);
+                            if(VpnDnsPreference.Blocks(VpnCheck.Scan(),true,vpn))throw new IOException("Сначала выключите другой VPN или включите совместимость с VPN в настройках.");
+                            string conflict=vpn?null:EncryptedDns.PolicyConflict(NrptRegistryReader.Read(true));if(vpn)VpnDnsPolicy.Validate(NrptRegistryReader.Read(true));if(conflict!=null)throw new IOException(conflict);
                             var system=new TunnelDnsSystem();var snapshots=new TunnelBackupStore(new RegistryDnsBackupStore(),system.Adapters(true).Select(a=>a.Id));snapshots.EnsureReady();
-                            ValidateBaseline(system.Adapters(true).SelectMany(a=>new[]{a.V4?system.Read(a.Id,"IPv4"):null,a.V6?system.Read(a.Id,"IPv6"):null}).Where(f=>f!=null));
+                            if(!vpn)ValidateBaseline(system.Adapters(true).SelectMany(a=>new[]{a.V4?system.Read(a.Id,"IPv4"):null,a.V6?system.Read(a.Id,"IPv6"):null}).Where(f=>f!=null));
                             trace("LOCAL session UTC="+DateTime.UtcNow.ToString("O")+"; provider="+Dns.Name[provider]+"; protocol="+(tls?"DoT":"DoH")+"; adapters="+snapshots.Ids.Length+"; unrelated snapshots="+(new RegistryDnsBackupStore().Load().Count-snapshots.Load().Count));
-                            string fingerprint=TunnelDnsSystem.Fingerprint();var engine=new DnsSettingsEngine(system,snapshots);
+                            Func<string> networkFingerprint=vpn?(Func<string>)VpnDnsPolicy.Fingerprint:TunnelDnsSystem.Fingerprint;string fingerprint=networkFingerprint();var engine=new DnsSettingsEngine(system,snapshots);
                             var upstream=new TunnelUpstream(provider,tls,trace);
                             var special=antigravity>=0?new TunnelUpstream(antigravity,specialTls,s=>trace("ANTIGRAVITY "+s)):null;
                             var routes=new LocalDnsRouting(upstream.Query,special==null?null:(Func<byte[],byte[]>)special.Query);
                             trace("ANTIGRAVITY separate="+(special!=null)+(special==null?"":"; provider="+Dns.Name[antigravity]+"; protocol="+(specialTls?"DoT":"DoH")+"; exact API domains only")+"; client/account NOT modified or verified");
                             var switching=new LocalDnsSwitchController();
                             using(var proxy=new LocalDnsProxy(routes.Query,trace)){
-                                LocalDnsLifecycle.Run(()=>{phase("start-loopback-listeners");proxy.Start();if(system.Adapters(true).Any(a=>a.V6)&&!proxy.Ipv6)throw new IOException("IPv6 включён у адаптера, но локальный IPv6 DNS недоступен. Настройки не изменены.");},()=>{phase("encrypted-dns-preflight");proxy.Probe();routes.Probe(trace);},()=>command.IsCompleted,
-                                    ()=>{phase("start-recovery-process");if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась. Включите режим заново.");guard=LocalDnsGuardian.Start();if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась до применения DNS. Включите режим заново.");phase("arm-recovery");guard.Mark(snapshots.Ids);},
-                                    ()=>{phase("apply-and-verify");if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась до применения DNS.");engine.ChangeVerified(proxy.Ipv6?new[]{"127.0.0.1","::1"}:new[]{"127.0.0.1"},null,false,()=>{proxy.Probe();SystemDnsVerification.Verify();if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась при проверке DNS.");});},
+                                LocalDnsLifecycle.Run(()=>{phase("start-loopback-listeners");proxy.Start();if(system.Adapters(true).Any(a=>a.V6)&&!proxy.Ipv6)throw new IOException("IPv6 включён у адаптера, но локальный IPv6 DNS недоступен. Настройки не изменены.");},()=>{phase("encrypted-dns-preflight");LocalDnsPreflightException.Verify("Основной DNS",provider,tls,()=>proxy.Probe());if(special!=null)LocalDnsPreflightException.Verify("Отдельный DNS Antigravity",antigravity,specialTls,()=>routes.Probe(trace));},()=>command.IsCompleted,
+                                    ()=>{phase("start-recovery-process");if(fingerprint!=networkFingerprint())throw new IOException("Сеть изменилась. Включите режим заново.");guard=LocalDnsGuardian.Start();if(fingerprint!=networkFingerprint())throw new IOException("Сеть изменилась до применения DNS. Включите режим заново.");phase("arm-recovery");guard.Mark(snapshots.Ids);},
+                                    ()=>{phase("apply-and-verify");if(fingerprint!=networkFingerprint())throw new IOException("Сеть изменилась до применения DNS.");if(vpn){VpnDnsPolicy.Apply();VpnDnsPolicy.Verify(proxy);trace("VPN DNS verified; service domains only; adapter DNS and traffic routes unchanged; upstream follows OS routing");}else engine.ChangeVerified(proxy.Ipv6?new[]{"127.0.0.1","::1"}:new[]{"127.0.0.1"},null,false,()=>{LocalDnsPreflightException.Verify("Проверка после применения DNS",provider,tls,()=>proxy.Probe());SystemDnsVerification.Verify();if(fingerprint!=networkFingerprint())throw new IOException("Сеть изменилась при проверке DNS.");});},
                                     ()=>{phase("connected");trace("LOCAL connected; provider="+Dns.Name[provider]+"; protocol="+(tls?"DoT":"DoH")+"; default route=unchanged; Wintun=not used");lock(logGate)writer.WriteLine("CONNECTED Локальный DNS · "+Dns.Name[provider]);},
                                     ()=>{phase("running");int ticks=0;try{while(proxy.Error==null){
+                                        if(vpn&&ticks%300==0)VpnDnsPolicy.Verify(proxy);
                                         if(guard.Exited)throw new IOException("Процесс восстановления остановлен. Локальный DNS выключается.");
-                                        if(fingerprint!=TunnelDnsSystem.Fingerprint())throw new IOException("Сеть изменилась. Локальный DNS выключен; включите его заново.");
+                                        if(fingerprint!=networkFingerprint())throw new IOException("Сеть изменилась. Локальный DNS выключен; включите его заново.");
                                         if(command.IsCompleted){string line=command.GetAwaiter().GetResult();if(line==null||line=="STOP")break;
                                             RuntimeProviders.Reload();var requested=LocalDnsSwitchCommand.Parse(line);trace("LOCAL SWITCH requested provider="+Dns.Name[requested.Provider]+"; route="+(requested.Antigravity?"Antigravity":"common")+"; protocol="+(requested.Tls?"DoT":"DoH"));
                                             if(!switching.Begin(requested,candidate=>{var next=new TunnelUpstream(candidate.Provider,candidate.Tls,trace);foreach(string host in candidate.Antigravity?AntigravityDns.Domains:new[]{"example.com"}){var question=DnsProbe.Query(host);DnsProbe.Validate(question,next.Query(question));}return next.Query;}))lock(logGate)writer.WriteLine("SWITCH_FAILED Предыдущая проверка ещё завершается. Повторите позже; прежний DNS работает.");
@@ -240,10 +281,10 @@ namespace HbAi.XboxDns
                                         switching.Poll(routes,system.Flush,line=>{trace("LOCAL "+line);lock(logGate)writer.WriteLine(line);});
                                         if(ticks%5==0)lock(logGate)writer.WriteLine("STATS "+proxy.Statistics);if(ticks++%50==0)trace("LOCAL COUNTERS "+proxy.Counters);Thread.Sleep(100);
                                     }if(proxy.Error!=null)throw new IOException("Локальный DNS остановлен: "+proxy.Error);}finally{switching.Cancel();}},
-                                    ()=>{string before=stage;phase("restore-original-dns");string failure=DnsTunnel.RestoreSnapshot(engine,snapshots);trace("LOCAL RESTORE="+(failure??"complete"));if(failure!=null)result=failure;stage=before;},
+                                    ()=>{string before=stage;phase("restore-original-dns");string failure=DnsTunnel.RestoreSnapshot(engine,snapshots,vpn);trace("LOCAL RESTORE="+(failure??"complete"));if(failure!=null)result=failure;stage=before;},
                                     ()=>{string before=stage;phase("stop-loopback-listeners");trace("LOCAL FINAL "+proxy.Counters);proxy.Dispose();stage=before;});
                             }
-                        }catch(Exception problem){string cause=TunnelDiagnostics.Error(problem);result=result==null?cause:result+"; Причина остановки: "+cause;trace("LOCAL ERROR stage="+stage+"; HRESULT=0x"+problem.HResult.ToString("X8")+"; "+result);}
+                        }catch(Exception problem){string cause=problem is LocalDnsPreflightException?problem.Message:TunnelDiagnostics.Error(problem);result=result==null?cause:result+"; Причина остановки: "+cause;trace("LOCAL ERROR stage="+stage+"; HRESULT=0x"+problem.HResult.ToString("X8")+"; "+TunnelDiagnostics.Error(problem));}
                         finally{if(locked)mutex.ReleaseMutex();if(guard!=null)try{guard.Dispose();}catch(Exception problem){string cause=TunnelDiagnostics.Error(problem);result=result==null?cause:result+"; "+cause;trace("LOCAL ERROR stage=stop-recovery-process; "+cause);}}
                         trace("LOCAL SESSION END; ms="+elapsed.ElapsedMilliseconds+"; result="+(result??"stopped"));
                         foreach(string entry in DiagnosticReport.Recent(12000).Split(new[]{'\r','\n'},StringSplitOptions.RemoveEmptyEntries))trace("WORKER "+entry);

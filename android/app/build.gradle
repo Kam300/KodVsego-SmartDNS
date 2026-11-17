@@ -34,7 +34,7 @@ android {
         preview {
             initWith debug
             applicationIdSuffix '.test'
-            versionNameSuffix '-test.12'
+            versionNameSuffix '-test.14'
             manifestPlaceholders = [appLabel: 'Код Всего · Smart DNS · тест']
             matchingFallbacks = ['debug']
         }

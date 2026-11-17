@@ -12,6 +12,9 @@ namespace HbAi.XboxDns
     {
         Panel providerPanel,providerRows,antigravitySettingsPanel;Label providerHint,providerGeneralHeading,antigravitySettingsHint,antigravityProviderLabel;Button providerRefresh,settingsGeneralTab,settingsProvidersTab,settingsAntigravityTab;
         CheckBox antigravitySettingsEnabled,antigravityAutoDns;Label antigravitySettingsTitle;DialogServicePicker antigravitySettingsProvider;int[] antigravitySettingsIds=new int[0];int antigravityPreferred;
+        CheckBox settingsVpnDns;
+        internal bool VpnDnsEnabled {get{return settingsVpnDns!=null&&settingsVpnDns.Checked;}}
+        internal void AddVpnDnsSetting(bool enabled,bool locked){settingsVpnDns=new CheckBox{Text="Совместимость с VPN · способ 2 · beta",Checked=enabled,Enabled=!locked,Font=bodyFont,ForeColor=ForeColor,BackColor=surface,AccessibleDescription="DNS доменов сервисов через Smart DNS. Маршруты и DNS адаптеров VPN сохраняются. Сначала подключите VPN; смена сети остановит Smart DNS."};settingsVpnDns.CheckedChanged+=(s,e)=>UpdateDialogLayout();Controls.Add(settingsVpnDns);UpdateDialogLayout();}
         Control[] settingsGeneralControls;bool providersTab,antigravityTab;
         readonly Dictionary<int,CheckBox> providerChecks=new Dictionary<int,CheckBox>();
         readonly Dictionary<int,Label> providerPings=new Dictionary<int,Label>();
@@ -21,7 +24,7 @@ namespace HbAi.XboxDns
         internal void AddProviderSettingsControls(int[] hidden,DnsTransport protocol)
         {
             providerGeneralHeading=Controls.OfType<Label>().Single(label=>label.Text=="Выбор DNS");
-            settingsGeneralControls=new Control[]{providerGeneralHeading,settingsConnectionPanel,settingsBackupPanel,settingsBackupHeading,settingsSupportHeading,settingsGithub,settingsTelegram,settingsSource,settingsTunnel,settingsResolverCheck,settingsCatalog,settingsRestartHeading,settingsRestartHint,settingsBrowserRestart,settingsAntigravityRestart,settingsStartupRecovery}.Where(c=>c!=null).ToArray();
+            settingsGeneralControls=new Control[]{providerGeneralHeading,settingsConnectionPanel,settingsBackupPanel,settingsBackupHeading,settingsSupportHeading,settingsGithub,settingsTelegram,settingsSource,settingsTunnel,settingsResolverCheck,settingsCatalog,settingsDnsRecovery,settingsRestartHeading,settingsRestartHint,settingsBrowserRestart,settingsAntigravityRestart,settingsStartupRecovery,settingsVpnDns}.Where(c=>c!=null).ToArray();
             float scale=actionHeight/42f;Func<int,int> px=n=>(int)Math.Round(n*scale);
             settingsGeneralTab=new DialogButton("Общие",bodyFont,border,ForeColor,border,px(8));
             settingsProvidersTab=new DialogButton("Провайдеры",bodyFont,border,ForeColor,border,px(8));

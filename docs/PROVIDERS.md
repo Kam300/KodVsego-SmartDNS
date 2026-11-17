@@ -10,7 +10,7 @@
 
 С 2.23.6-test.2 у провайдера можно указать `dot` — проверяемое имя TLS-сервера без `tls://`, порта и пути — и `windowsDotServers` — массив его IPv4 для соединения на порт 853. Поля необязательны, по умолчанию TLS недоступен. Пример дополнения к объекту: `"dot":"resolver.example","windowsDotServers":["203.0.113.53"]`. Проверка сертификата использует имя `dot`; DNS-запрос к этому имени для подключения не требуется. Отсутствующие протоколы не подменяются другим провайдером или обычным DNS.
 
-Имена сверены 23 октября 2026 года: [Comss.one](https://www.comss.ru/page.php?id=7315) — `dns.comss.one`; [Xbox DNS](https://xbox-dns.ru/) — `xbox-dns.ru`; [Bezmezhau](https://bezmezhau.com/en/setup) — `dns.bezmezhau.com`; [DNS-AI](https://dns-ai.ru/) — `dns.dns-ai.ru`; [MagicDNS](https://magicdns.ru/) — `dns.magicdns.ru`. У Xbox опубликовано сообщение о временной недоступности; результат DNS-проверки не подтверждает работу Xbox Live. GeoHide по-прежнему скрыт переключателем доступности.
+Имена сверены по каталогам провайдеров: [Comss.one](https://www.comss.ru/page.php?id=7315) — `dns.comss.one`; [Xbox DNS](https://xbox-dns.ru/) — `xbox-dns.ru`; [Bezmezhau](https://bezmezhau.com/en/setup) — `dns.bezmezhau.com`; [DNS-AI](https://dns-ai.ru/) — `dns.dns-ai.ru`; [MagicDNS](https://magicdns.ru/) — `api.magicinfo.art`. У Xbox опубликовано сообщение о временной недоступности; результат DNS-проверки не подтверждает работу Xbox Live. GeoHide US и обновлённый GeoHide EU доступны отдельными записями.
 
 В тестовой версии проверены реальные TLS DNS-ответы всех пяти включённых провайдеров с проверкой сертификата. На ПК при этом уже работал DoT роутера; это не проверка системного применения в проблемной конфигурации. Основной адрес Bezmezhau обновлён до опубликованного `181.215.40.49`; прежняя пара оставлена в `legacyIpv4` для распознавания старых настроек.
 
@@ -20,7 +20,7 @@ Windows и Android используют [config/providers.json](../config/provid
 
 MagicDNS поддерживает выбор для Antigravity, проверку обоих API-доменов и участие в Авто в обычном режиме и DoH. На Windows отдельная галочка Antigravity создаёт обычные DNS-правила только для `cloudcode-pa.googleapis.com` и `daily-cloudcode-pa.googleapis.com`. Для шифрования выберите MagicDNS, включите «Зашифрованный DNS» и подключитесь большой кнопкой: применяется общий DoH с обязательным HTTPS для обоих IP. Старые отдельные правила нужно предварительно отключить для полного шифрования. На Android MagicDNS доступен с DoH через существующий DNS VPN.
 
-Адреса `109.120.132.43`, `94.249.177.102`, DoH `https://dns.magicdns.ru/dns-query` и заявленная поддержка Antigravity сверены с [сайтом MagicDNS](https://magicdns.ru/) 23 октября 2026 года. Наличие записи в каталоге не гарантирует доступ к аккаунту или модели.
+В каталоге MagicDNS заданы IPv4 `217.144.190.216` и `109.120.187.249`, DoH `https://api.magicinfo.art/rpc` и DoT `api.magicinfo.art`. Проверка сервиса в приложении измеряет DNS и HTTPS. [Инструкция MagicDNS](https://magicdns.ru/#setup)
 
 Локальная сетевая проверка 23 октября: каждый из двух IP MagicDNS ответил через DoH на запросы обоих API-доменов Antigravity. HTTPS-проверка обоих доменов на каждом IP с исходным SNI и проверкой сертификата также прошла. Проверялись только DNS и соединение с API, без входа в аккаунт, запуска модели и перезапуска пользовательского Antigravity. Настройки сети при проверке не менялись.
 

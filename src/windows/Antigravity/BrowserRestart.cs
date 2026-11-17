@@ -11,6 +11,15 @@ using System.Management;
 
 namespace HbAi.XboxDns
 {
+    static class ProcessCommandSnapshot {
+        internal static string Read(string name,Func<bool> exited,Func<string> read){
+            if(exited())return null;string command;
+            try{command=read();}catch(Exception){if(exited())return null;throw;}
+            if(exited())return null;
+            if(string.IsNullOrWhiteSpace(command))throw new IOException("Не удалось прочитать параметры запуска "+name+". Профиль не определён; окна не закрыты.");
+            return command;
+        }
+    }
     static class RestartPrompts
     {
         internal const string BrowserValue="HideDnsReminder", AntigravityValue="HideAntigravityRestartDialog";
@@ -184,8 +193,9 @@ namespace HbAi.XboxDns
         {
             readonly Process process;
             readonly bool yandex;
+            readonly string displayName;
             internal bool Background;
-            internal Instance(Process process, bool yandex) { this.process = process; this.yandex = yandex; }
+            internal Instance(Process process, bool yandex,string displayName) { this.process = process; this.yandex = yandex;this.displayName=displayName; }
             public bool Exited { get { return process.HasExited; } }
             public bool HasWindow { get { return !Background && !Exited && Windows(process.Id).Length > 0; } }
             public bool CloseWindow()
@@ -201,7 +211,7 @@ namespace HbAi.XboxDns
             }
             internal string Command()
             {
-                if (Exited) throw new IOException("Браузер завершился во время определения профиля. Повторите попытку.");
+                return ProcessCommandSnapshot.Read(displayName,()=>Exited,()=>{
                 string command = null;
                 using (var searcher = new ManagementObjectSearcher("SELECT CommandLine FROM Win32_Process WHERE ProcessId=" + process.Id))
                 {
@@ -210,8 +220,8 @@ namespace HbAi.XboxDns
                         foreach (ManagementBaseObject row in rows)
                             using (row) command = row["CommandLine"] as string;
                 }
-                if (Exited) throw new IOException("Браузер завершился во время определения профиля. Повторите попытку.");
                 return command;
+                });
             }
             public void Dispose() { process.Dispose(); }
         }
@@ -239,10 +249,11 @@ namespace HbAi.XboxDns
                             string image = ProcessSecurity.ImagePath(process.Id);
                             if (BrowserCatalog.Matches(browser, image))
                             {
-                                var instance = new Instance(process, browser.Name == "Яндекс Браузер");
+                                var instance = new Instance(process, browser.Name == "Яндекс Браузер",browser.Name);
                                 bool desktop = browser.Name == "Antigravity";
                                 bool backend = desktop && !string.Equals(image, browser.Exe, StringComparison.OrdinalIgnoreCase);
-                                string type = backend ? null : BrowserProfiles.Option(BrowserProfiles.Split(instance.Command()), "--type");
+                                string command=backend?null:instance.Command();if(!backend&&command==null)continue;
+                                string type = backend ? null : BrowserProfiles.Option(BrowserProfiles.Split(command), "--type");
                                 // Desktop's localhost UI is served by a separate language_server.
                                 // Wait for its server/renderers too; never send them window-close messages.
                                 // Detached crash reporters may intentionally survive a clean shutdown.
@@ -273,7 +284,8 @@ namespace HbAi.XboxDns
         public BrowserLaunch[] Capture(BrowserChoice browser, IBrowserProcess[] windows)
         {
             if (windows.Length == 0) return new[] { new BrowserLaunch { Arguments = "" } };
-            var commands = windows.Cast<Instance>().Select(p => p.Command()).ToArray();
+            var commands = windows.Cast<Instance>().Select(p => p.Command()).Where(command=>command!=null).ToArray();
+            if(commands.Length==0)throw new IOException(browser.Name+" завершился до сохранения параметров запуска. Профиль не заменялся стандартным. Откройте приложение вручную и повторите попытку.");
             if (browser.Name == "Antigravity") return AntigravityRestart.Capture(commands, Directory.Exists);
             var roots = commands.Where(c => BrowserProfiles.Option(BrowserProfiles.Split(c), "--type") == null).ToArray();
             if (roots.Length == 0) throw new IOException("Не удалось определить основной процесс браузера. Окна не закрыты.");

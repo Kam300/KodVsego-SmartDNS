@@ -41,7 +41,7 @@ namespace HbAi.XboxDns
                 throw new IOException("Ошибка NRPT Windows: " + Convert.ToString(code.Value));
         }
         // Invoke the Windows DNS CIM provider directly, without a shell or downloaded code.
-        static ManagementBaseObject Invoke(string className, string method, Action<ManagementBaseObject> configure)
+        internal static ManagementBaseObject Invoke(string className, string method, Action<ManagementBaseObject> configure)
         {
             var scope = new ManagementScope(@"\\.\root\Microsoft\Windows\DNS");
             scope.Options.Timeout = TimeSpan.FromSeconds(15);

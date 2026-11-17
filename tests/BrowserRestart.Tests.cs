@@ -56,6 +56,21 @@ static class BrowserTests
     static void Test(string name, Action action) { system = new FakeBrowserSystem(); action(); passed++; Console.WriteLine("PASS " + name); }
     static void Main(string[] args)
     {
+        Test("Exited child is ignored before reading command line",()=>{
+            bool read=false;var command=ProcessCommandSnapshot.Read("Antigravity",()=>true,()=>{read=true;return "unused";});Assert(command==null&&!read,"Exited child aborted capture or was read");
+        });
+        Test("Child exiting during profile scan is ignored",()=>{
+            bool exited=false;var command=ProcessCommandSnapshot.Read("Antigravity",()=>exited,()=>{exited=true;return "temporary renderer";});Assert(command==null,"Dead renderer retained");
+        });
+        Test("Read error from a vanished child does not abort enumeration",()=>{
+            bool exited=false;var command=ProcessCommandSnapshot.Read("Antigravity",()=>exited,()=>{exited=true;throw new IOException("gone");});Assert(command==null,"Vanished child caused restart failure");
+        });
+        Test("Live unreadable process cannot fall back to a default profile",()=>{
+            Fail(()=>ProcessCommandSnapshot.Read("Antigravity",()=>false,()=>null));Fail(()=>ProcessCommandSnapshot.Read("Antigravity",()=>false,()=>{throw new UnauthorizedAccessException();}));
+        });
+        Test("Surviving root command remains available for profile capture",()=>{
+            Assert(ProcessCommandSnapshot.Read("Antigravity",()=>false,()=>"Antigravity.exe --user-data-dir=custom").Contains("custom"),"Profile arguments lost");
+        });
         if (args.Length > 0 && args[0] == "--fixture-wait") { System.Threading.Thread.Sleep(15000); return; }
         Test("Restart prompt preferences persist independently and respect the old browser dismissal", () => {
             string path=@"Software\KodVsego\SmartDnsTest-Restart-"+Guid.NewGuid().ToString("N");

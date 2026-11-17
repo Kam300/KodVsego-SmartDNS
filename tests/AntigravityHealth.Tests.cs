@@ -83,6 +83,11 @@ class AntigravityHealthTests
         Check(!Parse(Startup(Now,"loadCodeAssist",60081).Replace(host,"accounts.example")).CanSwitch,"Startup errors from unrelated APIs remain diagnostic only");
         Check(Parse("[2026-10-26 20:00:00.000] [error] Failed to load URL: https://127.0.0.1:61881/ with error: ERR_TIMED_OUT",Now,"main.log").Kind==AgHealthKind.Other,"A local black-window timeout does not by itself blame an external DNS");
         var region=Parse(Line(Now,1,"FAILED_PRECONDITION (code 400): User location is not supported"));Check(region.Kind==AgHealthKind.Region&&region.CanSwitch,"A precise region refusal can use another declared route");
+        Check(region.PeerAddress==null,"Region refusal without a socket cannot blame an inferred DNS address");
+        var peer=Parse(Line(Now,1,"read tcp 192.168.1.2:51000->109.120.131.204:443: wsarecv: connection reset"));
+        Check(peer.PeerAddress=="109.120.131.204"&&peer.CanSwitch,"Client socket provides the exact public remote IP for health evidence");
+        var loopbackPeer=Parse(Line(Now,1,"read tcp 192.168.1.2:51000->127.0.0.1:443: connection reset"));
+        Check(loopbackPeer.PeerAddress==null&&!loopbackPeer.CanSwitch,"Loopback proxy failures cannot blacklist public endpoints");
         string sensitive="E1026 20:00:00.000000 failed https://example.com/private/chat/123?token=url-secret Trace: trace-secret api_key=key-secret prompt: private-user-text";
         string clean=AgHealthParser.SafeDetail(sensitive);Check(!clean.Contains("url-secret")&&!clean.Contains("trace-secret")&&!clean.Contains("key-secret")&&!clean.Contains("private-user-text")&&!clean.Contains("chat/123"),"Imported errors omit URLs with identifiers, credentials, traces and prompt payloads");
         Check(!AgHealthParser.SafeDetail("Authorization: Basic encoded-secret").Contains("encoded-secret")&&!AgHealthParser.SafeDetail("Cookie: session=private-cookie").Contains("private-cookie"),"Basic authorization and cookies cannot enter exported logs");
@@ -104,6 +109,11 @@ class AntigravityHealthTests
         policy=new AgFailoverPolicy();for(int n=0;n<4;n++){var at=Now.AddMinutes(2*n);policy.Observe(Parse(Line(at.AddSeconds(-2),1),at),6,at);Check(policy.Observe(Parse(Line(at.AddSeconds(-1),2),at),6,at)==(n<3),"At most three failover searches in ten minutes: "+n);}
         policy=new AgFailoverPolicy();policy.Observe(region,6,Now);Check(!policy.Observe(Parse(Line(Now.AddSeconds(1),2,"User location is not supported"),Now.AddSeconds(1)),6,Now.AddSeconds(1)),"Repeated reports of one region refusal do not count as two requests");
         Check(policy.Observe(Parse(Line(Now.AddSeconds(6),3,"User location is not supported"),Now.AddSeconds(6)),6,Now.AddSeconds(6)),"A later region refusal can trigger bounded failover");
+        policy.Failed(6,Now.AddSeconds(7));policy.ResetSignal();
+        Check(!policy.CanProbe(6,false,Now.AddMinutes(4))&&policy.CanProbe(6,false,Now.AddMinutes(6)),"Region backoff survives short preflight penalties and network signal resets for five minutes");
+        var fullPair=new AgFailoverPolicy();known.Error=null;fullPair.Answer(known.Provider,known.Tls,7,true);
+        Check(fullPair.Best(new[]{fast,known},7,true)==known,"Client-proven priority is retained for the same full DNS combination");
+        Check(fullPair.Best(new[]{fast,known},7,false)==fast&&fullPair.Best(new[]{fast,known},8,true)==fast,"Another main DNS or transport cannot inherit proof from a different combination");
         string folder=Path.Combine(Path.GetTempPath(),"SmartDNS-health-tests-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
         string log=Path.Combine(folder,"language_server.log");File.WriteAllText(log,Line(Now)+"\n");var tail=new AgLogTail(log);Check(tail.Read(Now).Length==0,"Existing log history is not replayed");
         string next=Line(Now,2);File.AppendAllText(log,next.Substring(0,20));Check(tail.Read(Now).Length==0,"Partial lines wait for completion");File.AppendAllText(log,next.Substring(20)+"\n");Check(tail.Read(Now).Length==1&&tail.Read(Now).Length==0,"Each appended error is read exactly once");
@@ -123,6 +133,16 @@ class AntigravityHealthTests
             Check(form.LocalAntigravityProvider==6&&local.CurrentProvider==7&&local.Stops==0,"Selection waits for acknowledgement; common DNS stays active");
             local.Complete(true);Application.DoEvents();Check(form.LocalAntigravityProvider==5&&local.CurrentProvider==7,"Acknowledgement commits only Antigravity");
             Check(DiagnosticReport.Recent(20000).Contains("Авто: DNS применён без диалога и без перезапуска клиента"),"Automatic worker acknowledgement records silent application without restarting the client");
+        }
+        local=new Session();using(var form=Form(local)){
+            Set(form,"agAutoStatus","Клиент начал получать ответ модели");
+            Check(form.SwitchLocalAntigravity(9),"Manual switch from an answered route can request Malw");local.Complete(true);Application.DoEvents();
+            Check(form.LocalAntigravityProvider==9&&Get<string>(form,"agAutoStatus").Contains("ещё не подтверждён"),"New DNS acknowledgement invalidates the previous route's answer label");
+            var cutoff=Get<DateTime>(form,"agWatchSince");
+            form.ReceiveAgHealth(new[]{new AgHealthEvent{Kind=AgHealthKind.Answer,When=cutoff.AddSeconds(-1),Host=host,Source="language_server.log"}});
+            Check(Get<string>(form,"agAutoStatus").Contains("ещё не подтверждён"),"An answer logged before the switch cannot reconfirm the new selection");
+            form.ReceiveAgHealth(new[]{new AgHealthEvent{Kind=AgHealthKind.Answer,When=cutoff.AddMilliseconds(1),Host=host,Source="language_server.log"}});
+            Check(Get<string>(form,"agAutoStatus").Contains("Клиент начал"),"Fresh client response after the new watch is observed");
         }
         local=new Session();using(var form=Form(local)){
             form.AgFailoverProbe=(ids,cancel)=>new[]{new AutoDnsResult{Provider=5,Encrypted=true,Tls=true}};form.ReceiveAgHealth(Pair());

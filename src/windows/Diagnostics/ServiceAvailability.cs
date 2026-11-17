@@ -36,7 +36,8 @@ namespace HbAi.XboxDns
     sealed class ServiceEndpointResult
     {
         internal ServiceEndpoint Endpoint;
-        internal bool Dns, Connection, Tls;
+        internal bool Dns, Connection, Tls, Suppressed, RegionSuppressed;
+        internal string Address;
         internal int Status, Milliseconds;
         internal ServiceReply Reply = ServiceReply.Failed;
         internal string Error, Trace;
@@ -64,11 +65,11 @@ namespace HbAi.XboxDns
         internal bool CanRecommend {get{return Endpoints.All(e=>e.Reply==ServiceReply.Response||e.Reply==ServiceReply.Login||e.Reply==ServiceReply.BrowserCheck);}}
         internal string EndpointSummary {get{return string.Join("; ",Endpoints.Select(e=>e.Endpoint.Name+": "+e.Caption));}}
         internal bool OfferReport {get{return Endpoints.Any(e=>e.Reply==ServiceReply.Failed||e.Reply==ServiceReply.Unknown||e.Reply==ServiceReply.ServerError);}}
-        internal string Summary {get{return string.Join("\n",Endpoints.Select(e=>e.Endpoint.Name+": "+e.Caption))+"\n\nБез ключа и входа. Генерация не проверялась.";}}
+        internal string Summary {get{return string.Join("\n",Endpoints.Select(e=>e.Endpoint.Name+": "+e.Caption))+(Endpoints.Any(e=>e.Endpoint.Api)?"\n\nБез ключа и входа. Генерация не проверялась.":"\n\nВход в аккаунт и генерация не проверялись.");}}
         internal string Report {get{return string.Join("\n\n",Endpoints.Select(e=>e.Endpoint.Name+" · "+e.Endpoint.Host+e.Endpoint.Path+"\n"+e.Caption+
-            "\nDNS: "+(e.Dns?"ответ есть":"нет ответа")+" · соединение: "+(e.Connection?"есть":"не установлено")+" · TLS: "+(e.Tls?"сертификат проверен":"не подтверждён")+
+                    "\nDNS: "+(e.Dns?"ответ есть":"нет ответа")+" · соединение: "+(e.Connection?"есть":"не установлено")+" · TLS: "+(e.Tls?"сертификат проверен":"не подтверждён")+(e.Address==null?"":" · IP "+e.Address)+
             (e.Status>0?" · HTTP "+e.Status:"")+" · "+e.Milliseconds+" мс"))+
-            "\n\nВ этой проверке ключ не передавался. Ответ API 401/403 с запросом авторизации не означает отказ сохранённого ключа.\nАдреса получены от выбранного DNS; HTTPS проверяется с исходным именем и сертификатом. Системные настройки не менялись. DNS браузера, аккаунт и генерация не проверялись. API и сайт могут иметь разные ограничения.";}}
+            (Endpoints.Any(e=>e.Endpoint.Api)?"\n\nВ этой проверке ключ не передавался. Ответ API 401/403 с запросом авторизации не означает отказ сохранённого ключа.":"")+"\n\nАдреса получены от выбранного DNS; HTTPS проверяется с исходным именем и сертификатом. Системные настройки не менялись. DNS браузера, аккаунт и генерация не проверялись."+(Endpoints.Any(e=>e.Endpoint.Api)?" API и сайт могут иметь разные ограничения.":"");}}
         internal string Diagnostic {get{return DiagnosticReport.Scrub(string.Join("\n\n",Endpoints.Select(e=>e.Trace)));}}
     }
     sealed class ServiceTransportException : IOException
@@ -85,19 +86,19 @@ namespace HbAi.XboxDns
     {
         // Public, read-only API routes. No credentials, browser profiles or generation requests.
         internal static readonly ServiceTarget[] Targets = {
-            Target("Gemini","gemini.google.com","generativelanguage.googleapis.com","/v1beta/models"),
+            new ServiceTarget { Name = "Gemini", Endpoints = new[] { new ServiceEndpoint { Name = "Сайт", Host = "gemini.google.com", Path = "/" } } },
             Target("ChatGPT","chatgpt.com","api.openai.com","/v1/models"),
             Target("Claude","claude.ai","api.anthropic.com","/v1/models"),
             Target("ElevenLabs","elevenlabs.io","api.elevenlabs.io","/v1/user")
         };
         static ServiceTarget Target(string name,string web,string api,string path)
         {return new ServiceTarget{Name=name,Endpoints=new[]{new ServiceEndpoint{Name="Сайт",Host=web,Path="/"},new ServiceEndpoint{Name="API",Host=api,Path=path,Api=true}}};}
-        internal static ServiceAvailabilityResult Check(int target,int provider,bool encrypted,IServiceAvailabilityProbe probe,CancellationToken cancel,int parallelism=2)
+        internal static ServiceAvailabilityResult Check(int target,int provider,bool encrypted,IServiceAvailabilityProbe probe,CancellationToken cancel,int parallelism=2,EndpointAddressHealth health=null)
         {
             if(target<0||target>=Targets.Length)throw new ArgumentOutOfRangeException("target");
-            return Check(Targets[target],provider,encrypted,probe,cancel,parallelism);
+            return Check(Targets[target],provider,encrypted,probe,cancel,parallelism,health);
         }
-        internal static ServiceAvailabilityResult Check(ServiceTarget target,int provider,bool encrypted,IServiceAvailabilityProbe probe,CancellationToken cancel,int parallelism=2)
+        internal static ServiceAvailabilityResult Check(ServiceTarget target,int provider,bool encrypted,IServiceAvailabilityProbe probe,CancellationToken cancel,int parallelism=2,EndpointAddressHealth health=null)
         {
             var endpoints=target.Endpoints;
             var results=new ServiceEndpointResult[endpoints.Length];
@@ -107,19 +108,28 @@ namespace HbAi.XboxDns
                 string stage="DNS";
                 try {
                     cancel.ThrowIfCancellationRequested();
-                    var addresses=probe.Resolve(provider,encrypted,endpoint.Host,cancel).Where(AutoDnsProbe.PublicAddress).Distinct().Take(3).ToArray();
+                    var addresses=probe.Resolve(provider,encrypted,endpoint.Host,cancel).Where(AutoDnsProbe.PublicAddress).Distinct().Take(16).ToArray();
                     if(addresses.Length==0)throw new IOException("Нет публичного IPv4-адреса");
                     result.Dns=true;trace.AppendLine("DNS -> "+string.Join(", ",addresses));
-                    Exception last=null;ServiceHttpReply reply=null;stage="соединение";
-                    foreach(string address in addresses) {
+                    Exception last=null;ServiceHttpReply reply=null;stage="соединение";long healthVersion=0;
+                    var ready=health==null?addresses.Take(8).ToArray():health.Ready(endpoint.Host,addresses,out healthVersion);
+                    trace.AppendLine("HTTPS plan="+string.Join(",",ready)+"; skipped="+string.Join(",",addresses.Except(ready)));
+                    if(ready.Length==0){result.Suppressed=true;result.RegionSuppressed=health!=null&&health.OnlyRegionBlocked(endpoint.Host,addresses);throw new IOException("Все полученные IP временно исключены после предыдущих ошибок; повторите позже.");}
+                    foreach(string address in ready) {
                         cancel.ThrowIfCancellationRequested();
-                        try {reply=probe.Request(endpoint,address,cancel);result.Connection=true;result.Tls=true;trace.AppendLine("HTTPS @ "+address+"; HTTP="+reply.Status);break;}
+                        try {
+                            reply=probe.Request(endpoint,address,cancel);result.Address=address;result.Connection=true;result.Tls=true;trace.AppendLine("HTTPS @ "+address+"; HTTP="+reply.Status);
+                            var classification=Classify(endpoint,reply);
+                            if(classification==ServiceReply.Restricted){if(health!=null)health.RegionFailed(endpoint.Host,address,healthVersion);trace.AppendLine("Region refusal: this host/IP excluded for 5 min; trying another address from the same provider");continue;}
+                            if(health!=null&&(classification==ServiceReply.Response||classification==ServiceReply.Login||classification==ServiceReply.BrowserCheck))health.Reachable(endpoint.Host,address,healthVersion);break;
+                        }
                         catch(OperationCanceledException){throw;}
                         catch(Exception error){
                             last=error;var transport=error as ServiceTransportException;
                             stage=transport==null?"соединение":transport.Stage;
                             if(stage=="TLS"||stage=="HTTP")result.Connection=true;
                             if(stage=="HTTP")result.Tls=true;
+                            if(health!=null&&(stage=="TLS"||stage=="соединение"))health.TransportFailed(endpoint.Host,address,healthVersion);
                             trace.AppendLine(stage+" @ "+address+": "+error.GetType().Name+"; "+(error.InnerException??error).Message);
                         }
                     }
@@ -128,7 +138,7 @@ namespace HbAi.XboxDns
                     trace.AppendLine("Classification="+result.Reply+"; no authentication or generation attempted");
                 }
                 catch(OperationCanceledException){throw;}
-                catch(Exception error){result.Error=stage+": "+(stage=="DNS"?"нет ответа или ошибка адреса":stage=="TLS"?"защищённое соединение не подтверждено":stage=="HTTP"?"нет корректного ответа сервиса":"не удалось подключиться");trace.AppendLine(error.GetType().Name+": "+error.Message);}
+                catch(Exception error){result.Error=result.Suppressed?"IP сервиса временно исключены после отказов":stage+": "+(stage=="DNS"?"нет ответа или ошибка адреса":stage=="TLS"?"защищённое соединение не подтверждено":stage=="HTTP"?"нет корректного ответа сервиса":"не удалось подключиться");trace.AppendLine(error.GetType().Name+": "+error.Message);}
                 result.Milliseconds=(int)clock.ElapsedMilliseconds;trace.AppendLine("Endpoint total="+result.Milliseconds+" ms");result.Trace=trace.ToString();results[i]=result;
             });
             cancel.ThrowIfCancellationRequested();return new ServiceAvailabilityResult{Name=target.Name,Endpoints=results};

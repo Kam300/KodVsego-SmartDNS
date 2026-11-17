@@ -1,4 +1,4 @@
-src\windows\App\XboxDns.cs
+﻿src\windows\App\XboxDns.cs
 src\windows\Antigravity\AntigravityStartup.cs
 src\windows\Providers\CustomDns.cs
 src\windows\Ui\CustomDnsUi.cs
@@ -42,5 +42,9 @@ src\windows\Antigravity\AntigravityFailoverUi.cs
 src\windows\Providers\CatalogDefaults.cs
 src\windows\Providers\CatalogUpdate.cs
 src\windows\Ui\CatalogUi.cs
-src\windows\Diagnostics\ServiceBoard.cs
-src\windows\Ui\ServiceBoardWindow.cs
+
+src\windows\Ui\DnsRecoveryUi.cs
+src\windows\Diagnostics\EndpointAddressHealth.cs
+
+src/windows/Dns/VpnDns.cs
+src/windows/Ui/DnsRatingsUi.cs

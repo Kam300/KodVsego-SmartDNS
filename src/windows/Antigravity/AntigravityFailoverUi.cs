@@ -42,7 +42,7 @@ namespace HbAi.XboxDns
     static class AgFailoverSearch
     {
         // Each result describes the exact encrypted transport later sent to the worker.
-        internal static AutoDnsResult[] Search(int[] providers,int current,bool currentTls,CancellationToken cancel,Func<bool,IAutoDnsProbe> probes=null,int[] allowedRoutes=null)
+        internal static AutoDnsResult[] Search(int[] providers,int current,bool currentTls,CancellationToken cancel,Func<bool,IAutoDnsProbe> probes=null,int[] allowedRoutes=null,EndpointAddressHealth health=null)
         {
             int goal=AutoDns.GoalIndex("Antigravity");
             var pairs=providers.Distinct().Where(LocalDnsRouting.Supports).SelectMany(p=>new[]{false,true}.Where(t=>!t||DotDns.Available(p)).Select(t=>new{Provider=p,Tls=t})).Where(p=>(p.Provider!=current||p.Tls!=currentTls)&&(allowedRoutes==null||allowedRoutes.Contains(AgFailoverPolicy.Route(p.Provider,p.Tls)))).ToArray();
@@ -50,7 +50,7 @@ namespace HbAi.XboxDns
             Parallel.ForEach(pairs,new ParallelOptions{MaxDegreeOfParallelism=4,CancellationToken=cancel},pair=>{
                 using(var limit=CancellationTokenSource.CreateLinkedTokenSource(cancel)){
                     limit.CancelAfter(45000);
-                    try{foreach(var item in AutoDns.Search(goal,true,probes==null?new AutoDnsProbe(pair.Tls,8000,true):probes(pair.Tls),limit.Token,null,pair.Provider,pair.Tls,new[]{pair.Provider}))results.Add(item);}
+                    try{foreach(var item in AutoDns.Search(goal,true,probes==null?new AutoDnsProbe(pair.Tls,8000,true):probes(pair.Tls),limit.Token,null,pair.Provider,pair.Tls,new[]{pair.Provider},health))results.Add(item);}
                     catch(OperationCanceledException){if(cancel.IsCancellationRequested)throw;results.Add(new AutoDnsResult{Provider=pair.Provider,Tls=pair.Tls,Encrypted=true,Error="Проверка варианта превысила 45 с",Trace="Provider="+Dns.Name[pair.Provider]+"; protocol="+(pair.Tls?"TLS":"HTTPS")+"; candidate timeout=45000 ms"});}
                 }
             });
@@ -64,7 +64,7 @@ namespace HbAi.XboxDns
         DateTime agWatchSince;CancellationTokenSource agSearch;string agAutoStatus="Автосмена ожидает ошибок клиента";
         internal Func<int[],CancellationToken,AutoDnsResult[]> AgFailoverProbe;
         internal Func<int[],CancellationToken,AutoDnsResult[]> AgCommonProbe;
-        int agRouteChanges,pendingAgCommon=-1,agWorkingCommon=-1;bool pendingAgCommonTls;
+        int agRouteChanges,pendingAgCommon=-1,agWorkingCommon=-1;bool pendingAgCommonTls,agWorkingCommonTls,agWorkingSpecialTls;int agWorkingSpecial=-1;
         readonly System.Collections.Generic.HashSet<int> agTriedCommon=new System.Collections.Generic.HashSet<int>();
         bool AgAutoEligible {get{return agAutoDns&&localMode&&localAntigravity&&ManagedDns.Connected&&!ManagedDns.Stopping&&!busy;}}
         void ResetAgHealthWatch()
@@ -83,10 +83,10 @@ namespace HbAi.XboxDns
             foreach(var item in items.OrderBy(i=>i.When)){
                 if(item.When<agWatchSince)continue;
                 if(item.Kind==AgHealthKind.Answer||item.Kind==AgHealthKind.Capacity||item.Kind==AgHealthKind.Quota||item.Kind==AgHealthKind.Authentication||item.Kind==AgHealthKind.Server){
-                    ResetAgHealthWatch();if(item.Kind==AgHealthKind.Answer){agFailover.Answer(localAntigravityProvider,localAntigravityTls);agWorkingCommon=dnsSet;agTriedCommon.Remove(dnsSet);DiagnosticReport.Record("Связка Antigravity","Client stream started; common="+Dns.Name[dnsSet]+"; common protocol="+(tlsDns?"DoT":"DoH")+"; separate="+Dns.Name[localAntigravityProvider]+"; separate protocol="+(localAntigravityTls?"DoT":"DoH")+"; stream completion NOT verified");}
+                    ResetAgHealthWatch();if(item.Kind==AgHealthKind.Answer){agFailover.Answer(localAntigravityProvider,localAntigravityTls,dnsSet,tlsDns);endpointHealth.ClientAnswer(item.Host,item.PeerAddress);agWorkingCommon=dnsSet;agWorkingCommonTls=tlsDns;agWorkingSpecial=localAntigravityProvider;agWorkingSpecialTls=localAntigravityTls;agTriedCommon.Remove(dnsSet);DiagnosticReport.Record("Связка Antigravity","Client stream started; common="+Dns.Name[dnsSet]+"; common protocol="+(tlsDns?"DoT":"DoH")+"; separate="+Dns.Name[localAntigravityProvider]+"; separate protocol="+(localAntigravityTls?"DoT":"DoH")+"; stream completion NOT verified");}
                     agAutoStatus=item.Kind==AgHealthKind.Answer?"Клиент начал получать ответ модели":item.Kind==AgHealthKind.Capacity?"Модель перегружена · DNS не меняем":item.Kind==AgHealthKind.Quota?"Лимит запросов · DNS не меняем":item.Kind==AgHealthKind.Authentication?"Ошибка входа · DNS не меняем":"Ошибка сервера · DNS не меняем";Invalidate();return;
                 }
-                if(agSearch==null&&agFailover.Observe(item,localAntigravityProvider,DateTime.Now,localAntigravityTls))StartAgFailover(item.Kind,item.When);
+                if(agSearch==null&&agFailover.Observe(item,localAntigravityProvider,DateTime.Now,localAntigravityTls)){RefreshEndpointHealthContext();endpointHealth.ClientFailure(item.Host,item.PeerAddress,item.Kind==AgHealthKind.Region);DiagnosticReport.Record("Конечный IP Antigravity",item.PeerAddress==null?"Клиент не указал конечный IP; адрес не угадывается по DNS-проверке.":"host="+item.Host+"; peer="+item.PeerAddress+"; reason="+item.Kind);StartAgFailover(item.Kind,item.When);}
             }
         }
         void StartAgFailover(AgHealthKind reason,DateTime failureAt)
@@ -98,19 +98,19 @@ namespace HbAi.XboxDns
             if((allowed.Length==0&&!DotDns.Available(current))||goal<0){agAutoStatus="Автосмена: нет запасных DNS · повторите позже";Invalidate();return;}
             bool currentTls=localAntigravityTls;
             int common=dnsSet;bool commonTls=tlsDns;int changes=agRouteChanges;
-            int workingCommon=agWorkingCommon;
-            var commonCandidates=UiProviders.Where(id=>id!=common&&!agTriedCommon.Contains(id)&&Dns.IsAvailable(id)&&EncryptedDns.Templates[id]!=null&&RuntimeProviders.All[id].autoGoals.Contains("Gemini")).OrderBy(id=>id==workingCommon?0:1).ToArray();
+            int workingCommon=agWorkingCommon;bool workingCommonTls=agWorkingCommonTls,workingPairMatches=agWorkingSpecial==current&&agWorkingSpecialTls==currentTls;
+            var commonCandidates=UiProviders.Where(id=>id!=common&&!agTriedCommon.Contains(id)&&Dns.IsAvailable(id)&&EncryptedDns.Templates[id]!=null&&RuntimeProviders.All[id].autoGoals.Contains("Gemini")).OrderBy(id=>workingPairMatches&&id==workingCommon?0:1).ToArray();
             var allowedRoutes=allowed.Concat(new[]{current}).Distinct().SelectMany(id=>new[]{false,true}.Where(t=>(!t||DotDns.Available(id))&&agFailover.CanProbe(id,t,DateTime.Now)).Select(t=>AgFailoverPolicy.Route(id,t))).ToArray();
             var cancel=CancellationTokenSource.CreateLinkedTokenSource(autoLifetime.Token);agSearch=cancel;cancel.CancelAfter(120000);
             agAutoStatus="Автосмена: проверяем запасные DNS…";Invalidate();
             ThreadPool.QueueUserWorkItem(_=>{
                 AutoDnsResult[] results=null;AutoDnsResult commonBest=null;string failure=null;
-                try{results=AgFailoverProbe==null?AgFailoverSearch.Search(allowed.Concat(new[]{current}).ToArray(),current,currentTls,cancel.Token,null,allowedRoutes):AgFailoverProbe(allowed,cancel.Token);foreach(var result in results)DiagnosticReport.Record("Подбор Antigravity","Provider="+Dns.Name[result.Provider]+"; protocol="+(result.Tls?"DoT":"DoH")+"; result="+(result.Ok?"reachable":result.Error)+"; elapsed="+result.Milliseconds+" ms\n"+AutoDns.Diagnostic(goal,new[]{result}));}
+                try{RefreshEndpointHealthContext();results=AgFailoverProbe==null?AgFailoverSearch.Search(allowed.Concat(new[]{current}).ToArray(),current,currentTls,cancel.Token,null,allowedRoutes,endpointHealth):AgFailoverProbe(allowed,cancel.Token);foreach(var result in results)DiagnosticReport.Record("Подбор Antigravity","Provider="+Dns.Name[result.Provider]+"; protocol="+(result.Tls?"DoT":"DoH")+"; result="+(result.Ok?"reachable":result.Error)+"; elapsed="+result.Milliseconds+" ms\n"+AutoDns.Diagnostic(goal,new[]{result}));}
                 catch(OperationCanceledException){failure="Проверка отменена или истекли 120 с";}catch(Exception problem){failure=problem.GetType().Name;}
                 if(!cancel.IsCancellationRequested&&(AgFailoverProbe==null||AgCommonProbe!=null)&&(changes>0||!(results??new AutoDnsResult[0]).Any(r=>r.Ok&&!r.NeedsBrowser))&&commonCandidates.Length>0){
                     try{var combinations=AgCommonProbe==null?AgCommonSearch.Search(commonCandidates,commonTls,current,currentTls,cancel.Token):AgCommonProbe(commonCandidates,cancel.Token);
                         foreach(var result in combinations)DiagnosticReport.Record("Связка Antigravity","Common="+Dns.Name[result.Provider]+"; Antigravity="+Dns.Name[current]+"; result="+(result.Ok?"bootstrap reachable; client not verified":result.Error)+"\n"+result.Trace);
-                        commonBest=combinations.Where(r=>r.Ok&&!r.NeedsBrowser).OrderBy(r=>r.Provider==workingCommon?0:1).ThenBy(r=>r.Milliseconds).FirstOrDefault();
+                        commonBest=combinations.Where(r=>r.Ok&&!r.NeedsBrowser).OrderBy(r=>workingPairMatches&&r.Provider==workingCommon&&r.Tls==workingCommonTls?0:1).ThenBy(r=>r.Milliseconds).FirstOrDefault();
                     }catch(OperationCanceledException){failure="Подбор связки отменён";}catch(Exception problem){failure=problem.Message;DiagnosticReport.Record("Связка Antigravity",DiagnosticReport.Scrub(problem.ToString()));}
                 }
                 if(profilePreferences&&!cancel.IsCancellationRequested)try{agLogs.Collect();}catch(Exception problem){DiagnosticReport.Record("Журнал Antigravity",problem.GetType().Name);}
@@ -122,7 +122,7 @@ namespace HbAi.XboxDns
                         agSearch=null;
                         if(!cancel.IsCancellationRequested&&commonBest!=null&&TryAgCommon(commonBest,current,currentTls))return;
                         foreach(var result in results??new AutoDnsResult[0])if(!result.Ok||result.NeedsBrowser)agFailover.Failed(result.Provider,DateTime.Now,result.Tls);
-                        var best=agFailover.Best((results??new AutoDnsResult[0]).Where(r=>UiProviders.Contains(r.Provider)&&LocalDnsRouting.Supports(r.Provider)));
+                        var best=agFailover.Best((results??new AutoDnsResult[0]).Where(r=>UiProviders.Contains(r.Provider)&&LocalDnsRouting.Supports(r.Provider)),common,commonTls);
                         if(cancel.IsCancellationRequested||best==null){agAutoStatus="Автосмена: запасной DNS не найден";DiagnosticReport.Record("Автосмена Antigravity",failure??"No reachable replacement; previous route retained");return;}
                         if(!SwitchLocalAntigravity(best.Provider,best.Tls)){agAutoStatus="Автосмена отменена: подключение изменилось";return;}
                         agAutomaticPending=best.Provider;agAutoStatus="Автосмена: ждём подтверждения "+Dns.Name[best.Provider];

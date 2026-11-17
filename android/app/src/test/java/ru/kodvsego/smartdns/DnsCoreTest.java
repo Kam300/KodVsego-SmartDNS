@@ -22,7 +22,7 @@ public class DnsCoreTest {
     }
     static IpPacket tcp(long seq,long ack,int flags,byte[] data) throws Exception {byte[] p=packet(6,seq,ack,flags,data);return IpPacket.parse(p,p.length);}
     static final byte[] EMPTY=new byte[0];
-    @Test public void providersMatchWindows(){assertEquals(14,Provider.ALL.length);assertEquals("DNS-AI",Provider.at(5).name);assertArrayEquals(new String[]{"194.87.196.13","45.151.102.219"},Provider.at(5).servers);assertEquals("MagicDNS",Provider.at(6).name);assertArrayEquals(new String[]{"109.120.132.43","94.249.177.102"},Provider.at(6).servers);assertEquals("https://dns.magicdns.ru/dns-query",Provider.at(6).doh);}
+    @Test public void providersMatchWindows(){assertEquals(16,Provider.ALL.length);assertEquals("DNS-AI",Provider.at(5).name);assertArrayEquals(new String[]{"194.87.196.13","45.151.102.219"},Provider.at(5).servers);assertEquals("MagicDNS",Provider.at(6).name);assertArrayEquals(new String[]{"217.144.190.216","109.120.187.249"},Provider.at(6).servers);assertEquals("https://api.magicinfo.art/rpc",Provider.at(6).doh);}
     @Test public void invalidProviderRejected(){fails(()->Provider.at(-1));fails(()->Provider.at(Provider.ALL.length));}
     @Test public void encryptedOnlyCannotDowngrade(){assertTrue(new DnsConfig(5,false).encrypted);}
     @Test public void missingDohCannotDowngrade(){
@@ -70,5 +70,5 @@ public class DnsCoreTest {
     @Test public void tcpSessionLimitIsBounded() throws Exception {
         List<byte[]> out=new ArrayList<>();TcpDnsProxy proxy=new TcpDnsProxy(out::add,(q,c)->{});for(int i=0;i<100;i++){byte[] p=packet(6,100,0,2,EMPTY);DnsWire.put16(p,20,1000+i);proxy.accept(IpPacket.parse(p,p.length),System.currentTimeMillis());}assertEquals(64,out.size());
     }
-    @Test public void dnsAiTestsGeminiWebsiteAndApi(){List<String> hosts=Arrays.asList(Provider.at(5).testHosts());assertTrue(hosts.contains("gemini.google.com"));assertTrue(hosts.contains("generativelanguage.googleapis.com"));}
+    @Test public void dnsAiTestsGeminiWebsite(){List<String> hosts=Arrays.asList(Provider.at(5).testHosts());assertTrue(hosts.contains("gemini.google.com"));assertFalse(hosts.contains("generativelanguage.googleapis.com"));}
 }

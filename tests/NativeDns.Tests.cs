@@ -34,6 +34,7 @@ sealed class FakeSystem : IDnsSystem, IDnsBindingSystem
     public List<DnsAdapter> All = new List<DnsAdapter>();
     public Dictionary<string, string[]> Values = new Dictionary<string, string[]>();
     public HashSet<int> FailWrites = new HashSet<int>();
+    public HashSet<Guid> Inactive = new HashSet<Guid>();
     public int Writes;
     public bool Unsupported;
     public FakeSystem() { Add(Id); }
@@ -44,7 +45,7 @@ sealed class FakeSystem : IDnsSystem, IDnsBindingSystem
         Values[id + "/IPv6"] = new string[0];
     }
     public void EnsureSupported() { if (Unsupported) throw new NotSupportedException(); }
-    public DnsAdapter[] Adapters(bool activeOnly) { return All.ToArray(); }
+    public DnsAdapter[] Adapters(bool activeOnly) { foreach(var adapter in All)adapter.Active=!Inactive.Contains(adapter.Id);return All.Where(a=>!activeOnly||!Inactive.Contains(a.Id)).ToArray(); }
     public FamilyBackup Read(Guid id, string family)
     {
         var values = Values[id + "/" + family];
@@ -358,6 +359,42 @@ static class NativeDnsTests
             system.Values[system.Id + "/IPv6"] = new[] { "2a00:ab00:1233:0026:0:0:0:50" };
             engine.ResetKnown(new[] { "2a00:ab00:1233:26::50" }); Original();
             Assert(system.Values[system.Id + "/IPv6"].Length == 0 && system.Writes == 1, "Canonical IPv6 reset failed");
+        });
+        Test("Disconnected Wi-Fi without backup is detected and reset with DoH", () => {
+            system.Inactive.Add(system.Id);system.CaptureDoh=true;system.Values[system.Id+"/IPv4"]=Smart;
+            system.Encryption[system.Id+"/IPv4"]=EncryptedDns.Strict(2,EncryptedDns.Templates[0]);
+            Assert(system.Adapters(true).Length==0&&engine.NeedsKnownReset(Smart),"Disconnected Wi-Fi excluded from cleanup");
+            var plan=engine.RecoveryPlan(Smart);Assert(plan.Length==1&&plan[0].Present&&!plan[0].Active&&!plan[0].FromBackup&&plan[0].Summary.Contains("отключён")&&system.Writes==0,"Recovery preview changed settings or hid disconnected status");
+            engine.ResetKnown(Smart);Assert(system.Values[system.Id+"/IPv4"].Length==0&&system.Encryption[system.Id+"/IPv4"].Length==0&&store.Json==null,"Disconnected DNS or DoH remains after reset");
+        });
+        Test("Disconnecting Wi-Fi does not prevent restoring its saved DNS", () => {
+            engine.Change(true,Smart);system.Inactive.Add(system.Id);
+            var plan=engine.RecoveryPlan(Smart);Assert(plan.Single().FromBackup&&!plan.Single().Active,"Disconnected backup missing from preview");
+            engine.Change(false,new string[0]);Original();Assert(store.Json==null,"Restored disconnected backup retained");
+        });
+        Test("Inactive Wi-Fi loopback DNS restores automatic DNS from backup", () => {
+            system.Values[system.Id+"/IPv4"]=new string[0];system.CaptureDoh=true;
+            engine.Change(true,new[]{"127.0.0.1"});system.Inactive.Add(system.Id);engine.ResetKnown(Smart);
+            Assert(system.Values[system.Id+"/IPv4"].Length==0&&store.Json==null,"Own loopback setting survived inactive restore");
+        });
+        Test("Applying DNS still skips disconnected adapters", () => {
+            var other=Guid.NewGuid();system.Add(other);system.Inactive.Add(system.Id);engine.Change(true,Smart);
+            Assert(system.Values[system.Id+"/IPv4"].SequenceEqual(new[]{"192.0.2.53","192.0.2.54"}),"Enable modified disconnected Wi-Fi");
+            Assert(system.Values[other+"/IPv4"].SequenceEqual(Smart)&&store.Load().Count==1,"Active adapter not isolated from disconnected one");
+        });
+        Test("Disconnected custom and mixed DNS are not cleared without backup", () => {
+            system.Inactive.Add(system.Id);system.Values[system.Id+"/IPv4"]=new[]{Smart[0],"9.9.9.9"};
+            Assert(!engine.NeedsKnownReset(Smart)&&engine.RecoveryPlan(Smart).Length==0,"Mixed inactive DNS selected for reset");
+            Fail(()=>engine.ResetKnown(Smart));Assert(system.Writes==0,"Third-party DNS was changed");
+        });
+        Test("Failed disconnected restore keeps its backup for retry", () => {
+            engine.Change(true,Smart);system.Inactive.Add(system.Id);system.FailWrites.Add(system.Writes+1);Fail(()=>engine.Change(false,new string[0]));
+            Assert(store.Json!=null&&engine.RecoveryPlan(Smart).Single().FromBackup,"Failure deleted recovery data");
+            system.FailWrites.Clear();engine.Change(false,new string[0]);Original();Assert(store.Json==null,"Retry did not finish inactive recovery");
+        });
+        Test("Absent hardware stays distinct from a disconnected adapter", () => {
+            engine.Change(true,Smart);system.All.Clear();var plan=engine.RecoveryPlan(Smart);Assert(plan.Length==1&&!plan[0].Present,"Absent adapter reported as available");
+            string saved=store.Json;engine.Change(false,new string[0]);Assert(store.Json==saved&&engine.DeferredAdapters.Count==1,"Unavailable adapter backup was erased");
         });
         Test("Native structure and read-only API smoke check", () => {
             Assert(Marshal.SizeOf(typeof(NativeDnsSystem.Settings)) == (IntPtr.Size == 8 ? 64 : 48), "Invalid native structure size");

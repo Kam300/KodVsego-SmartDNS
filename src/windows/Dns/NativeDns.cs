@@ -38,7 +38,11 @@ namespace HbAi.XboxDns
     {
         public Guid Id;
         public string Name;
-        public bool V4, V6;
+        public bool V4, V6, Active;
+    }
+    sealed class DnsRecoveryItem {
+        internal Guid Id;internal string Name;internal bool Present,Active,FromBackup;internal string[] Families;
+        internal string Summary {get{return Name+(Present?(Active?"":" (отключён)"):" (недоступен)")+": "+string.Join("/",Families)+" · "+(FromBackup?"восстановить копию":"вернуть автоматический DNS");}}
     }
     interface IDnsSystem
     {
@@ -159,7 +163,7 @@ namespace HbAi.XboxDns
                 if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback || !Guid.TryParse(ni.Id, out id) ||
                     (activeOnly && ni.OperationalStatus != OperationalStatus.Up)) continue;
                 result.Add(new DnsAdapter { Id = id, Name = ni.Name,
-                    V4 = ni.Supports(NetworkInterfaceComponent.IPv4), V6 = ni.Supports(NetworkInterfaceComponent.IPv6) });
+                    V4 = ni.Supports(NetworkInterfaceComponent.IPv4), V6 = ni.Supports(NetworkInterfaceComponent.IPv6), Active=ni.OperationalStatus==OperationalStatus.Up });
             }
             return result.ToArray();
         }
@@ -346,12 +350,18 @@ namespace HbAi.XboxDns
             var existing = store.Load(); RegistryDnsBackupStore.Validate(existing);
             return UnbackedKnown(knownServers, existing).Count > 0;
         }
+        internal DnsRecoveryItem[] RecoveryPlan(string[] knownServers){
+            var saved=store.Load();RegistryDnsBackupStore.Validate(saved);var uncovered=UnbackedKnown(knownServers,saved);var adapters=system.Adapters(false);
+            return saved.Concat(uncovered).Select(record=>{var id=new Guid(record.Guid);var adapter=adapters.FirstOrDefault(a=>a.Id==id);return new DnsRecoveryItem{Id=id,Name=adapter==null?id.ToString():adapter.Name,Present=adapter!=null,Active=adapter!=null&&adapter.Active,FromBackup=saved.Contains(record),Families=record.Families.Select(f=>f.Family).ToArray()};}).ToArray();
+        }
         List<AdapterBackup> UnbackedKnown(string[] knownServers, List<AdapterBackup> existing)
         {
             var known = new HashSet<IPAddress>(knownServers.Select(IPAddress.Parse));
             var covered = new HashSet<Guid>(existing.Select(r => new Guid(r.Guid)));
             var records = new List<AdapterBackup>();
-            foreach (var adapter in system.Adapters(true))
+            // Cleanup must also inspect present adapters whose link is down.
+            // Applying a new connection still targets active adapters only.
+            foreach (var adapter in system.Adapters(false))
             {
                 if (covered.Contains(adapter.Id)) continue;
                 var families = new List<FamilyBackup>();
@@ -423,6 +433,7 @@ namespace HbAi.XboxDns
                     try { locked = mutex.WaitOne(30000); }
                     catch (AbandonedMutexException) { locked = true; }
                     if (!locked) return "Другая операция DNS ещё выполняется.";
+                    if(!enable&&DnsTunnel.Pending){string recovery=DnsTunnel.Recover();if(recovery!=null)return recovery;}
                     var engine = new DnsSettingsEngine(new NativeDnsSystem(), new RegistryDnsBackupStore());
                     var policy = new DotPolicyTransaction(new WindowsDotPolicy());
                     bool applied = false;

@@ -303,7 +303,7 @@ namespace HbAi.XboxDns
             serviceTestChoice=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Font=bodyFont,BackColor=surface,ForeColor=ForeColor,
                 Left=px(28),Width=ClientSize.Width-px(56),AccessibleName="Сервис для проверки доступности"};
             serviceTestChoice.Items.Add("Только DNS");
-            serviceTestChoice.Items.AddRange(ServiceAvailability.Targets.Select(t=>t.Name+" · сайт и API (без ключа)").ToArray());
+            serviceTestChoice.Items.AddRange(ServiceAvailability.Targets.Select(t=>t.Name+(t.Endpoints.Any(endpoint=>endpoint.Api)?" · сайт и API (без ключа)":" · сайт")).ToArray());
             serviceTestChoice.Items.Add("Применение DNS · проверка провайдера");
             serviceTestChoice.SelectedIndex=selected>=0&&selected<ServiceAvailability.Targets.Length?selected+1:0;
             browserRowHeight=px(96);browserHint.Visible=false;
@@ -511,12 +511,12 @@ namespace HbAi.XboxDns
             SuspendLayout();settingsConnectionPanel.SuspendLayout();settingsBackupPanel.SuspendLayout();
             try {
             float scale=actionHeight/42f;Func<int,int> px=n=>(int)Math.Round(n*scale);bool automatic=settingsAutoMode.Checked;
-            int height=Math.Min(maxDialogHeight,px((automatic?574:518)+(settingsTunnel==null?0:32)+(settingsResolverCheck==null?0:30)+(settingsRestartHeading==null?0:94)+(settingsStartupRecovery==null?0:30)+(providerPanel==null?0:44)+(settingsCatalog==null?0:58)));if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
+            int height=Math.Min(maxDialogHeight,px((automatic?574:518)+(settingsTunnel==null?0:32)+(settingsResolverCheck==null?0:30)+(settingsRestartHeading==null?0:94)+(settingsStartupRecovery==null?0:30)+(providerPanel==null?0:44)+(settingsCatalog==null?0:58)+(settingsVpnDns==null?0:38)));if(ClientSize.Height!=height)ClientSize=new Size(ClientSize.Width,height);
             int innerWidth=ClientSize.Width-px(88),half=(innerWidth-px(8))/2;
             settingsConnectionBounds=new Rectangle(px(28),px(providerPanel==null?100:144),ClientSize.Width-px(56),px(automatic?148:92));
             settingsConnectionPanel.Bounds=settingsConnectionBounds;
             settingsManualMode.Bounds=new Rectangle(px(16),px(16),half,px(34));settingsAutoMode.Bounds=new Rectangle(px(16)+half+px(8),px(16),half,px(34));
-            settingsModeHint.Text=automatic?"Подключать выбранный сервис одной кнопкой.":"Выбирайте DNS на главном экране.";
+            settingsModeHint.Text=settingsVpnDns!=null&&settingsVpnDns.Checked?"Сначала включите VPN. DNS — для доменов сервисов.":automatic?"Подключать выбранный сервис одной кнопкой.":"Выбирайте DNS на главном экране.";
             settingsModeHint.Bounds=new Rectangle(px(16),px(60),innerWidth,px(24));
             settingsGoalChoice.Visible=automatic;settingsGoalChoice.Enabled=automatic;settingsGoalChoice.Bounds=new Rectangle(px(16),px(96),innerWidth,px(36));
             if(settingsRestartHeading!=null) {
@@ -526,9 +526,11 @@ namespace HbAi.XboxDns
                 settingsRestartHint.Bounds=new Rectangle(px(28),settingsBrowserRestart.Bottom+px(6),ClientSize.Width-px(56),px(22));
             }
             if(settingsStartupRecovery!=null)settingsStartupRecovery.Bounds=new Rectangle(px(28),settingsRestartHint.Bottom+px(4),ClientSize.Width-px(56),px(26));
-            settingsBackupHeading.Bounds=new Rectangle(px(28),settingsRestartHeading==null?settingsConnectionBounds.Bottom+px(20):settingsStartupRecovery==null?settingsRestartHint.Bottom+px(16):settingsStartupRecovery.Bottom+px(12),ClientSize.Width-px(56),px(24));
+            if(settingsVpnDns!=null)settingsVpnDns.Bounds=new Rectangle(px(28),settingsStartupRecovery.Bottom+px(4),ClientSize.Width-px(56),px(30));
+            settingsBackupHeading.Bounds=new Rectangle(px(28),settingsRestartHeading==null?settingsConnectionBounds.Bottom+px(20):settingsStartupRecovery==null?settingsRestartHint.Bottom+px(16):settingsStartupRecovery.Bottom+px(settingsVpnDns==null?12:50),ClientSize.Width-px(56),px(24));
             settingsBackupBounds=new Rectangle(px(28),settingsBackupHeading.Bottom+px(8),ClientSize.Width-px(56),px(64));
             settingsBackupPanel.Bounds=settingsBackupBounds;
+            if(settingsDnsRecovery!=null){settingsBackupHeading.Width=Math.Max(0,ClientSize.Width-px(220));settingsDnsRecovery.Bounds=new Rectangle(ClientSize.Width-px(182),settingsBackupHeading.Top,px(154),px(24));}
             settingsBackupTitle.Bounds=new Rectangle(px(16),px(9),ClientSize.Width-px(232),px(24));
             settingsBackupStatus.Bounds=new Rectangle(px(16),px(34),ClientSize.Width-px(232),px(22));
             settingsOpenBackup.Bounds=new Rectangle(settingsBackupPanel.Width-px(128),px(14),px(112),px(36));

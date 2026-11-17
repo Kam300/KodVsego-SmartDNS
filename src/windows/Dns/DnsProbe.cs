@@ -124,7 +124,9 @@ namespace HbAi.XboxDns
         internal static string[] HostsForProvider(int provider)
         {
             if (provider < 0 || provider >= Dns.Name.Length) throw new ArgumentOutOfRangeException("provider");
-            return RuntimeProviders.All[provider].testHosts;
+            return RuntimeProviders.All[provider].testHosts.Select(host =>
+                string.Equals(host, "generativelanguage.googleapis.com", StringComparison.OrdinalIgnoreCase) ? "gemini.google.com" : host)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         }
         internal static string Report(int provider, DnsProbeResult[] results)
         {

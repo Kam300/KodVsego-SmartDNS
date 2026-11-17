@@ -26,6 +26,7 @@ namespace HbAi.XboxDns
         internal string Error;
         internal string Trace;
         internal ServiceAvailabilityResult Availability;
+        internal readonly Dictionary<string,string> EndpointAddresses=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
         internal string Summary {get{return Availability==null?(NeedsBrowser?"HTTPS есть · проверка в браузере":"HTTPS отвечает"):Availability.EndpointSummary;}}
         internal bool Ok { get { return Error == null; } }
     }
@@ -55,13 +56,14 @@ namespace HbAi.XboxDns
             if(goal<0 || goal>=Goals.Length) throw new ArgumentOutOfRangeException("goal");
             return Enumerable.Range(0,RuntimeProviders.All.Length).Where(p=>RuntimeProviders.All[p].autoGoals.Contains(Goals[goal].Name)&&Dns.IsAvailable(p)&&(allowedProviders==null||allowedProviders.Contains(p))&&(!encrypted || (tls ? DotDns.Available(p) : EncryptedDns.Templates[p]!=null))).ToArray();
         }
-        internal static AutoDnsResult[] Search(int goal, bool encrypted, IAutoDnsProbe probe, CancellationToken cancel, Action<AutoDnsResult> progress=null, int? onlyProvider=null, bool tls=false,int[] allowedProviders=null)
+        internal static AutoDnsResult[] Search(int goal, bool encrypted, IAutoDnsProbe probe, CancellationToken cancel, Action<AutoDnsResult> progress=null, int? onlyProvider=null, bool tls=false,int[] allowedProviders=null,EndpointAddressHealth health=null)
         {
             var providers=Candidates(goal,encrypted,tls,allowedProviders);
             if(onlyProvider.HasValue) providers=providers.Where(p=>p==onlyProvider.Value).ToArray();
-            var results=new AutoDnsResult[providers.Length];
+            var results=new AutoDnsResult[providers.Length];health=health??new EndpointAddressHealth();
             // Four bounded provider checks; endpoints within each stay sequential.
             Parallel.For(0,providers.Length,new ParallelOptions {MaxDegreeOfParallelism=4,CancellationToken=cancel},i=> {
+                using(var limit=CancellationTokenSource.CreateLinkedTokenSource(cancel)){limit.CancelAfter(45000);var operationToken=limit.Token;
                 int provider=providers[i];
                 var result=new AutoDnsResult {Provider=provider,Encrypted=encrypted||Dns.EncryptedOnly(provider),Tls=tls};
                 var watch=Stopwatch.StartNew();
@@ -72,36 +74,40 @@ namespace HbAi.XboxDns
                     if(service>=0) {
                         trace.AppendLine("DNS servers="+(result.Encrypted?(tls?DotDns.Host(provider):EncryptedDns.Templates[provider]):string.Join(",",Dns.V4[provider])));
                         // Sequential endpoints keep the overall network concurrency bounded.
-                        result.Availability=ServiceAvailability.Check(service,provider,result.Encrypted,probe,cancel,1);
+                        result.Availability=ServiceAvailability.Check(service,provider,result.Encrypted,probe,operationToken,1,health);
+                        foreach(var item in result.Availability.Endpoints.Where(e=>e.Address!=null))result.EndpointAddresses[item.Endpoint.Host]=item.Address;
                         trace.AppendLine(result.Availability.Diagnostic);
                         result.NeedsBrowser=result.Availability.Endpoints.Any(e=>e.Reply==ServiceReply.BrowserCheck);
                         if(!result.Availability.CanRecommend)result.Error=result.Availability.EndpointSummary;
                     }
                     else {
                     foreach(string host in Goals[goal].Hosts) {
-                        cancel.ThrowIfCancellationRequested();
+                        operationToken.ThrowIfCancellationRequested();
                         trace.AppendLine(watch.ElapsedMilliseconds+" ms DNS query "+host+"; servers="+(result.Encrypted?(tls?DotDns.Host(provider):EncryptedDns.Templates[provider]):string.Join(",",Dns.V4[provider]))+"; timeout="+(result.Encrypted?DohHttp2.RequestTimeoutMilliseconds:2000)+" ms");
-                        var addresses=probe.Resolve(provider,result.Encrypted,host,cancel);
+                        var addresses=probe.Resolve(provider,result.Encrypted,host,operationToken);
                         trace.AppendLine(watch.ElapsedMilliseconds+" ms DNS "+host+" -> "+string.Join(", ",addresses));
                         bool reachable=false, challenged=false; string error="DNS не вернул IPv4-адрес";
-                        foreach(string address in addresses.Distinct().Take(3)) {
-                            cancel.ThrowIfCancellationRequested();
+                        long healthVersion;var ready=health.Ready(host,addresses,out healthVersion);
+                        if(ready.Length==0)throw new IOException(host+": полученные IP временно исключены после отказов");
+                        foreach(string address in ready) {
+                            operationToken.ThrowIfCancellationRequested();
                             trace.AppendLine(watch.ElapsedMilliseconds+" ms HTTPS "+host+" @ "+address+"; connect/TLS timeout="+(probe is AutoDnsProbe?((AutoDnsProbe)probe).HttpsTimeout:3500)+" ms");
-                            try {probe.Https(host,address,Goals[goal].Api,cancel);trace.AppendLine(watch.ElapsedMilliseconds+" ms HTTPS OK");reachable=true;break;}
+                            try {probe.Https(host,address,Goals[goal].Api,operationToken);trace.AppendLine(watch.ElapsedMilliseconds+" ms HTTPS OK");reachable=true;result.EndpointAddresses[host]=address;health.Reachable(host,address,healthVersion);break;}
                             catch(OperationCanceledException){throw;}
-                            catch(BrowserChallengeException ex){challenged=true;trace.AppendLine(watch.ElapsedMilliseconds+" ms "+ex.Message);}
-                            catch(Exception ex){error=ex.Message;trace.AppendLine(watch.ElapsedMilliseconds+" ms "+ex.ToString());}
+                            catch(BrowserChallengeException ex){challenged=true;result.EndpointAddresses[host]=address;health.Reachable(host,address,healthVersion);trace.AppendLine(watch.ElapsedMilliseconds+" ms "+ex.Message);}
+                            catch(Exception ex){error=ex.Message;if(ex is TimeoutException||ex is SocketException||ex.Message.StartsWith("HTTPS: ",StringComparison.Ordinal))health.TransportFailed(host,address,healthVersion);trace.AppendLine(watch.ElapsedMilliseconds+" ms "+ex.ToString());}
                         }
                         if(!reachable && challenged) { reachable=true;result.NeedsBrowser=true; }
                         if(!reachable)throw new IOException(host+": "+error);
                     }
                     }
                 }
-                catch(OperationCanceledException){throw;}
+                catch(OperationCanceledException){if(cancel.IsCancellationRequested)throw;result.Error="Проверка провайдера превысила 45 с";trace.AppendLine("Provider deadline=45000 ms");}
                 catch(Exception ex){result.Error=ex.Message;trace.AppendLine(ex.ToString());}
                 result.Trace=DiagnosticReport.Scrub(trace.ToString());
                 result.Milliseconds=(int)watch.ElapsedMilliseconds;results[i]=result;
                 if(progress!=null)progress(result);
+                }
             });
             cancel.ThrowIfCancellationRequested();return results;
         }
@@ -111,7 +117,7 @@ namespace HbAi.XboxDns
         {return DiagnosticReport.Scrub("Auto goal="+Goals[goal].Name+"\n"+string.Join("\n\n",results.Select(r=>(r.Trace??"")+"\nTotal="+r.Milliseconds+" ms; error="+r.Error+"; browser challenge="+r.NeedsBrowser)));}
         internal static string Report(int goal, IEnumerable<AutoDnsResult> results)
         {
-            return "Цель: "+Goals[goal].Name+"\n\n"+string.Join("\n",results.OrderBy(r=>r.Provider).Select(r=>Dns.Name[r.Provider]+(r.Encrypted?(r.Tls?" · DoT":" · DoH"):" · DNS")+": "+(r.Ok?r.Summary+" · "+r.Milliseconds+" мс":r.Error)))+
+            return "Цель: "+Goals[goal].Name+"\n\n"+string.Join("\n",results.OrderBy(r=>r.Provider).Select(r=>Dns.Name[r.Provider]+(r.Encrypted?(r.Tls?" · DoT":" · DoH"):" · DNS")+": "+(r.Ok?r.Summary+(r.EndpointAddresses.Count==0?"":" · IP: "+string.Join(", ",r.EndpointAddresses.Select(p=>p.Key+" → "+p.Value)))+" · "+r.Milliseconds+" мс":r.Error)))+
                 "\n\nПроверено соединение с адресом от выбранного DNS. Вход в аккаунт и работа модели не проверялись. Применяется общий DNS компьютера.";
         }
     }

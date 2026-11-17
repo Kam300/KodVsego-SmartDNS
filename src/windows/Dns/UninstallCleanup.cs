@@ -95,6 +95,7 @@ namespace HbAi.XboxDns
                             RestoreNetwork(new DnsSettingsEngine(new NativeDnsSystem(),dns),dns,ag,rules);
                         }finally{if(agLocked)agMutex.ReleaseMutex();}
                     }
+                    VpnDnsPolicy.Remove();
                     new DotPolicyTransaction(new WindowsDotPolicy()).Restore();
                     using(var key=Registry.LocalMachine.OpenSubKey(RegistryDnsBackupStore.Key,true))if(key!=null){key.DeleteValue("TunnelPending",false);key.DeleteValue("TunnelAdapters",false);key.DeleteValue("LocalResolverOwner",false);}
                     DeleteEmptyKey(Registry.LocalMachine,RegistryDnsBackupStore.Key);

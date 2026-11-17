@@ -9,7 +9,7 @@ static class ServiceAvailabilityTests
 {
     static int passed;
     static void Check(bool value,string name){if(!value)throw new Exception(name);passed++;Console.WriteLine("PASS "+name);}
-    static ServiceEndpoint Api {get{return ServiceAvailability.Targets[0].Endpoints[1];}}
+    static ServiceEndpoint Api {get{return ServiceAvailability.Targets[1].Endpoints[1];}}
     static ServiceEndpoint Web {get{return ServiceAvailability.Targets[0].Endpoints[0];}}
     static ServiceHttpReply Reply(int status,string body="",string type="application/json")
     {var response=new ServiceHttpReply{Status=status,Body=body};response.Headers["Content-Type"]=type;return response;}
@@ -45,7 +45,10 @@ static class ServiceAvailabilityTests
             }
             return;
         }
-        Check(ServiceAvailability.Targets.Length==4&&ServiceAvailability.Targets.All(t=>t.Endpoints.Length==2),"Each AI service checks separate website and read-only API endpoints");
+        var gemini = ServiceAvailability.Check(0,6,true,new Probe(),CancellationToken.None);
+        Check(gemini.Endpoints.Single().Endpoint.Host == "gemini.google.com" &&
+            !gemini.Report.Contains("API") && !gemini.Summary.Contains("ключ"),
+            "Gemini detailed diagnostics only check and describe the website");
         Check(ServiceAvailability.Classify(Api,Reply(200,"<html>landing page</html>","text/html"))==ServiceReply.Unknown,"An API HTML 200 never proves service access");
         Check(ServiceAvailability.Classify(Api,Reply(200,"{}"))==ServiceReply.Unknown,"An arbitrary API JSON 200 never proves service access");
         Check(ServiceAvailability.Classify(Api,Reply(200,"{\"error\":{\"message\":\"unavailable\"}}"))==ServiceReply.Unknown,"An error hidden inside a 200 is unconfirmed");
@@ -66,25 +69,25 @@ static class ServiceAvailabilityTests
         Check(ServiceAvailability.Classify(Web,redirect)==ServiceReply.Login,"Login redirect is not silently accepted as usable AI");
         redirect.Headers["Location"]="https://example.org/";
         Check(ServiceAvailability.Classify(Web,redirect)==ServiceReply.Unknown,"Other redirects stay unconfirmed and are never followed");
-        var probe=new Probe();var result=ServiceAvailability.Check(0,6,true,probe,CancellationToken.None);
+        var probe=new Probe();var result=ServiceAvailability.Check(1,6,true,probe,CancellationToken.None);
         Check(result.Endpoints.All(e=>e.Dns&&e.Connection&&e.Tls)&&probe.calls==2&&probe.Encrypted,"Website and API requests use selected encrypted DNS");
         Check(!result.Attention&&result.Endpoints[1].Reply==ServiceReply.Login,"Authentication requirement is not a network failure");
         Check(result.Summary.Contains("Генерация не проверялась")&&result.Report.Contains("API и сайт могут иметь разные ограничения"),"Visible report explains verification limits");
         Check(!result.Diagnostic.Contains("missing authentication"),"API response bodies are not copied into diagnostic logs");
-        var dns=new Probe{DnsFails=true};result=ServiceAvailability.Check(0,6,false,dns,CancellationToken.None);
+        var dns=new Probe{DnsFails=true};result=ServiceAvailability.Check(1,6,false,dns,CancellationToken.None);
         Check(dns.calls==0&&result.Endpoints.All(e=>!e.Dns&&!e.Tls&&e.Error.StartsWith("DNS:")),"DNS failure stops before any HTTPS request");
-        result=ServiceAvailability.Check(0,6,false,new Probe{TlsFails=true},CancellationToken.None);
+        result=ServiceAvailability.Check(1,6,false,new Probe{TlsFails=true},CancellationToken.None);
         Check(result.Endpoints.All(e=>e.Dns&&e.Connection&&!e.Tls&&e.Error.StartsWith("TLS:")),"Certificate failure is shown at TLS stage");
-        result=ServiceAvailability.Check(0,6,false,new Probe{HttpFails=true},CancellationToken.None);
+        result=ServiceAvailability.Check(1,6,false,new Probe{HttpFails=true},CancellationToken.None);
         Check(result.Endpoints.All(e=>e.Dns&&e.Connection&&e.Tls&&e.Error.StartsWith("HTTP:")),"Bad HTTP reply preserves completed DNS and TLS stages");
-        result=ServiceAvailability.Check(0,6,false,new Probe{ConnectFails=true},CancellationToken.None);
+        result=ServiceAvailability.Check(1,6,false,new Probe{ConnectFails=true},CancellationToken.None);
         Check(result.Endpoints.All(e=>e.Dns&&!e.Connection&&!e.Tls),"Connection timeout is not mislabeled as DNS failure");
-        var challenged=new Probe{Challenge=true};result=ServiceAvailability.Check(0,6,false,challenged,CancellationToken.None);
+        var challenged=new Probe{Challenge=true};result=ServiceAvailability.Check(1,6,false,challenged,CancellationToken.None);
         Check(challenged.calls==2&&result.Endpoints.All(e=>e.Reply==ServiceReply.BrowserCheck)&&result.Attention&&!result.OfferReport,"Browser checks do not retry HTTP responses or clutter the summary with a technical report panel");
-        result=ServiceAvailability.Check(0,6,false,new Probe{Addresses=new[]{"127.0.0.1","192.168.0.1"}},CancellationToken.None);
+        result=ServiceAvailability.Check(1,6,false,new Probe{Addresses=new[]{"127.0.0.1","192.168.0.1"}},CancellationToken.None);
         Check(result.Endpoints.All(e=>!e.Dns),"Local or router addresses cannot be mistaken for service addresses");
         using(var cancel=new CancellationTokenSource()) {
-            cancel.Cancel();bool cancelled=false;try{ServiceAvailability.Check(0,6,true,new Probe(),cancel.Token);}catch(OperationCanceledException){cancelled=true;}
+            cancel.Cancel();bool cancelled=false;try{ServiceAvailability.Check(1,6,true,new Probe(),cancel.Token);}catch(OperationCanceledException){cancelled=true;}
             Check(cancelled,"Closing the dialog can cancel testing without presenting stale success");
         }
         var response=Read("HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}");
